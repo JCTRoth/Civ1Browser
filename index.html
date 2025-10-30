@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Civilization I - Browser Edition</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- Top UI Bar -->
+        <div id="topBar">
+            <div id="civInfo">
+                <span id="civilizationName">Romans</span>
+                <span id="currentYear">4000 BC</span>
+                <span id="turn">Turn 1</span>
+            </div>
+            <div id="resources">
+                <span>Gold: <span id="gold">50</span></span>
+                <span>Science: <span id="science">2</span></span>
+            </div>
+            <div id="gameControls">
+                <button id="endTurnBtn">End Turn</button>
+                <button id="menuBtn">Menu</button>
+            </div>
+        </div>
+
+        <!-- Main Game Area -->
+        <div id="gameArea">
+            <!-- Game Canvas -->
+            <canvas id="gameCanvas" width="1200" height="700"></canvas>
+            
+            <!-- Side Panel -->
+            <div id="sidePanel">
+                <div id="unitInfo" class="panel">
+                    <h3>Unit Information</h3>
+                    <div id="unitDetails">
+                        <p>Select a unit to view details</p>
+                    </div>
+                </div>
+                
+                <div id="cityInfo" class="panel">
+                    <h3>City Information</h3>
+                    <div id="cityDetails">
+                        <p>Select a city to view details</p>
+                    </div>
+                </div>
+
+                <div id="miniMap" class="panel">
+                    <h3>Mini Map</h3>
+                    <canvas id="miniMapCanvas" width="200" height="150"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <div id="statusBar">
+            <span id="statusMessage">Welcome to Civilization! Select a unit to begin.</span>
+        </div>
+    </div>
+
+    <!-- Modal Dialogs -->
+    <div id="cityDialog" class="modal hidden">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="cityDialogTitle">City Name</h2>
+            <div id="cityDialogContent">
+                <!-- City management interface -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Scripts -->
+    <script src="js/utils/constants.js"></script>
+    <script src="js/utils/helpers.js"></script>
+    <script src="js/engine/hexgrid.js"></script>
+    <script src="js/engine/renderer.js"></script>
+    <script src="js/game/terrain.js"></script>
+    <script src="js/game/unit.js"></script>
+    <script src="js/game/city.js"></script>
+    <script src="js/game/civilization.js"></script>
+    <script src="js/game/map.js"></script>
+    <script src="js/ui/interface.js"></script>
+    <script src="js/engine/input.js"></script>
+    <script src="js/engine/game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+/* Main Game Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: #2c1810;
+    color: #d4af37;
+    overflow: hidden;
+}
+
+#gameContainer {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Top Bar */
+#topBar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #8B4513 0%, #654321 100%);
+    padding: 10px 20px;
+    border-bottom: 2px solid #d4af37;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+#civInfo span {
+    margin-right: 20px;
+    font-weight: bold;
+}
+
+#resources span {
+    margin-left: 20px;
+    font-weight: bold;
+}
+
+#gameControls button {
+    background: linear-gradient(135deg, #d4af37 0%, #b8941f 100%);
+    border: 2px solid #8b7355;
+    color: #2c1810;
+    padding: 8px 16px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-weight: bold;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+#gameControls button:hover {
+    background: linear-gradient(135deg, #e6c547 0%, #d4af37 100%);
+    transform: translateY(-1px);
+}
+
+/* Game Area */
+#gameArea {
+    display: flex;
+    flex: 1;
+    background: #1a1a1a;
+}
+
+#gameCanvas {
+    background: #2c5f2d;
+    border-right: 2px solid #d4af37;
+    cursor: crosshair;
+}
+
+/* Side Panel */
+#sidePanel {
+    width: 300px;
+    background: linear-gradient(180deg, #654321 0%, #8B4513 100%);
+    padding: 15px;
+    overflow-y: auto;
+    border-left: 2px solid #d4af37;
+}
+
+.panel {
+    background: rgba(212, 175, 55, 0.1);
+    border: 1px solid #d4af37;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.panel h3 {
+    color: #d4af37;
+    border-bottom: 1px solid #d4af37;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+}
+
+#miniMapCanvas {
+    background: #2c5f2d;
+    border: 1px solid #d4af37;
+    border-radius: 4px;
+}
+
+/* Status Bar */
+#statusBar {
+    background: linear-gradient(135deg, #8B4513 0%, #654321 100%);
+    padding: 8px 20px;
+    border-top: 2px solid #d4af37;
+    font-weight: bold;
+}
+
+/* Terrain Colors */
+.terrain-ocean { background-color: #1e3a8a; }
+.terrain-grassland { background-color: #22c55e; }
+.terrain-plains { background-color: #84cc16; }
+.terrain-desert { background-color: #f59e0b; }
+.terrain-tundra { background-color: #64748b; }
+.terrain-hills { background-color: #a3a3a3; }
+.terrain-mountains { background-color: #525252; }
+.terrain-forest { background-color: #166534; }
+
+/* Responsive Design */
+@media (max-width: 1400px) {
+    #sidePanel {
+        width: 250px;
+    }
+    
+    #gameCanvas {
+        width: calc(100vw - 250px);
+    }
+}
+
+@media (max-width: 1200px) {
+    #topBar {
+        flex-direction: column;
+        padding: 10px;
+    }
+    
+    #civInfo, #resources, #gameControls {
+        margin: 5px 0;
+    }
+    
+    #sidePanel {
+        width: 200px;
+    }
+}
