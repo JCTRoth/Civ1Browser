@@ -37,7 +37,7 @@ function GameSetupModal({ show, onStart }) {
     <Modal show={show} centered size="xl" backdrop="static" keyboard={false} fullscreen>
       <Modal.Header style={{ backgroundColor: '#1a1a1a', color: 'white', borderBottom: '2px solid #ffd700' }}>
         <Modal.Title className="w-100 text-center">
-          <h2 style={{ fontSize: '32px', marginBottom: '8px' }}>🏛️ Civilization I - Game Setup</h2>
+          <h2 style={{ fontSize: '32px', marginBottom: '8px' }}>🏛️ Zivilisation 1 - Game Setup</h2>
           <small style={{ fontSize: '18px', color: '#aaa' }}>Step {currentStep} of {totalSteps}</small>
         </Modal.Title>
       </Modal.Header>
@@ -96,16 +96,16 @@ function GameSetupModal({ show, onStart }) {
                     {civ.name === 'Aztecs' && '🐆'}
                     {civ.name === 'Babylonians' && '🏺'}
                     {civ.name === 'Chinese' && '🐉'}
+                    {civ.name === 'Germans' && '✠'}
                     {civ.name === 'Egyptians' && <span style={{ fontSize: '36px', color: '#FFD700' }}>𓂀</span>}
                     {civ.name === 'English' && '🇬🇧'}
-                    {civ.name === 'French' && '⚜️'}
-                    {civ.name === 'Germans' && '✠'}
+                    {civ.name === 'French' && '🇫🇷🥖'}
                     {civ.name === 'Greeks' && '🏛️'}
                     {civ.name === 'Indians' && '🇮🇳'}
-                    {civ.name === 'Mongols' && '🏹'}
+                    {civ.name === 'Mongols' && '🏹🐎'}
                     {civ.name === 'Romans' && '⚔️'}
                     {civ.name === 'Russians' && <span style={{ fontSize: '36px', color: '#DC143C' }}>☭</span>}
-                    {civ.name === 'Zulus' && '🛡️'}
+                    {civ.name === 'Zulus' && <span style={{ fontSize: '32px' }}>🛡️</span>}
                   </div>
                   <div style={{ fontWeight: 'bold', fontSize: '16px', color: civ.color }}>
                     {civ.name}

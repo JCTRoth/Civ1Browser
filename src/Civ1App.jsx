@@ -37,7 +37,10 @@ function Civ1App() {
       // Get player's starting settler position
       const playerSettler = engine.units.find(u => u.civilizationId === 0 && u.type === 'settler');
       
-      // Update game state with engine data
+      console.log('Game started with units:', engine.units);
+      console.log('Player settler at:', playerSettler);
+      
+      // Update game state with engine data including map
       setGameState(prev => ({
         ...prev,
         gamePhase: 'playing',
@@ -47,27 +50,37 @@ function Civ1App() {
         currentYear: engine.currentYear,
         units: engine.units,
         cities: engine.cities,
-        civilizations: engine.civilizations
+        civilizations: engine.civilizations,
+        map: engine.map
       }));
       
-      // Center camera on player's starting settler
+      // Center camera on player's starting settler with a small delay to ensure rendering is ready
       if (playerSettler) {
-        const HEX_WIDTH = 32 * Math.sqrt(3);
-        const VERT_DISTANCE = 64 * 0.75;
-        const startX = playerSettler.col * HEX_WIDTH + (playerSettler.row % 2) * (HEX_WIDTH / 2);
-        const startY = playerSettler.row * VERT_DISTANCE;
-        
-        setCamera(prev => ({
-          ...prev,
-          x: -startX + window.innerWidth / 2,
-          y: -startY + window.innerHeight / 2
-        }));
-        
-        console.log('Camera centered on player settler at:', playerSettler.col, playerSettler.row);
+        setTimeout(() => {
+          const HEX_WIDTH = 32 * Math.sqrt(3);
+          const VERT_DISTANCE = 64 * 0.75;
+          const zoom = 2.0;
+          
+          // Calculate world position of the settler
+          const startX = playerSettler.col * HEX_WIDTH + (playerSettler.row % 2) * (HEX_WIDTH / 2);
+          const startY = playerSettler.row * VERT_DISTANCE;
+          
+          // Camera offset needs to account for zoom - we want the settler at screen center
+          const newCamera = {
+            x: startX - (window.innerWidth / 2) / zoom,
+            y: startY - (window.innerHeight / 2) / zoom,
+            zoom: zoom,
+            minZoom: 0.5,
+            maxZoom: 3.0
+          };
+          
+          console.log('Camera centered on player settler at hex:', playerSettler.col, playerSettler.row);
+          console.log('Settler world position:', { startX, startY });
+          console.log('Camera position:', newCamera);
+          
+          setCamera(newCamera);
+        }, 100);
       }
-      
-      console.log('Game started with units:', engine.units);
-      console.log('Player settler at:', playerSettler);
       
     } catch (error) {
       console.error('Game start error:', error);

@@ -83,12 +83,66 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     return newTerrain;
   };
 
-  // Initialize terrain once
+  // Initialize terrain from game engine
   useEffect(() => {
-    if (!terrain) {
+    if (gameEngine && gameEngine.map && gameEngine.map.tiles) {
+      // Convert flat tiles array to 2D array for rendering
+      const terrainGrid = [];
+      for (let row = 0; row < mapData.height; row++) {
+        terrainGrid[row] = [];
+        for (let col = 0; col < mapData.width; col++) {
+          const tileIndex = row * mapData.width + col;
+          const tile = gameEngine.map.tiles[tileIndex];
+          if (tile) {
+            terrainGrid[row][col] = {
+              type: tile.type,
+              resource: tile.resource,
+              improvement: tile.improvement,
+              visible: tile.visible,
+              explored: tile.explored
+            };
+          }
+        }
+      }
+      setTerrain(terrainGrid);
+    } else if (!terrain) {
+      // Fallback to generated terrain if no game engine
       setTerrain(generateTerrain(mapData.width, mapData.height));
     }
-  }, [mapData.width, mapData.height]);
+  }, [gameEngine, gameEngine?.map, gameEngine?.units, mapData.width, mapData.height]);
+
+  // Update terrain visibility when game state changes
+  useEffect(() => {
+    if (gameEngine && terrain && gameEngine.map && gameEngine.map.tiles) {
+      // Update visibility without recreating the entire grid
+      const updatedTerrain = [...terrain];
+      for (let row = 0; row < mapData.height; row++) {
+        if (!updatedTerrain[row]) updatedTerrain[row] = [];
+        for (let col = 0; col < mapData.width; col++) {
+          const tileIndex = row * mapData.width + col;
+          const tile = gameEngine.map.tiles[tileIndex];
+          if (tile && updatedTerrain[row][col]) {
+            updatedTerrain[row][col] = {
+              ...updatedTerrain[row][col],
+              visible: tile.visible,
+              explored: tile.explored
+            };
+          }
+        }
+      }
+      setTerrain(updatedTerrain);
+    }
+  }, [gameState.currentTurn, gameEngine?.units?.length]);
+
+  // Select player's starting settler when game starts
+  useEffect(() => {
+    if (gameEngine && gameEngine.units && gameEngine.units.length > 0 && gameState.isGameStarted) {
+      const playerSettler = gameEngine.units.find(u => u.civilizationId === 0 && u.type === 'settlers');
+      if (playerSettler) {
+        setSelectedHex({ col: playerSettler.col, row: playerSettler.row });
+      }
+    }
+  }, [gameEngine?.units, gameState.isGameStarted]);
 
   // Convert hex coordinates to screen position
   const hexToScreen = (col, row) => {
@@ -241,6 +295,19 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         const tile = terrain[row]?.[col];
         if (!tile) continue;
         
+        // Fog of War: Only render explored tiles
+        if (!tile.explored) {
+          // Draw completely black for unexplored areas
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(
+            col * tileWidth,
+            row * tileHeight,
+            tileWidth + 1,
+            tileHeight + 1
+          );
+          continue;
+        }
+        
         const terrainInfo = TERRAIN_TYPES[tile.type];
         ctx.fillStyle = terrainInfo.color;
         ctx.fillRect(
@@ -250,8 +317,11 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
           tileHeight + 1
         );
         
-        // Draw cities as bright dots
-        if (tile.city) {
+        // Only show cities and units in currently visible areas
+        const isVisible = tile.visible;
+        
+        // Draw cities as bright dots (only if visible)
+        if (tile.city && isVisible) {
           ctx.fillStyle = tile.city.owner === 0 ? '#FFD700' : '#FF6347';
           ctx.fillRect(
             col * tileWidth,
@@ -261,14 +331,25 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
           );
         }
         
-        // Draw units as small dots
-        if (tile.unit) {
+        // Draw units as small dots (only if visible)
+        if (tile.unit && isVisible) {
           ctx.fillStyle = tile.unit.owner === 0 ? '#FFFFFF' : '#FF0000';
           ctx.fillRect(
             col * tileWidth + tileWidth/3,
             row * tileHeight + tileHeight/3,
             tileWidth/3,
             tileHeight/3
+          );
+        }
+        
+        // Apply fog overlay for explored but not currently visible tiles
+        if (!isVisible) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(
+            col * tileWidth,
+            row * tileHeight,
+            tileWidth + 1,
+            tileHeight + 1
           );
         }
       }
@@ -342,7 +423,21 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         const tile = terrain[row]?.[col];
         if (!tile) continue;
         
-        const terrainInfo = TERRAIN_TYPES[tile.type];
+        // Fog of War: Only render explored tiles
+        if (!tile.explored) {
+          // Draw completely black hex for unexplored areas
+          drawHex(
+            ctx,
+            x,
+            y,
+            HEX_SIZE * camera.zoom,
+            '#000000',
+            '#000000'
+          );
+          continue;
+        }
+        
+        const terrainInfo = TERRAIN_TYPES[tile.type] || TERRAIN_TYPES[tile.type?.toUpperCase()] || TERRAIN_TYPES.GRASSLAND;
         const isSelected = selectedHex.col === col && selectedHex.row === row;
         
         // Draw hex background
@@ -360,8 +455,11 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
           drawTerrainSymbol(ctx, x, y, tile);
         }
         
+        // Only draw units and cities if tile is currently visible (not just explored)
+        const isVisible = tile.visible;
+        
         // Draw city from game engine
-        if (gameEngine && camera.zoom > 0.3) {
+        if (gameEngine && camera.zoom > 0.3 && isVisible) {
           const city = gameEngine.cities?.find(c => c.col === col && c.row === row);
           if (city) {
             drawCity(ctx, x, y, city);
@@ -369,11 +467,26 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         }
         
         // Draw unit from game engine
-        if (gameEngine && camera.zoom > 0.3) {
+        if (gameEngine && camera.zoom > 0.3 && isVisible) {
           const unit = gameEngine.units?.find(u => u.col === col && u.row === row);
           if (unit) {
             drawUnit(ctx, x, y, unit);
           }
+        }
+        
+        // Apply fog overlay for explored but not currently visible tiles
+        if (!isVisible) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const angle = (Math.PI / 3) * i;
+            const hx = x + (HEX_SIZE * camera.zoom) * Math.cos(angle);
+            const hy = y + (HEX_SIZE * camera.zoom) * Math.sin(angle);
+            if (i === 0) ctx.moveTo(hx, hy);
+            else ctx.lineTo(hx, hy);
+          }
+          ctx.closePath();
+          ctx.fill();
         }
         
         // Draw coordinates only when zoomed in
@@ -524,7 +637,7 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         ]
       });
       
-      if (tile.unit.type === 'Settler') {
+      if (tile.unit.type === 'settlers') {
         menuOptions.push({
           label: '🏙️ Build City',
           action: 'buildCity',

@@ -42,16 +42,16 @@ export const CIVILIZATIONS = [
     cityNames: ['London', 'York', 'Nottingham', 'Oxford', 'Cambridge', 'Canterbury', 'Coventry', 'Warwick', 'Newcastle']
   },
   {
-    name: 'French',
-    leader: 'Napoleon Bonaparte',
-    color: '#0000CD',
-    cityNames: ['Paris', 'Orleans', 'Lyon', 'Tours', 'Marseille', 'Chartres', 'Avignon', 'Rouen', 'Grenoble']
-  },
-  {
     name: 'Germans',
     leader: 'Frederick the Great',
     color: '#696969',
     cityNames: ['Berlin', 'Leipzig', 'Hamburg', 'Bremen', 'Frankfurt', 'Bonn', 'Nuremberg', 'Cologne', 'Munich']
+  },
+  {
+    name: 'French',
+    leader: 'Napoleon Bonaparte',
+    color: '#0000CD',
+    cityNames: ['Paris', 'Orleans', 'Lyon', 'Tours', 'Marseille', 'Chartres', 'Avignon', 'Rouen', 'Grenoble']
   },
   {
     name: 'Greeks',
@@ -390,25 +390,27 @@ export const WONDERS = {
 
 // Unit Types
 export const UNIT_TYPES = {
-  SETTLER: {
-    id: 'settler',
-    name: 'Settler',
+  SETTLERS: {
+    id: 'settlers',
+    name: 'Settlers',
     cost: 40,
     attack: 0,
-    defense: 1,
+    defense: 0,
     movement: 1,
+    sightRange: 2,
     requires: null,
-    description: 'Founds new cities and improves terrain'
+    description: 'Non-combat unit for building improvements and founding cities'
   },
-  WARRIOR: {
-    id: 'warrior',
-    name: 'Warrior',
+  MILITIA: {
+    id: 'militia',
+    name: 'Militia',
     cost: 10,
     attack: 1,
     defense: 1,
     movement: 1,
+    sightRange: 1,
     requires: null,
-    description: 'Basic military unit'
+    description: 'Basic infantry unit, early game with balanced offense and defense'
   },
   PHALANX: {
     id: 'phalanx',
@@ -417,38 +419,75 @@ export const UNIT_TYPES = {
     attack: 1,
     defense: 2,
     movement: 1,
+    sightRange: 1,
     requires: 'bronze_working',
-    description: 'Defensive infantry unit'
+    description: 'Ancient infantry, stronger defense, suitable for holding lines'
   },
   LEGION: {
     id: 'legion',
     name: 'Legion',
-    cost: 40,
-    attack: 4,
-    defense: 2,
-    movement: 1,
-    requires: 'iron_working',
-    description: 'Strong ancient military unit'
-  },
-  HORSEMEN: {
-    id: 'horsemen',
-    name: 'Horsemen',
     cost: 20,
-    attack: 2,
+    attack: 3,
     defense: 1,
-    movement: 2,
-    requires: 'horseback_riding',
-    description: 'Fast cavalry unit'
+    movement: 1,
+    sightRange: 1,
+    requires: 'iron_working',
+    description: 'Strong offensive ancient unit, replaces Phalanx in mid game'
+  },
+  MUSKETEERS: {
+    id: 'musketeers',
+    name: 'Musketeers',
+    cost: 30,
+    attack: 2,
+    defense: 3,
+    movement: 1,
+    sightRange: 1,
+    requires: 'gunpowder',
+    description: 'Gunpowder infantry with good defense and balanced attack'
+  },
+  RIFLEMEN: {
+    id: 'riflemen',
+    name: 'Riflemen',
+    cost: 30,
+    attack: 3,
+    defense: 5,
+    movement: 1,
+    sightRange: 1,
+    requires: 'conscription',
+    description: 'Advanced infantry with strong defense and attack'
+  },
+  MECHANIZED_INFANTRY: {
+    id: 'mechanized_infantry',
+    name: 'Mechanized Infantry',
+    cost: 50,
+    attack: 6,
+    defense: 6,
+    movement: 3,
+    sightRange: 2,
+    requires: 'labor_union',
+    description: 'Modern infantry unit with high attack, defense, and greater mobility'
   },
   CHARIOT: {
     id: 'chariot',
     name: 'Chariot',
-    cost: 30,
-    attack: 3,
+    cost: 40,
+    attack: 4,
     defense: 1,
     movement: 2,
+    sightRange: 2,
     requires: 'the_wheel',
-    description: 'Ancient mobile warfare unit'
+    description: 'Fast cavalry unit with good attack, early game'
+  },
+  KNIGHTS: {
+    id: 'knights',
+    name: 'Knights',
+    cost: 40,
+    attack: 4,
+    defense: 2,
+    movement: 2,
+    sightRange: 2,
+    requires: 'chivalry',
+    description: 'Cavalry unit with balanced attack and defense, middle ages'
   },
   CATAPULT: {
     id: 'catapult',
@@ -457,38 +496,75 @@ export const UNIT_TYPES = {
     attack: 6,
     defense: 1,
     movement: 1,
+    sightRange: 1,
     requires: 'mathematics',
-    description: 'Siege weapon'
+    description: 'Early artillery with good attack, weak defense'
+  },
+  CANNON: {
+    id: 'cannon',
+    name: 'Cannon',
+    cost: 40,
+    attack: 8,
+    defense: 1,
+    movement: 1,
+    sightRange: 1,
+    requires: 'metallurgy',
+    description: 'Improved field artillery for siege, high attack'
   },
   TRIREME: {
     id: 'trireme',
     name: 'Trireme',
     cost: 40,
     attack: 1,
-    defense: 1,
+    defense: 0,
     movement: 3,
+    sightRange: 2,
     requires: 'map_making',
-    description: 'Ancient naval unit'
+    description: 'Early naval transport and exploration unit, no attack power'
   },
-  PIKEMEN: {
-    id: 'pikemen',
-    name: 'Pikemen',
-    cost: 20,
-    attack: 1,
+  BATTLESHIP: {
+    id: 'battleship',
+    name: 'Battleship',
+    cost: 160,
+    attack: 18,
+    defense: 12,
+    movement: 4,
+    sightRange: 2,
+    requires: 'steel',
+    description: 'Powerful naval unit with strong attack and defense'
+  },
+  FIGHTER: {
+    id: 'fighter',
+    name: 'Fighter',
+    cost: 60,
+    attack: 4,
     defense: 2,
-    movement: 1,
-    requires: 'feudalism',
-    description: 'Medieval defensive unit'
+    movement: 10,
+    sightRange: 3,
+    requires: 'flight',
+    description: 'Fast air unit, strong for air combat'
   },
-  MUSKETEER: {
-    id: 'musketeer',
-    name: 'Musketeer',
-    cost: 30,
-    attack: 2,
-    defense: 3,
+  BOMBER: {
+    id: 'bomber',
+    name: 'Bomber',
+    cost: 120,
+    attack: 12,
+    defense: 1,
+    movement: 8,
+    sightRange: 2,
+    requires: 'advanced_flight',
+    description: 'Heavy air unit with high attack, weak defense'
+  },
+  CARAVAN: {
+    id: 'caravan',
+    name: 'Caravan',
+    cost: 50,
+    attack: 0,
+    defense: 1,
     movement: 1,
-    requires: 'gunpowder',
-    description: 'Gunpowder infantry'
+    sightRange: 1,
+    requires: 'trade',
+    description: 'Trade unit, economic role, can bypass enemy units during movement'
   }
 };
 

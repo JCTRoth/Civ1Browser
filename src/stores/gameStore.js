@@ -28,7 +28,7 @@ export const mapAtom = atom({
 export const cameraAtom = atom({
   x: 0,
   y: 0,
-  zoom: 1.0,
+  zoom: 2.0,
   minZoom: 0.5,
   maxZoom: 3.0
 });

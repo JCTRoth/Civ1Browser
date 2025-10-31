@@ -62,6 +62,9 @@ export default class GameEngine {
     await this.createCivilizations();
     await this.initializeTechnologies();
     
+    // Initialize fog of war visibility
+    this.updateVisibility();
+    
     this.isInitialized = true;
     console.log('Game engine initialized successfully');
     console.log(`Starting year: ${this.formatYear(this.currentYear)}`);
@@ -204,8 +207,8 @@ export default class GameEngine {
         const settler = {
           id: settlerId,
           civilizationId: i,
-          type: 'settler',
-          name: 'Settler',
+          type: 'settlers',
+          name: 'Settlers',
           col: startPos.col,
           row: startPos.row,
           health: 100,
@@ -244,6 +247,60 @@ export default class GameEngine {
         if (tile && this.hexGrid.hexDistance(centerCol, centerRow, col, row) <= radius) {
           tile.visible = true;
           tile.explored = true;
+        }
+      }
+    }
+  }
+
+  /**
+   * Update fog of war visibility for all tiles
+   * Clears current visibility and recalculates based on unit/city positions
+   */
+  updateVisibility() {
+    if (!this.map) return;
+    
+    // First, clear all visibility (but keep explored status)
+    for (const tile of this.map.tiles) {
+      tile.visible = false;
+    }
+    
+    // Reveal around all player units
+    for (const unit of this.units) {
+      if (unit.civilizationId === 0) { // Player civilization
+        // Get sight range from unit type, default to 1 if not specified
+        let viewRadius = 1;
+        const unitTypeKey = unit.type.toUpperCase();
+        if (UNIT_TYPES[unitTypeKey] && UNIT_TYPES[unitTypeKey].sightRange) {
+          viewRadius = UNIT_TYPES[unitTypeKey].sightRange;
+        }
+        this.setVisibilityArea(unit.col, unit.row, viewRadius);
+      }
+    }
+    
+    // Reveal around all player cities
+    for (const city of this.cities) {
+      if (city.civilizationId === 0) { // Player civilization
+        const cityViewRadius = 2; // Cities can see 2 tiles away
+        this.setVisibilityArea(city.col, city.row, cityViewRadius);
+      }
+    }
+  }
+
+  /**
+   * Set visibility (but not explored) for an area
+   */
+  setVisibilityArea(centerCol, centerRow, radius) {
+    if (!this.map) return;
+    
+    for (let row = centerRow - radius; row <= centerRow + radius; row++) {
+      for (let col = centerCol - radius; col <= centerCol + radius; col++) {
+        const tile = this.getTileAt(col, row);
+        if (tile && this.hexGrid.hexDistance(centerCol, centerRow, col, row) <= radius) {
+          tile.visible = true;
+          // Also mark as explored when first seen
+          if (!tile.explored) {
+            tile.explored = true;
+          }
         }
       }
     }
@@ -303,7 +360,7 @@ export default class GameEngine {
       foodStored: 0,
       foodRequired: 20, // Food needed for next population
       shields: 0, // Production shields
-      currentProduction: 'settler', // Start building a settler
+      currentProduction: 'settlers', // Start building a settler
       productionQueue: [],
       buildings: [],
       wonders: [],
@@ -328,7 +385,7 @@ export default class GameEngine {
     
     // Remove settler unit that founded the city
     const settlerIdx = this.units.findIndex(u => 
-      u.col === col && u.row === row && u.civilizationId === civilizationId && u.type === 'settler'
+      u.col === col && u.row === row && u.civilizationId === civilizationId && u.type === 'settlers'
     );
     if (settlerIdx !== -1) {
       this.units.splice(settlerIdx, 1);
@@ -515,7 +572,7 @@ export default class GameEngine {
    */
   foundCity(settlerId) {
     const settler = this.units.find(u => u.id === settlerId);
-    if (!settler || settler.type !== CONSTANTS.UNIT_TYPES.SETTLER) return false;
+    if (!settler || settler.type !== 'settlers') return false;
 
     // Check if location is valid for city
     const tile = this.getTileAt(settler.col, settler.row);
