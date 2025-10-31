@@ -390,6 +390,7 @@ export const WONDERS = {
 
 // Unit Types
 export const UNIT_TYPES = {
+  // Non-combat units
   SETTLERS: {
     id: 'settlers',
     name: 'Settlers',
@@ -399,161 +400,7 @@ export const UNIT_TYPES = {
     movement: 1,
     sightRange: 2,
     requires: null,
-    description: 'Non-combat unit for building improvements and founding cities'
-  },
-  MILITIA: {
-    id: 'militia',
-    name: 'Militia',
-    cost: 10,
-    attack: 1,
-    defense: 1,
-    movement: 1,
-    sightRange: 1,
-    requires: null,
-    description: 'Basic infantry unit, early game with balanced offense and defense'
-  },
-  PHALANX: {
-    id: 'phalanx',
-    name: 'Phalanx',
-    cost: 20,
-    attack: 1,
-    defense: 2,
-    movement: 1,
-    sightRange: 1,
-    requires: 'bronze_working',
-    description: 'Ancient infantry, stronger defense, suitable for holding lines'
-  },
-  LEGION: {
-    id: 'legion',
-    name: 'Legion',
-    cost: 20,
-    attack: 3,
-    defense: 1,
-    movement: 1,
-    sightRange: 1,
-    requires: 'iron_working',
-    description: 'Strong offensive ancient unit, replaces Phalanx in mid game'
-  },
-  MUSKETEERS: {
-    id: 'musketeers',
-    name: 'Musketeers',
-    cost: 30,
-    attack: 2,
-    defense: 3,
-    movement: 1,
-    sightRange: 1,
-    requires: 'gunpowder',
-    description: 'Gunpowder infantry with good defense and balanced attack'
-  },
-  RIFLEMEN: {
-    id: 'riflemen',
-    name: 'Riflemen',
-    cost: 30,
-    attack: 3,
-    defense: 5,
-    movement: 1,
-    sightRange: 1,
-    requires: 'conscription',
-    description: 'Advanced infantry with strong defense and attack'
-  },
-  MECHANIZED_INFANTRY: {
-    id: 'mechanized_infantry',
-    name: 'Mechanized Infantry',
-    cost: 50,
-    attack: 6,
-    defense: 6,
-    movement: 3,
-    sightRange: 2,
-    requires: 'labor_union',
-    description: 'Modern infantry unit with high attack, defense, and greater mobility'
-  },
-  CHARIOT: {
-    id: 'chariot',
-    name: 'Chariot',
-    cost: 40,
-    attack: 4,
-    defense: 1,
-    movement: 2,
-    sightRange: 2,
-    requires: 'the_wheel',
-    description: 'Fast cavalry unit with good attack, early game'
-  },
-  KNIGHTS: {
-    id: 'knights',
-    name: 'Knights',
-    cost: 40,
-    attack: 4,
-    defense: 2,
-    movement: 2,
-    sightRange: 2,
-    requires: 'chivalry',
-    description: 'Cavalry unit with balanced attack and defense, middle ages'
-  },
-  CATAPULT: {
-    id: 'catapult',
-    name: 'Catapult',
-    cost: 40,
-    attack: 6,
-    defense: 1,
-    movement: 1,
-    sightRange: 1,
-    requires: 'mathematics',
-    description: 'Early artillery with good attack, weak defense'
-  },
-  CANNON: {
-    id: 'cannon',
-    name: 'Cannon',
-    cost: 40,
-    attack: 8,
-    defense: 1,
-    movement: 1,
-    sightRange: 1,
-    requires: 'metallurgy',
-    description: 'Improved field artillery for siege, high attack'
-  },
-  TRIREME: {
-    id: 'trireme',
-    name: 'Trireme',
-    cost: 40,
-    attack: 1,
-    defense: 0,
-    movement: 3,
-    sightRange: 2,
-    requires: 'map_making',
-    description: 'Early naval transport and exploration unit, no attack power'
-  },
-  BATTLESHIP: {
-    id: 'battleship',
-    name: 'Battleship',
-    cost: 160,
-    attack: 18,
-    defense: 12,
-    movement: 4,
-    sightRange: 2,
-    requires: 'steel',
-    description: 'Powerful naval unit with strong attack and defense'
-  },
-  FIGHTER: {
-    id: 'fighter',
-    name: 'Fighter',
-    cost: 60,
-    attack: 4,
-    defense: 2,
-    movement: 10,
-    sightRange: 3,
-    requires: 'flight',
-    description: 'Fast air unit, strong for air combat'
-  },
-  BOMBER: {
-    id: 'bomber',
-    name: 'Bomber',
-    cost: 120,
-    attack: 12,
-    defense: 1,
-    movement: 8,
-    sightRange: 2,
-    requires: 'advanced_flight',
-    description: 'Heavy air unit with high attack, weak defense'
+    description: 'Non-combat: builds cities & improvements'
   },
   CARAVAN: {
     id: 'caravan',
@@ -564,7 +411,303 @@ export const UNIT_TYPES = {
     movement: 1,
     sightRange: 1,
     requires: 'trade',
-    description: 'Trade unit, economic role, can bypass enemy units during movement'
+    description: 'Non-combat: trade unit'
+  },
+  DIPLOMAT: {
+    id: 'diplomat',
+    name: 'Diplomat',
+    cost: 20,
+    attack: 0,
+    defense: 1,
+    movement: 1,
+    sightRange: 1,
+    requires: 'writing',
+    description: 'Non-combat: diplomacy'
+  },
+  WAGON: {
+    id: 'wagon',
+    name: 'Wagon',
+    cost: 20,
+    attack: 0,
+    defense: 0,
+    movement: 2,
+    sightRange: 1,
+    requires: 'the_wheel',
+    description: 'Non-combat: transport'
+  },
+  
+  // Infantry units
+  MILITIA: {
+    id: 'militia',
+    name: 'Militia',
+    cost: 10,
+    attack: 1,
+    defense: 1,
+    movement: 1,
+    sightRange: 1,
+    requires: null,
+    description: 'Basic early infantry'
+  },
+  PHALANX: {
+    id: 'phalanx',
+    name: 'Phalanx',
+    cost: 20,
+    attack: 1,
+    defense: 2,
+    movement: 1,
+    sightRange: 1,
+    requires: 'bronze_working',
+    description: 'Defensive ancient infantry'
+  },
+  LEGION: {
+    id: 'legion',
+    name: 'Legion',
+    cost: 20,
+    attack: 3,
+    defense: 1,
+    movement: 1,
+    sightRange: 1,
+    requires: 'iron_working',
+    description: 'Offensive ancient infantry'
+  },
+  MUSKETEERS: {
+    id: 'musketeers',
+    name: 'Musketeers',
+    cost: 30,
+    attack: 2,
+    defense: 3,
+    movement: 1,
+    sightRange: 1,
+    requires: 'gunpowder',
+    description: 'Gunpowder infantry'
+  },
+  RIFLEMEN: {
+    id: 'riflemen',
+    name: 'Riflemen',
+    cost: 30,
+    attack: 3,
+    defense: 5,
+    movement: 1,
+    sightRange: 1,
+    requires: 'conscription',
+    description: 'Advanced infantry'
+  },
+  MECHANIZED_INFANTRY: {
+    id: 'mechanized_infantry',
+    name: 'Mechanized Infantry',
+    cost: 50,
+    attack: 6,
+    defense: 6,
+    movement: 3,
+    sightRange: 2,
+    requires: 'labor_union',
+    description: 'Modern infantry with high mobility'
+  },
+  
+  // Cavalry units
+  CAVALRY: {
+    id: 'cavalry',
+    name: 'Cavalry',
+    cost: 40,
+    attack: 4,
+    defense: 1,
+    movement: 2,
+    sightRange: 2,
+    requires: 'horseback_riding',
+    description: 'Early fast cavalry'
+  },
+  CHARIOT: {
+    id: 'chariot',
+    name: 'Chariot',
+    cost: 40,
+    attack: 4,
+    defense: 1,
+    movement: 2,
+    sightRange: 2,
+    requires: 'the_wheel',
+    description: 'Ancient fast cavalry'
+  },
+  KNIGHTS: {
+    id: 'knights',
+    name: 'Knights',
+    cost: 40,
+    attack: 4,
+    defense: 2,
+    movement: 2,
+    sightRange: 2,
+    requires: 'chivalry',
+    description: 'Medieval cavalry with balanced stats'
+  },
+  ARMOR: {
+    id: 'armor',
+    name: 'Armor',
+    cost: 80,
+    attack: 8,
+    defense: 8,
+    movement: 4,
+    sightRange: 2,
+    requires: 'automobile',
+    description: 'Heavy modern tank'
+  },
+  
+  // Artillery units
+  ARTILLERY: {
+    id: 'artillery',
+    name: 'Artillery',
+    cost: 40,
+    attack: 6,
+    defense: 1,
+    movement: 1,
+    sightRange: 1,
+    requires: 'mathematics',
+    description: 'Early artillery unit'
+  },
+  CANNON: {
+    id: 'cannon',
+    name: 'Cannon',
+    cost: 40,
+    attack: 8,
+    defense: 1,
+    movement: 1,
+    sightRange: 1,
+    requires: 'metallurgy',
+    description: 'Improved artillery'
+  },
+  
+  // Naval units
+  TRIREME: {
+    id: 'trireme',
+    name: 'Trireme',
+    cost: 40,
+    attack: 1,
+    defense: 0,
+    movement: 3,
+    sightRange: 2,
+    requires: 'map_making',
+    description: 'Early naval transport/exploration'
+  },
+  SAILING_SHIP: {
+    id: 'sailing_ship',
+    name: 'Sailing Ship',
+    cost: 60,
+    attack: 1,
+    defense: 2,
+    movement: 3,
+    sightRange: 2,
+    requires: 'navigation',
+    description: 'Early weaponized naval ship'
+  },
+  FRIGATE: {
+    id: 'frigate',
+    name: 'Frigate',
+    cost: 80,
+    attack: 4,
+    defense: 4,
+    movement: 4,
+    sightRange: 2,
+    requires: 'magnetism',
+    description: 'Mid-game naval combat ship'
+  },
+  IRONCLAD: {
+    id: 'ironclad',
+    name: 'Ironclad',
+    cost: 100,
+    attack: 8,
+    defense: 8,
+    movement: 4,
+    sightRange: 2,
+    requires: 'steam_engine',
+    description: 'Early armored naval ship'
+  },
+  CRUISER: {
+    id: 'cruiser',
+    name: 'Cruiser',
+    cost: 100,
+    attack: 10,
+    defense: 8,
+    movement: 4,
+    sightRange: 2,
+    requires: 'combustion',
+    description: 'Late-game naval attack ship'
+  },
+  BATTLESHIP: {
+    id: 'battleship',
+    name: 'Battleship',
+    cost: 160,
+    attack: 18,
+    defense: 12,
+    movement: 4,
+    sightRange: 2,
+    requires: 'steel',
+    description: 'Powerful late-game naval battleship'
+  },
+  CARRIER: {
+    id: 'carrier',
+    name: 'Carrier',
+    cost: 160,
+    attack: 6,
+    defense: 10,
+    movement: 4,
+    sightRange: 2,
+    requires: 'advanced_flight',
+    description: 'Naval air unit carrier'
+  },
+  SUBMARINE: {
+    id: 'submarine',
+    name: 'Submarine',
+    cost: 120,
+    attack: 14,
+    defense: 7,
+    movement: 4,
+    sightRange: 2,
+    requires: 'mass_production',
+    description: 'Stealthy naval attacker'
+  },
+  TRANSPORT: {
+    id: 'transport',
+    name: 'Transport',
+    cost: 40,
+    attack: 0,
+    defense: 1,
+    movement: 3,
+    sightRange: 2,
+    requires: 'industrialization',
+    description: 'Naval troop transport unit'
+  },
+  
+  // Air units
+  FIGHTER: {
+    id: 'fighter',
+    name: 'Fighter',
+    cost: 60,
+    attack: 4,
+    defense: 2,
+    movement: 10,
+    sightRange: 3,
+    requires: 'flight',
+    description: 'Late game fast air unit'
+  },
+  BOMBER: {
+    id: 'bomber',
+    name: 'Bomber',
+    cost: 120,
+    attack: 12,
+    defense: 1,
+    movement: 8,
+    sightRange: 2,
+    requires: 'advanced_flight',
+    description: 'Heavy air attack unit'
+  },
+  NUCLEAR_MISSILE: {
+    id: 'nuclear_missile',
+    name: 'Nuclear Missile',
+    cost: 200,
+    attack: 99,
+    defense: 0,
+    movement: 20,
+    sightRange: 0,
+    requires: 'rocketry',
+    description: 'Ultimate area-effect weapon (air)'
   }
 };
 
