@@ -21,11 +21,13 @@ function App() {
   const [gameState] = useAtom(gameStateAtom);
   const [, gameActions] = useAtom(gameActionsAtom);
   const [gameEngine, setGameEngine] = useState(null);
+  const [error, setError] = useState(null);
 
   // Initialize game engine
   useEffect(() => {
     const initializeGame = async () => {
       try {
+        console.log('App: Starting initialization...');
         gameActions({ type: 'SET_LOADING', payload: true });
         
         // Create game engine instance
@@ -34,9 +36,11 @@ function App() {
         
         setGameEngine(engine);
         gameActions({ type: 'SET_LOADING', payload: false });
+        console.log('App: Initialization complete');
         
       } catch (error) {
         console.error('Failed to initialize game:', error);
+        setError(error.message);
         gameActions({ 
           type: 'ADD_NOTIFICATION', 
           payload: { 
@@ -52,6 +56,21 @@ function App() {
 
   // Connect game engine to React state management
   useGameEngine(gameEngine);
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="d-flex justify-content-center align-items-center vh-100 bg-dark text-white">
+        <div className="text-center">
+          <h2>Error Loading Game</h2>
+          <p>{error}</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -101,16 +120,16 @@ function App() {
       <TopBar gameEngine={gameEngine} />
       
       {/* Main game area */}
-      <div className="d-flex flex-grow-1">
+      <div className="d-flex flex-grow-1 position-relative">
         {/* Game Canvas */}
-        <div className="flex-grow-1 position-relative">
+        <div className="flex-grow-1 position-relative overflow-hidden">
           <GameCanvas gameEngine={gameEngine} />
           
-          {/* Bottom Panel for unit/city details */}
+          {/* Bottom Panel for unit/city details - mobile responsive */}
           <BottomPanel gameEngine={gameEngine} />
         </div>
         
-        {/* Side Panel for game info */}
+        {/* Side Panel for game info - responsive */}
         <SidePanel gameEngine={gameEngine} />
       </div>
       

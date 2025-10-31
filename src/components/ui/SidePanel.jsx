@@ -1,11 +1,12 @@
 import React from 'react';
 import { useAtom } from 'jotai';
-import { Card, ListGroup, Badge } from 'react-bootstrap';
+import { Card, ListGroup, Badge, Button } from 'react-bootstrap';
 import { 
   currentPlayerAtom, 
   playerUnitsAtom, 
   playerCitiesAtom,
-  uiStateAtom 
+  uiStateAtom,
+  gameActionsAtom
 } from '../../stores/gameStore';
 import MiniMap from './MiniMap';
 
@@ -14,6 +15,7 @@ const SidePanel = ({ gameEngine }) => {
   const [playerUnits] = useAtom(playerUnitsAtom);
   const [playerCities] = useAtom(playerCitiesAtom);
   const [uiState] = useAtom(uiStateAtom);
+  const [, gameActions] = useAtom(gameActionsAtom);
 
   if (!currentPlayer) {
     return (
@@ -28,9 +30,27 @@ const SidePanel = ({ gameEngine }) => {
   }
 
   return (
-    <div className={`game-side-panel ${uiState.sidebarCollapsed ? 'collapsed' : ''}`}>
-      {/* Civilization Info */}
-      <Card bg="dark" text="white" className="m-2">
+    <>
+      {/* Mobile backdrop */}
+      <div 
+        className={`mobile-menu-backdrop ${!uiState.sidebarCollapsed ? 'show' : ''} d-md-none`}
+        onClick={() => gameActions({ type: 'TOGGLE_UI', payload: 'sidebarCollapsed' })}
+      />
+      
+      <div className={`game-side-panel ${!uiState.sidebarCollapsed ? 'show' : ''}`}>
+        {/* Mobile close button */}
+        <div className="d-md-none p-2 border-bottom border-secondary">
+          <Button 
+            variant="outline-light" 
+            size="sm"
+            onClick={() => gameActions({ type: 'TOGGLE_UI', payload: 'sidebarCollapsed' })}
+          >
+            <i className="bi bi-x-lg"></i> Close
+          </Button>
+        </div>
+        
+        {/* Civilization Info */}
+        <Card bg="dark" text="white" className="m-2">
         <Card.Header className="d-flex align-items-center">
           <div 
             className="civ-flag me-2"
@@ -180,7 +200,8 @@ const SidePanel = ({ gameEngine }) => {
           </div>
         </Card.Body>
       </Card>
-    </div>
+      </div>
+    </>
   );
 };
 

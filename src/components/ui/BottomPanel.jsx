@@ -20,6 +20,8 @@ const BottomPanel = ({ gameEngine }) => {
     return null;
   }
 
+  const showPanel = uiState.showUnitPanel || uiState.showCityPanel;
+
   const handleUnitAction = (action) => {
     if (!selectedUnit || !gameEngine) return;
 
@@ -348,10 +350,21 @@ const BottomPanel = ({ gameEngine }) => {
   };
 
   return (
-    <div className="game-bottom-panel position-absolute bottom-0 w-100" style={{ zIndex: 10 }}>
-      {uiState.showUnitPanel && renderUnitPanel()}
-      {uiState.showCityPanel && renderCityPanel()}
-    </div>
+    <>
+      {/* Mobile backdrop */}
+      <div 
+        className={`mobile-menu-backdrop ${showPanel ? 'show' : ''} d-md-none`}
+        onClick={() => {
+          gameActions({ type: 'SELECT_UNIT', payload: null });
+          gameActions({ type: 'SELECT_CITY', payload: null });
+        }}
+      />
+      
+      <div className={`game-bottom-panel ${showPanel ? 'show' : ''}`}>
+        {uiState.showUnitPanel && renderUnitPanel()}
+        {uiState.showCityPanel && renderCityPanel()}
+      </div>
+    </>
   );
 };
 

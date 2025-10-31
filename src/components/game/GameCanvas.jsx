@@ -11,13 +11,16 @@ const GameCanvas = ({ gameEngine }) => {
   const [gameState] = useAtom(gameStateAtom);
   const [, gameActions] = useAtom(gameActionsAtom);
   
-  // Mouse interaction state
+  // Mouse and touch interaction state
   const mouseState = useRef({
     isDragging: false,
     lastX: 0,
     lastY: 0,
     dragStartX: 0,
-    dragStartY: 0
+    dragStartY: 0,
+    initialPinchDistance: 0,
+    lastPinchDistance: 0,
+    isPinching: false
   });
 
   // Render loop
@@ -72,29 +75,98 @@ const GameCanvas = ({ gameEngine }) => {
     };
   }, [render]);
 
-  // Handle mouse events
-  const handleMouseDown = useCallback((event) => {
+  // Handle mouse and touch events
+  const getEventPos = (event) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+    const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  };
+
+  const getPinchDistance = (event) => {
+    if (!event.touches || event.touches.length < 2) return 0;
     
-    mouseState.current.isDragging = true;
-    mouseState.current.lastX = x;
-    mouseState.current.lastY = y;
-    mouseState.current.dragStartX = x;
-    mouseState.current.dragStartY = y;
+    const touch1 = event.touches[0];
+    const touch2 = event.touches[1];
+    
+    return Math.sqrt(
+      Math.pow(touch2.clientX - touch1.clientX, 2) +
+      Math.pow(touch2.clientY - touch1.clientY, 2)
+    );
+  };
+
+  const getPinchCenter = (event) => {
+    if (!event.touches || event.touches.length < 2) return { x: 0, y: 0 };
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const touch1 = event.touches[0];
+    const touch2 = event.touches[1];
+    
+    return {
+      x: ((touch1.clientX + touch2.clientX) / 2) - rect.left,
+      y: ((touch1.clientY + touch2.clientY) / 2) - rect.top
+    };
+  };
+
+  const handleMouseDown = useCallback((event) => {
+    // Handle pinch gestures on touch devices
+    if (event.touches && event.touches.length === 2) {
+      mouseState.current.isPinching = true;
+      mouseState.current.initialPinchDistance = getPinchDistance(event);
+      mouseState.current.lastPinchDistance = mouseState.current.initialPinchDistance;
+      mouseState.current.isDragging = false;
+    } else {
+      const pos = getEventPos(event);
+      
+      mouseState.current.isDragging = true;
+      mouseState.current.isPinching = false;
+      mouseState.current.lastX = pos.x;
+      mouseState.current.lastY = pos.y;
+      mouseState.current.dragStartX = pos.x;
+      mouseState.current.dragStartY = pos.y;
+    }
     
     event.preventDefault();
   }, []);
 
   const handleMouseMove = useCallback((event) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    
-    if (mouseState.current.isDragging) {
-      const deltaX = (x - mouseState.current.lastX) / camera.zoom;
-      const deltaY = (y - mouseState.current.lastY) / camera.zoom;
+    // Handle pinch zoom
+    if (mouseState.current.isPinching && event.touches && event.touches.length === 2) {
+      const currentDistance = getPinchDistance(event);
+      const center = getPinchCenter(event);
+      
+      if (mouseState.current.lastPinchDistance > 0) {
+        const scaleFactor = currentDistance / mouseState.current.lastPinchDistance;
+        const newZoom = Math.max(
+          camera.minZoom, 
+          Math.min(camera.maxZoom, camera.zoom * scaleFactor)
+        );
+        
+        // Zoom towards pinch center
+        const worldCenterX = (center.x / camera.zoom) + camera.x;
+        const worldCenterY = (center.y / camera.zoom) + camera.y;
+        
+        const newWorldCenterX = (center.x / newZoom) + camera.x;
+        const newWorldCenterY = (center.y / newZoom) + camera.y;
+        
+        gameActions({
+          type: 'UPDATE_CAMERA',
+          payload: {
+            zoom: newZoom,
+            x: camera.x + (worldCenterX - newWorldCenterX),
+            y: camera.y + (worldCenterY - newWorldCenterY)
+          }
+        });
+      }
+      
+      mouseState.current.lastPinchDistance = currentDistance;
+    } else if (mouseState.current.isDragging) {
+      const pos = getEventPos(event);
+      const deltaX = (pos.x - mouseState.current.lastX) / camera.zoom;
+      const deltaY = (pos.y - mouseState.current.lastY) / camera.zoom;
       
       gameActions({
         type: 'UPDATE_CAMERA',
@@ -104,25 +176,32 @@ const GameCanvas = ({ gameEngine }) => {
         }
       });
       
-      mouseState.current.lastX = x;
-      mouseState.current.lastY = y;
+      mouseState.current.lastX = pos.x;
+      mouseState.current.lastY = pos.y;
     }
+    
+    event.preventDefault();
   }, [camera, gameActions]);
 
   const handleMouseUp = useCallback((event) => {
-    if (mouseState.current.isDragging) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+    if (mouseState.current.isPinching) {
+      mouseState.current.isPinching = false;
+      mouseState.current.initialPinchDistance = 0;
+      mouseState.current.lastPinchDistance = 0;
+    } else if (mouseState.current.isDragging) {
+      const pos = getEventPos(event);
       
       // Check if this was a click (small movement) rather than a drag
       const dragDistance = Math.sqrt(
-        Math.pow(x - mouseState.current.dragStartX, 2) +
-        Math.pow(y - mouseState.current.dragStartY, 2)
+        Math.pow(pos.x - mouseState.current.dragStartX, 2) +
+        Math.pow(pos.y - mouseState.current.dragStartY, 2)
       );
       
-      if (dragDistance < 5) {
-        // This was a click, not a drag
+      // Increase threshold for touch devices
+      const threshold = event.touches || event.changedTouches ? 15 : 5;
+      
+      if (dragDistance < threshold) {
+        // This was a click/tap, not a drag
         handleCanvasClick(event);
       }
     }
@@ -133,13 +212,11 @@ const GameCanvas = ({ gameEngine }) => {
   const handleCanvasClick = useCallback((event) => {
     if (!gameEngine) return;
     
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const pos = getEventPos(event);
     
     // Convert screen coordinates to world coordinates
-    const worldX = (x / camera.zoom) + camera.x;
-    const worldY = (y / camera.zoom) + camera.y;
+    const worldX = (pos.x / camera.zoom) + camera.x;
+    const worldY = (pos.y / camera.zoom) + camera.y;
     
     // Get hex coordinates
     const hex = gameEngine.screenToHex(worldX, worldY);
@@ -197,13 +274,11 @@ const GameCanvas = ({ gameEngine }) => {
   const handleContextMenu = useCallback((event) => {
     event.preventDefault();
     
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const pos = getEventPos(event);
     
     // Convert to world coordinates and get hex
-    const worldX = (x / camera.zoom) + camera.x;
-    const worldY = (y / camera.zoom) + camera.y;
+    const worldX = (pos.x / camera.zoom) + camera.x;
+    const worldY = (pos.y / camera.zoom) + camera.y;
     const hex = gameEngine.screenToHex(worldX, worldY);
     
     if (gameEngine.isValidHex(hex.col, hex.row)) {
@@ -221,9 +296,15 @@ const GameCanvas = ({ gameEngine }) => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onTouchStart={handleMouseDown}
+      onTouchMove={handleMouseMove}
+      onTouchEnd={handleMouseUp}
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
-      style={{ cursor: mouseState.current?.isDragging ? 'grabbing' : 'crosshair' }}
+      style={{ 
+        cursor: mouseState.current?.isDragging ? 'grabbing' : 'crosshair',
+        touchAction: 'none' // Prevent default touch behaviors
+      }}
     />
   );
 };

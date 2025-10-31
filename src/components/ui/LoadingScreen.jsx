@@ -34,29 +34,57 @@ const LoadingScreen = () => {
 
   return (
     <div className="loading-screen">
-      <div className="text-center">
+      <div className="container-fluid text-center px-3">
         <h1 className="loading-title">
           <i className="bi bi-globe2"></i>
           <br />
-          Civilization Browser
+          <span className="d-block d-sm-inline">Civilization</span>
+          <span className="d-block d-sm-inline"> Browser</span>
         </h1>
         
-        <div className="loading-progress mb-3">
+        <div className="loading-progress mb-3 mx-auto" style={{ maxWidth: '400px' }}>
           <ProgressBar 
             now={progress} 
             variant="warning"
             animated
             className="loading-progress-bar"
+            style={{ height: '12px' }}
           />
         </div>
         
-        <p className="loading-status">{status}</p>
+        <div className="loading-status mb-4">
+          <i className="bi bi-hourglass-split me-2"></i>
+          {status}
+        </div>
         
-        <div className="mt-4 text-light">
-          <small>
-            <i className="bi bi-info-circle"></i>
-            {' '}A browser-based Civilization clone built with React
-          </small>
+        {/* Mobile tips */}
+        <div className="mt-4">
+          <div className="row text-center">
+            <div className="col-12 col-md-4 mb-3 mb-md-0">
+              <small className="text-light">
+                <i className="bi bi-hand-index d-block mb-1"></i>
+                <strong>Tap</strong> to select
+              </small>
+            </div>
+            <div className="col-12 col-md-4 mb-3 mb-md-0">
+              <small className="text-light">
+                <i className="bi bi-arrows-move d-block mb-1"></i>
+                <strong>Drag</strong> to pan
+              </small>
+            </div>
+            <div className="col-12 col-md-4">
+              <small className="text-light">
+                <i className="bi bi-zoom-in d-block mb-1"></i>
+                <strong>Pinch</strong> to zoom
+              </small>
+            </div>
+          </div>
+          
+          <div className="mt-3">
+            <small className="text-light">
+              Building your empire since 4000 BC...
+            </small>
+          </div>
         </div>
       </div>
     </div>
