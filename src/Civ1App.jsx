@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
 import { gameStateAtom, gameActionsAtom } from './stores/gameStore';
 import GameEngine from './game/GameEngine';
+import Civ1GameCanvas from './components/game/Civ1GameCanvas';
+import HexDetailModal from './components/ui/HexDetailModal';
 
 function Civ1App() {
   const [gameState, setGameState] = useAtom(gameStateAtom);
@@ -10,6 +12,9 @@ function Civ1App() {
   const [error, setError] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [showHexDetail, setShowHexDetail] = useState(false);
+  const [detailHex, setDetailHex] = useState(null);
+  const [terrainData, setTerrainData] = useState(null);
 
   // Initialize game engine
   useEffect(() => {
@@ -42,6 +47,13 @@ function Civ1App() {
     setActiveMenu(activeMenu === menu ? null : menu);
   };
 
+  // Handle hex examination (called from canvas)
+  const handleExamineHex = (hex, terrain) => {
+    setDetailHex(hex);
+    setTerrainData(terrain);
+    setShowHexDetail(true);
+  };
+
   if (error) {
     return (
       <div className="vh-100 bg-danger text-white d-flex align-items-center justify-content-center">
@@ -67,8 +79,9 @@ function Civ1App() {
   return (
     <div className="vh-100 d-flex flex-column bg-dark text-white" style={{ fontFamily: 'monospace' }}>
       {/* Top Menu Bar */}
-      <div className="bg-secondary border-bottom border-light" style={{ height: '32px' }}>
-        <div className="d-flex h-100">
+      <div className="bg-secondary border-bottom border-light d-flex" style={{ height: '32px' }}>
+        {/* Menu items */}
+        <div className="d-flex flex-grow-1 h-100">
           {['GAME', 'ORDERS', 'ADVISORS', 'WORLD', 'CIVILOPEDIA'].map((item) => (
             <button
               key={item}
@@ -86,10 +99,36 @@ function Civ1App() {
 
       {/* Main Game Area */}
       <div className="flex-grow-1 d-flex">
-        {/* Left Sidebar */}
-        <div className="bg-info text-dark border-end border-light" style={{ width: '200px' }}>
+        {/* Left Sidebar with CSS Grid */}
+        <div 
+          className="bg-info text-dark border-end border-light"
+          style={{ 
+            width: '200px',
+            display: 'grid',
+            gridTemplateRows: '100px auto auto 1fr auto',
+            gridTemplateColumns: '1fr',
+            height: '100%'
+          }}
+        >
+          {/* Minimap */}
+          <div 
+            className="border-bottom border-dark bg-dark"
+            style={{ 
+              gridRow: '1',
+              overflow: 'hidden'
+            }}
+          >
+            <Civ1GameCanvas minimap={true} />
+          </div>
+
           {/* Civilization Info */}
-          <div className="border-bottom border-dark p-2" style={{ backgroundColor: '#87CEEB' }}>
+          <div 
+            className="border-bottom border-dark p-2" 
+            style={{ 
+              backgroundColor: '#87CEEB',
+              gridRow: '2'
+            }}
+          >
             <div style={{ fontSize: '11px', fontWeight: 'bold' }}>
               <div>22002</div>
               <div>20,000</div>
@@ -104,7 +143,15 @@ function Civ1App() {
           </div>
 
           {/* City List */}
-          <div className="border-bottom border-dark p-1" style={{ backgroundColor: '#B0C4DE' }}>
+          <div 
+            className="border-bottom border-dark p-1" 
+            style={{ 
+              backgroundColor: '#B0C4DE',
+              gridRow: '3',
+              maxHeight: '150px',
+              overflowY: 'auto'
+            }}
+          >
             <div style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>
               CITIES (4)
             </div>
@@ -125,7 +172,14 @@ function Civ1App() {
           </div>
 
           {/* Unit Info */}
-          <div className="border-bottom border-dark p-1" style={{ backgroundColor: '#B0C4DE' }}>
+          <div 
+            className="border-bottom border-dark p-1" 
+            style={{ 
+              backgroundColor: '#B0C4DE',
+              gridRow: '4',
+              overflowY: 'auto'
+            }}
+          >
             <div style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>
               UNITS
             </div>
@@ -138,7 +192,13 @@ function Civ1App() {
           </div>
 
           {/* Current Selection */}
-          <div className="p-2" style={{ backgroundColor: '#B0C4DE' }}>
+          <div 
+            className="p-2" 
+            style={{ 
+              backgroundColor: '#B0C4DE',
+              gridRow: '5'
+            }}
+          >
             <div style={{ fontSize: '10px', fontWeight: 'bold' }}>
               FORTIFIED UNIT
             </div>
@@ -159,15 +219,8 @@ function Civ1App() {
         </div>
 
         {/* Main Map Area */}
-        <div className="flex-grow-1 position-relative bg-success">
-          <canvas 
-            id="gameCanvas"
-            className="w-100 h-100"
-            style={{ 
-              cursor: 'crosshair',
-              imageRendering: 'pixelated'
-            }}
-          />
+        <div className="flex-grow-1 position-relative bg-dark">
+          <Civ1GameCanvas onExamineHex={handleExamineHex} />
           
           {/* Map overlay info */}
           <div 
@@ -177,7 +230,8 @@ function Civ1App() {
               right: '10px', 
               backgroundColor: 'rgba(0,0,0,0.7)', 
               fontSize: '12px',
-              fontFamily: 'monospace'
+              fontFamily: 'monospace',
+              zIndex: 10
             }}
           >
             <div>Turn: {gameState?.currentTurn || 1}</div>
@@ -262,6 +316,14 @@ function Civ1App() {
           )}
         </div>
       )}
+
+      {/* Hex Detail Modal */}
+      <HexDetailModal
+        show={showHexDetail}
+        onHide={() => setShowHexDetail(false)}
+        hex={detailHex}
+        terrain={terrainData}
+      />
     </div>
   );
 }
