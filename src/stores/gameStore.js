@@ -83,6 +83,15 @@ export const uiStateAtom = atom({
   notifications: []
 });
 
+// Settings Atom
+export const settingsAtom = atom({
+  uiScale: 1.0,        // Overall UI scale multiplier (0.5 to 2.0)
+  menuFontSize: 12,    // Top menu font size in pixels
+  sidebarWidth: 140,   // Left sidebar width in pixels
+  minimapHeight: 120,  // Minimap height in pixels
+  civListFontSize: 10  // Civilization list font size
+});
+
 // Selected Unit Details Atom (derived)
 export const selectedUnitAtom = atom((get) => {
   const gameState = get(gameStateAtom);

@@ -1,5 +1,6 @@
 import { HexGrid } from './hexGrid.js';
 import { CONSTANTS, TERRAIN_PROPS, UNIT_PROPS } from '../utils/constants.js';
+import { CIVILIZATIONS, TECHNOLOGIES, UNIT_TYPES } from './gameData.js';
 
 /**
  * Main Game Engine for React Civilization Clone
@@ -14,12 +15,23 @@ export default class GameEngine {
     this.civilizations = [];
     this.technologies = [];
     
+    // Game settings
+    this.gameSettings = {
+      difficulty: 'PRINCE',
+      mapType: 'EARTH',
+      numberOfCivilizations: 4,
+      playerCivilization: 0,
+      startingYear: -4000, // 4000 BC
+      startingGold: 50
+    };
+    
     // Rendering context
     this.renderer = null;
     
     // Game state
     this.isInitialized = false;
     this.currentTurn = 1;
+    this.currentYear = -4000; // 4000 BC
     this.activePlayer = 0;
     
     // Callbacks for React state updates
@@ -27,10 +39,20 @@ export default class GameEngine {
   }
 
   /**
-   * Initialize the game engine
+   * Initialize the game engine with settings
    */
-  async initialize() {
+  async initialize(settings = {}) {
     console.log('Initializing game engine...');
+    
+    // Merge custom settings
+    this.gameSettings = { ...this.gameSettings, ...settings };
+    
+    // Validate playerCivilization index
+    if (this.gameSettings.playerCivilization < 0 || 
+        this.gameSettings.playerCivilization >= CIVILIZATIONS.length) {
+      console.error('Invalid playerCivilization index:', this.gameSettings.playerCivilization);
+      this.gameSettings.playerCivilization = 0; // Default to first civilization
+    }
     
     // Create hex grid system
     this.hexGrid = new HexGrid(CONSTANTS.MAP_WIDTH, CONSTANTS.MAP_HEIGHT);
@@ -38,10 +60,12 @@ export default class GameEngine {
     // Generate initial game state
     await this.generateWorld();
     await this.createCivilizations();
-    await this.createTechnologies();
+    await this.initializeTechnologies();
     
     this.isInitialized = true;
     console.log('Game engine initialized successfully');
+    console.log(`Starting year: ${this.formatYear(this.currentYear)}`);
+    console.log(`Player civilization: ${this.civilizations[0].name}`);
   }
 
   /**
@@ -97,21 +121,33 @@ export default class GameEngine {
    * Create civilizations and place starting units
    */
   async createCivilizations() {
-    const civNames = [
-      { name: 'Romans', leader: 'Caesar', color: '#e74c3c' },
-      { name: 'Greeks', leader: 'Alexander', color: '#3498db' },
-      { name: 'Egyptians', leader: 'Cleopatra', color: '#f39c12' },
-      { name: 'Chinese', leader: 'Mao', color: '#27ae60' }
-    ];
+    const numCivs = Math.min(this.gameSettings.numberOfCivilizations, CIVILIZATIONS.length);
+    const selectedCivs = [];
+    
+    // Always include player's chosen civilization first
+    selectedCivs.push(CIVILIZATIONS[this.gameSettings.playerCivilization]);
+    
+    // Add other random civilizations
+    const availableCivs = CIVILIZATIONS.filter((_, idx) => idx !== this.gameSettings.playerCivilization);
+    for (let i = 1; i < numCivs; i++) {
+      const randomIdx = Math.floor(Math.random() * availableCivs.length);
+      selectedCivs.push(availableCivs.splice(randomIdx, 1)[0]);
+    }
 
     this.civilizations = [];
     this.units = [];
     this.cities = [];
 
-    for (let i = 0; i < Math.min(4, civNames.length); i++) {
+    for (let i = 0; i < selectedCivs.length; i++) {
+      const civData = selectedCivs[i];
+      
       const civ = {
         id: i,
-        ...civNames[i],
+        name: civData.name,
+        leader: civData.leader,
+        color: civData.color,
+        cityNames: [...civData.cityNames],
+        nextCityNameIndex: 0,
         isAlive: true,
         isHuman: i === 0, // First civ is human player
         resources: {
@@ -119,11 +155,16 @@ export default class GameEngine {
           production: 0,
           trade: 0,
           science: 0,
-          gold: CONSTANTS.GAME.INITIAL_GOLD
+          gold: this.gameSettings.startingGold // 50 gold starting treasury
         },
-        technologies: [],
+        // Starting technologies (Civ1 style)
+        technologies: ['irrigation', 'mining', 'roads'],
         currentResearch: null,
         researchProgress: 0,
+        scienceRate: 50, // 50% of trade goes to science initially
+        taxRate: 0,
+        luxuryRate: 50,
+        government: 'despotism',
         score: 0
       };
 
@@ -142,7 +183,7 @@ export default class GameEngine {
           for (const otherCiv of this.civilizations) {
             const otherUnits = this.units.filter(u => u.civilizationId === otherCiv.id);
             for (const unit of otherUnits) {
-              if (this.hexGrid.hexDistance(col, row, unit.col, unit.row) < 8) {
+              if (this.hexGrid.hexDistance(col, row, unit.col, unit.row) < 12) {
                 validPosition = false;
                 break;
               }
@@ -157,47 +198,145 @@ export default class GameEngine {
       }
 
       if (startPos) {
-        // Create starting units
-        const settlerId = `unit_${i}_0`;
-        const warriorId = `unit_${i}_1`;
+        // Create single starting settler unit (Civ1 style)
+        const settlerId = `settler_${i}_0`;
         
         const settler = {
           id: settlerId,
           civilizationId: i,
-          type: CONSTANTS.UNIT_TYPES.SETTLER,
+          type: 'settler',
+          name: 'Settler',
           col: startPos.col,
           row: startPos.row,
           health: 100,
-          movesRemaining: UNIT_PROPS.settler.movement,
+          movesRemaining: 1,
+          maxMoves: 1,
           isVeteran: false,
-          ...UNIT_PROPS.settler
+          attack: 0,
+          defense: 1,
+          orders: null // 'fortify', 'sentry', 'goto', etc.
         };
 
-        const warrior = {
-          id: warriorId,
-          civilizationId: i,
-          type: CONSTANTS.UNIT_TYPES.WARRIOR,
-          col: startPos.col + 1,
-          row: startPos.row,
-          health: 100,
-          movesRemaining: UNIT_PROPS.warrior.movement,
-          isVeteran: false,
-          ...UNIT_PROPS.warrior
-        };
-
-        this.units.push(settler, warrior);
+        this.units.push(settler);
+        
+        // Reveal area around starting position
+        this.revealArea(startPos.col, startPos.row, 2);
       }
 
       this.civilizations.push(civ);
     }
 
     console.log('Created', this.civilizations.length, 'civilizations');
-    console.log('Created', this.units.length, 'starting units');
+    console.log('Player civilization:', this.civilizations[0].name, 'led by', this.civilizations[0].leader);
+    console.log('Starting with 1 Settler unit and', this.gameSettings.startingGold, 'gold');
+    console.log('Initial technologies: Irrigation, Mining, Roads');
   }
 
   /**
-   * Create technology tree
+   * Reveal map tiles around a position
    */
+  revealArea(centerCol, centerRow, radius) {
+    if (!this.map) return;
+    
+    for (let row = centerRow - radius; row <= centerRow + radius; row++) {
+      for (let col = centerCol - radius; col <= centerCol + radius; col++) {
+        const tile = this.getTileAt(col, row);
+        if (tile && this.hexGrid.hexDistance(centerCol, centerRow, col, row) <= radius) {
+          tile.visible = true;
+          tile.explored = true;
+        }
+      }
+    }
+  }
+
+  /**
+   * Initialize technology tree
+   */
+  async initializeTechnologies() {
+    // Starting technologies are already set in createCivilizations
+    // This can be expanded to include the full tech tree
+    console.log('Technology tree initialized');
+  }
+
+  /**
+   * Format year for display (4000 BC, 1000 AD, etc.)
+   */
+  formatYear(year) {
+    if (year < 0) {
+      return `${Math.abs(year)} BC`;
+    } else if (year > 0) {
+      return `${year} AD`;
+    } else {
+      return '1 BC'; // Year 0 doesn't exist historically
+    }
+  }
+
+  /**
+   * Get next city name for a civilization
+   */
+  getNextCityName(civilizationId) {
+    const civ = this.civilizations[civilizationId];
+    if (!civ) return 'City';
+    
+    const name = civ.cityNames[civ.nextCityNameIndex] || `${civ.name} City ${civ.nextCityNameIndex + 1}`;
+    civ.nextCityNameIndex++;
+    return name;
+  }
+
+  /**
+   * Found a new city
+   */
+  foundCity(col, row, civilizationId, customName = null) {
+    const civ = this.civilizations[civilizationId];
+    if (!civ) return null;
+
+    const cityId = `city_${civilizationId}_${this.cities.length}`;
+    const cityName = customName || this.getNextCityName(civilizationId);
+
+    const city = {
+      id: cityId,
+      name: cityName,
+      civilizationId: civilizationId,
+      col: col,
+      row: row,
+      population: 1,
+      foodStored: 0,
+      foodRequired: 20, // Food needed for next population
+      shields: 0, // Production shields
+      currentProduction: 'settler', // Start building a settler
+      productionQueue: [],
+      buildings: [],
+      wonders: [],
+      workingTiles: [], // Tiles being worked by citizens
+      isCapital: this.cities.filter(c => c.civilizationId === civilizationId).length === 0,
+      happiness: {
+        happy: 0,
+        content: 1,
+        unhappy: 0
+      },
+      // Resource output per turn
+      output: {
+        food: 0,
+        production: 0,
+        trade: 0,
+        science: 0,
+        gold: 0
+      }
+    };
+
+    this.cities.push(city);
+    
+    // Remove settler unit that founded the city
+    const settlerIdx = this.units.findIndex(u => 
+      u.col === col && u.row === row && u.civilizationId === civilizationId && u.type === 'settler'
+    );
+    if (settlerIdx !== -1) {
+      this.units.splice(settlerIdx, 1);
+    }
+
+    console.log(`${civ.name} founded ${cityName} at (${col}, ${row})`);
+    return city;
+  }
   async createTechnologies() {
     this.technologies = [
       {

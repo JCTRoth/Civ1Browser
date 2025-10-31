@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { gameStateAtom, mapAtom, cameraAtom } from '../../stores/gameStore';
 
-const Civ1GameCanvas = ({ minimap = false, onExamineHex }) => {
+const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
   const canvasRef = useRef(null);
   const [gameState] = useAtom(gameStateAtom);
   const [mapData] = useAtom(mapAtom);
@@ -360,14 +360,20 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex }) => {
           drawTerrainSymbol(ctx, x, y, tile);
         }
         
-        // Draw city
-        if (tile.city && camera.zoom > 0.3) {
-          drawCity(ctx, x, y, tile.city);
+        // Draw city from game engine
+        if (gameEngine && camera.zoom > 0.3) {
+          const city = gameEngine.cities?.find(c => c.col === col && c.row === row);
+          if (city) {
+            drawCity(ctx, x, y, city);
+          }
         }
         
-        // Draw unit
-        if (tile.unit && camera.zoom > 0.3) {
-          drawUnit(ctx, x, y, tile.unit);
+        // Draw unit from game engine
+        if (gameEngine && camera.zoom > 0.3) {
+          const unit = gameEngine.units?.find(u => u.col === col && u.row === row);
+          if (unit) {
+            drawUnit(ctx, x, y, unit);
+          }
         }
         
         // Draw coordinates only when zoomed in
@@ -381,9 +387,12 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex }) => {
     }
     
     // Draw selected hex info
-    if (selectedHex && terrain) {
+    if (selectedHex && terrain && gameEngine) {
       const tile = terrain[selectedHex.row]?.[selectedHex.col];
       if (tile) {
+        const unit = gameEngine.units?.find(u => u.col === selectedHex.col && u.row === selectedHex.row);
+        const city = gameEngine.cities?.find(c => c.col === selectedHex.col && c.row === selectedHex.row);
+        
         ctx.fillStyle = 'rgba(0,0,0,0.8)';
         ctx.fillRect(10, 10, 200, 80);
         
@@ -392,8 +401,8 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex }) => {
         ctx.textAlign = 'left';
         ctx.fillText(`Hex: ${selectedHex.col}, ${selectedHex.row}`, 15, 25);
         ctx.fillText(`Terrain: ${TERRAIN_TYPES[tile.type]?.name}`, 15, 40);
-        if (tile.city) ctx.fillText(`City: ${tile.city.name}`, 15, 55);
-        if (tile.unit) ctx.fillText(`Unit: ${tile.unit.type}`, 15, 70);
+        if (city) ctx.fillText(`City: ${city.name}`, 15, 55);
+        if (unit) ctx.fillText(`Unit: ${unit.name || unit.type}`, 15, 70);
         if (tile.hasRiver) ctx.fillText(`🌊 River`, 15, 85);
       }
     }

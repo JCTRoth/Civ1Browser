@@ -1,50 +1,98 @@
 import React, { useEffect, useState } from 'react';
 import { useAtom } from 'jotai';
-import { gameStateAtom, gameActionsAtom } from './stores/gameStore';
+import { gameStateAtom, gameActionsAtom, settingsAtom, cameraAtom } from './stores/gameStore';
 import GameEngine from './game/GameEngine';
 import Civ1GameCanvas from './components/game/Civ1GameCanvas';
 import HexDetailModal from './components/ui/HexDetailModal';
+import SettingsModal from './components/ui/SettingsModal';
+import GameSetupModal from './components/ui/GameSetupModal';
 
 function Civ1App() {
   const [gameState, setGameState] = useAtom(gameStateAtom);
   const [, gameActions] = useAtom(gameActionsAtom);
+  const [settings] = useAtom(settingsAtom);
+  const [camera, setCamera] = useAtom(cameraAtom);
   const [gameEngine, setGameEngine] = useState(null);
   const [error, setError] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
   const [activeMenu, setActiveMenu] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [showHexDetail, setShowHexDetail] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showGameSetup, setShowGameSetup] = useState(true);
   const [detailHex, setDetailHex] = useState(null);
   const [terrainData, setTerrainData] = useState(null);
+  const menuRefs = React.useRef({});
+
+  // Handle game start with chosen settings
+  const handleGameStart = async (gameSettings) => {
+    try {
+      console.log('Starting new game with settings:', gameSettings);
+      setShowGameSetup(false);
+      
+      const engine = new GameEngine();
+      await engine.initialize(gameSettings);
+      setGameEngine(engine);
+      
+      // Get player's starting settler position
+      const playerSettler = engine.units.find(u => u.civilizationId === 0 && u.type === 'settler');
+      
+      // Update game state with engine data
+      setGameState(prev => ({
+        ...prev,
+        gamePhase: 'playing',
+        isGameStarted: true,
+        mapGenerated: true,
+        currentTurn: engine.currentTurn,
+        currentYear: engine.currentYear,
+        units: engine.units,
+        cities: engine.cities,
+        civilizations: engine.civilizations
+      }));
+      
+      // Center camera on player's starting settler
+      if (playerSettler) {
+        const HEX_WIDTH = 32 * Math.sqrt(3);
+        const VERT_DISTANCE = 64 * 0.75;
+        const startX = playerSettler.col * HEX_WIDTH + (playerSettler.row % 2) * (HEX_WIDTH / 2);
+        const startY = playerSettler.row * VERT_DISTANCE;
+        
+        setCamera(prev => ({
+          ...prev,
+          x: -startX + window.innerWidth / 2,
+          y: -startY + window.innerHeight / 2
+        }));
+        
+        console.log('Camera centered on player settler at:', playerSettler.col, playerSettler.row);
+      }
+      
+      console.log('Game started with units:', engine.units);
+      console.log('Player settler at:', playerSettler);
+      
+    } catch (error) {
+      console.error('Game start error:', error);
+      setError(error.message);
+    }
+  };
 
   // Initialize game engine
   useEffect(() => {
-    const initializeGame = async () => {
-      try {
-        console.log('Civ1App: Starting initialization...');
-        const engine = new GameEngine();
-        setGameEngine(engine);
-        
-        // Auto-start the game for development
-        setGameState(prev => ({
-          ...prev,
-          gamePhase: 'playing',
-          isGameStarted: true,
-          mapGenerated: true,
-          currentTurn: 1
-        }));
-        
-      } catch (error) {
-        console.error('Civ1App: Initialization error:', error);
-        setError(error.message);
-      }
-    };
-
-    initializeGame();
+    // Game initialization now happens in handleGameStart after setup modal
+    // No auto-initialization
   }, [setGameState]);
 
   // Handle menu actions
-  const handleMenuClick = (menu) => {
-    setActiveMenu(activeMenu === menu ? null : menu);
+  const handleMenuClick = (menu, event) => {
+    if (activeMenu === menu) {
+      setActiveMenu(null);
+    } else {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setMenuPosition({
+        top: rect.bottom,
+        left: rect.left
+      });
+      setActiveMenu(menu);
+    }
   };
 
   // Handle hex examination (called from canvas)
@@ -52,6 +100,20 @@ function Civ1App() {
     setDetailHex(hex);
     setTerrainData(terrain);
     setShowHexDetail(true);
+  };
+
+  // Handle new game
+  const handleNewGame = () => {
+    const confirmed = window.confirm(
+      '🏛️ Start a New Game?\n\n' +
+      'Are you sure you want to end the current game and start over?\n\n' +
+      'All progress will be lost.'
+    );
+    
+    if (confirmed) {
+      // Reload the page to start fresh
+      window.location.reload();
+    }
   };
 
   if (error) {
@@ -65,7 +127,20 @@ function Civ1App() {
     );
   }
 
-  if (!gameEngine) {
+  // Show game setup modal before game engine is created
+  if (!gameEngine && showGameSetup) {
+    return (
+      <div className="vh-100 bg-dark text-white d-flex align-items-center justify-content-center">
+        <GameSetupModal
+          show={showGameSetup}
+          onStart={handleGameStart}
+        />
+      </div>
+    );
+  }
+
+  // Show loading only during actual initialization
+  if (!gameEngine && !showGameSetup) {
     return (
       <div className="vh-100 bg-primary text-white d-flex align-items-center justify-content-center">
         <div className="text-center">
@@ -77,21 +152,73 @@ function Civ1App() {
   }
 
   return (
-    <div className="vh-100 d-flex flex-column bg-dark text-white" style={{ fontFamily: 'monospace' }}>
+    <div 
+      className="vh-100 d-flex flex-column bg-dark text-white" 
+      style={{ 
+        fontFamily: 'monospace',
+        fontSize: `${settings.uiScale}rem`
+      }}
+    >
       {/* Top Menu Bar */}
-      <div className="bg-secondary border-bottom border-light d-flex" style={{ height: '32px' }}>
+      <div 
+        className="border-bottom border-light d-flex" 
+        style={{ 
+          height: `${48 * settings.uiScale}px`,
+          background: '#1a1a1a',
+          boxShadow: 'none'
+        }}
+      >
         {/* Menu items */}
-        <div className="d-flex flex-grow-1 h-100">
+        <div className="d-flex flex-grow-1 h-100 justify-content-center align-items-center">
           {['GAME', 'ORDERS', 'ADVISORS', 'WORLD', 'CIVILOPEDIA'].map((item) => (
             <button
               key={item}
-              className={`btn btn-sm px-3 text-white border-0 rounded-0 ${
-                activeMenu === item ? 'bg-primary' : 'bg-transparent'
+              ref={(el) => menuRefs.current[item] = el}
+              className={`btn px-4 text-white border-0 rounded-0 position-relative d-flex align-items-center justify-content-center ${
+                activeMenu === item ? '' : ''
               }`}
-              style={{ fontSize: '12px', height: '100%' }}
-              onClick={() => handleMenuClick(item)}
+              style={{ 
+                fontSize: `${settings.menuFontSize * 1.4}px`,
+                height: '100%',
+                fontWeight: 'bold',
+                letterSpacing: '1px',
+                background: activeMenu === item 
+                  ? '#333333'
+                  : 'transparent',
+                textShadow: 'none',
+                transition: 'all 0.2s ease',
+                transform: 'none',
+                borderLeft: 'none',
+                borderRight: 'none'
+              }}
+              onMouseEnter={(e) => {
+                if (activeMenu !== item) {
+                  e.target.style.background = '#2a2a2a';
+                  e.target.style.transform = 'none';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeMenu !== item) {
+                  e.target.style.background = 'transparent';
+                  e.target.style.transform = 'none';
+                }
+              }}
+              onClick={(e) => handleMenuClick(item, e)}
             >
               {item}
+              {activeMenu === item && (
+                <div 
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: '3px',
+                    background: '#ffffff',
+                    boxShadow: 'none'
+                  }}
+                />
+              )}
             </button>
           ))}
         </div>
@@ -101,13 +228,14 @@ function Civ1App() {
       <div className="flex-grow-1 d-flex">
         {/* Left Sidebar with CSS Grid */}
         <div 
-          className="bg-info text-dark border-end border-light"
+          className="text-dark border-end border-dark"
           style={{ 
-            width: '200px',
+            width: `${settings.sidebarWidth * 2}px`,
             display: 'grid',
-            gridTemplateRows: '100px auto auto 1fr auto',
+            gridTemplateRows: `${settings.minimapHeight * 2}px 1fr`,
             gridTemplateColumns: '1fr',
-            height: '100%'
+            height: '100%',
+            backgroundColor: '#A9A9A9'
           }}
         >
           {/* Minimap */}
@@ -115,203 +243,232 @@ function Civ1App() {
             className="border-bottom border-dark bg-dark"
             style={{ 
               gridRow: '1',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              height: `${settings.minimapHeight * 2}px`
             }}
           >
             <Civ1GameCanvas minimap={true} />
           </div>
 
-          {/* Civilization Info */}
-          <div 
-            className="border-bottom border-dark p-2" 
-            style={{ 
-              backgroundColor: '#87CEEB',
-              gridRow: '2'
-            }}
-          >
-            <div style={{ fontSize: '11px', fontWeight: 'bold' }}>
-              <div>22002</div>
-              <div>20,000</div>
-              <div>3220 BC</div>
-              <div>Monarch</div>
-              <div style={{ color: '#8B4513' }}>
-                End of Turn<br/>
-                Press Enter<br/>
-                to continue
-              </div>
-            </div>
-          </div>
-
-          {/* City List */}
-          <div 
-            className="border-bottom border-dark p-1" 
-            style={{ 
-              backgroundColor: '#B0C4DE',
-              gridRow: '3',
-              maxHeight: '150px',
-              overflowY: 'auto'
-            }}
-          >
-            <div style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>
-              CITIES (4)
-            </div>
-            {['Washington', 'New York', 'Boston', 'Philadelphia'].map((city, idx) => (
-              <div 
-                key={city}
-                className={`p-1 ${selectedCity === city ? 'bg-warning' : ''}`}
-                style={{ 
-                  fontSize: '10px', 
-                  cursor: 'pointer',
-                  backgroundColor: selectedCity === city ? '#FFD700' : 'transparent'
-                }}
-                onClick={() => setSelectedCity(city)}
-              >
-                📍 {city} ({idx + 1})
-              </div>
-            ))}
-          </div>
-
-          {/* Unit Info */}
-          <div 
-            className="border-bottom border-dark p-1" 
-            style={{ 
-              backgroundColor: '#B0C4DE',
-              gridRow: '4',
-              overflowY: 'auto'
-            }}
-          >
-            <div style={{ fontSize: '10px', fontWeight: 'bold', textAlign: 'center' }}>
-              UNITS
-            </div>
-            <div style={{ fontSize: '10px' }}>
-              <div>🏹 Archer</div>
-              <div>⚔️ Warrior</div>
-              <div>🚢 Trireme</div>
-              <div>👨‍🌾 Settler</div>
-            </div>
-          </div>
-
-          {/* Current Selection */}
+          {/* Civilizations List */}
           <div 
             className="p-2" 
             style={{ 
-              backgroundColor: '#B0C4DE',
-              gridRow: '5'
+              backgroundColor: '#A9A9A9',
+              gridRow: '2',
+              overflowY: 'auto'
             }}
           >
-            <div style={{ fontSize: '10px', fontWeight: 'bold' }}>
-              FORTIFIED UNIT
-            </div>
-            <div style={{ fontSize: '10px' }}>
-              Archer<br/>
-              Veteran<br/>
-              Moves: 0/1<br/>
-              <div className="mt-1">
-                <button className="btn btn-xs btn-warning me-1" style={{ fontSize: '8px' }}>
-                  Fortify
-                </button>
-                <button className="btn btn-xs btn-info" style={{ fontSize: '8px' }}>
-                  Sentry
-                </button>
-              </div>
+            <div style={{ fontSize: `${settings.civListFontSize * 2}px`, fontFamily: 'monospace', lineHeight: '1.5' }}>
+              {[
+                { name: 'Americans', color: '#4169E1' },
+                { name: 'German Settlers', color: '#8B4513' },
+                { name: 'Romans', color: '#DC143C' },
+                { name: 'Newest', color: '#228B22' },
+                { name: 'Bretons', color: '#FFD700' },
+                { name: '(Player)', color: '#000000' }
+              ].map((civ, idx) => (
+                <div 
+                  key={idx}
+                  className="py-1"
+                  style={{ 
+                    cursor: 'pointer',
+                    color: civ.color,
+                    fontWeight: civ.name === '(Player)' ? 'bold' : 'normal'
+                  }}
+                  onClick={() => setSelectedCity(civ.name)}
+                >
+                  {civ.name}
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
         {/* Main Map Area */}
         <div className="flex-grow-1 position-relative bg-dark">
-          <Civ1GameCanvas onExamineHex={handleExamineHex} />
-          
-          {/* Map overlay info */}
-          <div 
-            className="position-absolute text-white p-2"
-            style={{ 
-              top: '10px', 
-              right: '10px', 
-              backgroundColor: 'rgba(0,0,0,0.7)', 
-              fontSize: '12px',
-              fontFamily: 'monospace',
-              zIndex: 10
-            }}
-          >
-            <div>Turn: {gameState?.currentTurn || 1}</div>
-            <div>Year: 4000 BC</div>
-            <div>Treasury: 50 💰</div>
-            <div>Science: 2 🧪</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Status Panel */}
-      <div 
-        className="bg-secondary border-top border-light p-2 d-flex align-items-center"
-        style={{ height: '60px', fontSize: '11px' }}
-      >
-        <div className="flex-grow-1">
-          <div className="d-flex align-items-center">
-            <div className="me-3">
-              <strong>Plains</strong> (River) - Move cost: 1
-            </div>
-            <div className="me-3">
-              🌾 Food: 2 | ⚒️ Production: 1 | 💰 Trade: 1
-            </div>
-            <div className="me-3">
-              Special: None
-            </div>
-          </div>
-        </div>
-        
-        <div className="d-flex gap-2">
-          <button className="btn btn-sm btn-warning">
-            🏗️ Build
-          </button>
-          <button className="btn btn-sm btn-info">
-            📜 Science
-          </button>
-          <button className="btn btn-sm btn-success">
-            💰 Tax
-          </button>
-          <button className="btn btn-sm btn-primary">
-            🗺️ Map
-          </button>
+          <Civ1GameCanvas 
+            onExamineHex={handleExamineHex} 
+            gameEngine={gameEngine}
+          />
         </div>
       </div>
 
       {/* Dropdown Menus */}
       {activeMenu && (
         <div 
-          className="position-absolute bg-dark border border-light"
+          className="position-fixed border border-light"
           style={{ 
-            top: '32px', 
-            left: ['GAME', 'ORDERS', 'ADVISORS', 'WORLD', 'CIVILOPEDIA'].indexOf(activeMenu) * 80 + 'px',
+            top: `${menuPosition.top}px`, 
+            left: `${menuPosition.left}px`,
             zIndex: 1000,
-            minWidth: '150px'
+            minWidth: '220px',
+            background: 'linear-gradient(180deg, #2d3748 0%, #1a202c 100%)',
+            boxShadow: '0 8px 16px rgba(0,0,0,0.4)',
+            borderRadius: '0 0 8px 8px',
+            overflow: 'hidden'
           }}
         >
           {activeMenu === 'GAME' && (
             <div>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🆕 New Game</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">💾 Save Game</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">📁 Load Game</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">⚙️ Options</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🚪 Quit</button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
+                  e.target.style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.paddingLeft = '16px';
+                }}
+                onClick={handleNewGame}
+              >
+                🆕 New Game
+              </button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
+                  e.target.style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.paddingLeft = '16px';
+                }}
+              >
+                💾 Save Game
+              </button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
+                  e.target.style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.paddingLeft = '16px';
+                }}
+              >
+                📁 Load Game
+              </button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
+                  e.target.style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.paddingLeft = '16px';
+                }}
+                onClick={() => {
+                  setShowSettings(true);
+                  setActiveMenu(null);
+                }}
+              >
+                ⚙️ Settings
+              </button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.background = 'linear-gradient(90deg, #e53e3e 0%, #c53030 100%)';
+                  e.target.style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.background = 'transparent';
+                  e.target.style.paddingLeft = '16px';
+                }}
+              >
+                🚪 Quit
+              </button>
             </div>
           )}
           {activeMenu === 'ORDERS' && (
             <div>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🏰 Build City</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🛣️ Build Road</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🌾 Irrigate</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🗿 Mine</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🏹 Fortify</button>
+              {['🏰 Build City', '🛣️ Build Road', '🌾 Irrigate', '🗿 Mine', '🏹 Fortify'].map((item, idx, arr) => (
+                <button 
+                  key={item}
+                  className="btn btn-dark text-start w-100 border-0"
+                  style={{
+                    fontSize: `${settings.menuFontSize * 1.1}px`,
+                    padding: '12px 16px',
+                    fontWeight: '600',
+                    transition: 'all 0.2s ease',
+                    borderBottom: idx < arr.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'linear-gradient(90deg, #38a169 0%, #2f855a 100%)';
+                    e.target.style.paddingLeft = '24px';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'transparent';
+                    e.target.style.paddingLeft = '16px';
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
             </div>
           )}
           {activeMenu === 'ADVISORS' && (
             <div>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">👑 Foreign Minister</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">💰 Trade Advisor</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">🧪 Science Advisor</button>
-              <button className="btn btn-sm btn-dark text-start w-100 border-0">⚔️ Military Advisor</button>
+              {['👑 Foreign Minister', '💰 Trade Advisor', '🧪 Science Advisor', '⚔️ Military Advisor'].map((item, idx, arr) => (
+                <button 
+                  key={item}
+                  className="btn btn-dark text-start w-100 border-0"
+                  style={{
+                    fontSize: `${settings.menuFontSize * 1.1}px`,
+                    padding: '12px 16px',
+                    fontWeight: '600',
+                    transition: 'all 0.2s ease',
+                    borderBottom: idx < arr.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'linear-gradient(90deg, #9f7aea 0%, #805ad5 100%)';
+                    e.target.style.paddingLeft = '24px';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'transparent';
+                    e.target.style.paddingLeft = '16px';
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -323,6 +480,12 @@ function Civ1App() {
         onHide={() => setShowHexDetail(false)}
         hex={detailHex}
         terrain={terrainData}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        show={showSettings}
+        onHide={() => setShowSettings(false)}
       />
     </div>
   );
