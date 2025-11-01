@@ -197,32 +197,27 @@ export const useGameStore = create((set, get) => ({
 
     updateMap: (mapUpdate) => set(state => {
       const newMap = { ...state.map, ...mapUpdate };
+  // For development-only forced fog disable, read from env (Vite exposes VITE_* vars)
+  const disableFog = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DISABLE_FOG === 'true';
+      const tilesArray = Array.isArray(mapUpdate.tiles) && mapUpdate.tiles.length > 0
+        ? mapUpdate.tiles
+        : Array.isArray(newMap.tiles) ? newMap.tiles : [];
+      const totalTiles = tilesArray.length;
 
       // Initialize visibility arrays if tiles are provided and arrays don't exist or are wrong size
-      if (mapUpdate.tiles && mapUpdate.tiles.length > 0) {
-        const totalTiles = mapUpdate.tiles.length;
+      if (totalTiles > 0) {
         if (!newMap.visibility || newMap.visibility.length !== totalTiles) {
           newMap.visibility = new Array(totalTiles).fill(false);
         }
         if (!newMap.revealed || newMap.revealed.length !== totalTiles) {
           newMap.revealed = new Array(totalTiles).fill(false);
         }
-        console.log('[Store] updateMap: Initialized visibility arrays', {
-          totalTiles,
-          visibilityLength: newMap.visibility.length,
-          revealedLength: newMap.revealed.length,
-          visibilityTrueCount: newMap.visibility.filter(v => v).length,
-          revealedTrueCount: newMap.revealed.filter(r => r).length
-        });
+
+        // No development-only mutations here; visibility arrays will be updated independently
       }
 
-      console.log('[Store] updateMap: Final map state', {
-        width: newMap.width,
-        height: newMap.height,
-        tilesLength: newMap.tiles?.length || 0,
-        visibilityLength: newMap.visibility?.length || 0,
-        revealedLength: newMap.revealed?.length || 0
-      });
+      // Minimal logging for map initialization
+      console.log('[Store] updateMap: Final map state', { width: newMap.width, height: newMap.height, tilesLength: newMap.tiles?.length || 0 });
 
       return {
         map: newMap
@@ -232,16 +227,28 @@ export const useGameStore = create((set, get) => ({
     // Visibility management actions
     updateVisibility: () => set(state => {
       const { map, units, cities } = state;
+      const disableFog = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DISABLE_FOG === 'true';
+
       if (!map.tiles || map.tiles.length === 0) {
         console.log('[Store] updateVisibility: No tiles to update visibility for');
         return state;
       }
 
-      console.log('[Store] updateVisibility: Starting visibility update', {
-        unitsCount: units.length,
-        citiesCount: cities.length,
-        mapSize: `${map.width}x${map.height}`
-      });
+      if (disableFog) {
+        // If developer requested fog disabled via env var, mark everything visible
+        const totalTiles = map.tiles.length;
+        return {
+          ...state,
+          map: {
+            ...map,
+            visibility: new Array(totalTiles).fill(true),
+            revealed: new Array(totalTiles).fill(true),
+            tiles: Array.isArray(map.tiles) ? map.tiles.map(t => t ? { ...t, visible: true, explored: true } : t) : map.tiles
+          }
+        };
+      }
+
+      console.log('[Store] updateVisibility: Starting visibility update', { unitsCount: units.length, citiesCount: cities.length, mapSize: `${map.width}x${map.height}` });
 
       // Create new visibility arrays
       const newVisibility = new Array(map.tiles.length).fill(false);
@@ -302,6 +309,10 @@ export const useGameStore = create((set, get) => ({
     }),
 
     revealArea: (centerCol, centerRow, radius) => set(state => {
+      if (state.settings?.disableFogOfWar) {
+        return state;
+      }
+
       const { map } = state;
       if (!map.tiles || map.tiles.length === 0) {
         console.log('[Store] revealArea: No tiles to reveal');

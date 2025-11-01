@@ -36,6 +36,21 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     RIVER: { color: '#0000FF', char: '~', name: 'River' }
   };
 
+  // Helper to resolve terrain info from either uppercase or lowercase type strings
+  const getTerrainInfo = (type) => {
+    if (!type) return null;
+    if (typeof type !== 'string') return null;
+    // Try exact key, then uppercase, then lowercase
+    if (TERRAIN_TYPES[type]) return TERRAIN_TYPES[type];
+    const up = type.toUpperCase();
+    if (TERRAIN_TYPES[up]) return TERRAIN_TYPES[up];
+    const low = type.toLowerCase();
+    if (TERRAIN_TYPES[low]) return TERRAIN_TYPES[low];
+    // Last resort: try to match by name
+    const found = Object.values(TERRAIN_TYPES).find(t => t.name && t.name.toLowerCase() === type.toLowerCase());
+    return found || null;
+  };
+
   // Generate terrain map (initialize once)
   const generateTerrain = (width, height) => {
     if (terrain) return terrain; // Return cached terrain
@@ -86,8 +101,31 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
 
   // Initialize terrain from game engine
   useEffect(() => {
-    if (gameEngine && gameEngine.map && gameEngine.map.tiles) {
-      // Convert flat tiles array to 2D array for rendering
+    // Prefer authoritative store data (`mapData.tiles`) to avoid races where gameEngine.map
+    // might be present but the store hasn't synchronized yet. Fall back to gameEngine.map
+    // then to the procedural generator.
+    if (mapData && Array.isArray(mapData.tiles) && mapData.tiles.length === mapData.width * mapData.height) {
+      const terrainGrid = new Array(mapData.height);
+      for (let row = 0; row < mapData.height; row++) {
+        terrainGrid[row] = new Array(mapData.width);
+        for (let col = 0; col < mapData.width; col++) {
+          const tileIndex = row * mapData.width + col;
+          const tile = mapData.tiles[tileIndex];
+          if (!tile) continue;
+
+          terrainGrid[row][col] = {
+            type: tile.type,
+            resource: tile.resource ?? null,
+            improvement: tile.improvement ?? null,
+            visible: mapData.visibility?.[tileIndex] ?? tile.visible ?? false,
+            explored: mapData.revealed?.[tileIndex] ?? tile.explored ?? false
+          };
+        }
+      }
+      setTerrain(terrainGrid);
+
+    } else if (gameEngine && gameEngine.map && Array.isArray(gameEngine.map.tiles) && gameEngine.map.tiles.length > 0) {
+      // Older fallback: use engine's map if available
       const terrainGrid = [];
       for (let row = 0; row < mapData.height; row++) {
         terrainGrid[row] = [];
@@ -109,9 +147,10 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         }
       }
       setTerrain(terrainGrid);
+
     } else if (!terrain) {
-      // Fallback to generated terrain if no game engine
-      setTerrain(generateTerrain(mapData.width, mapData.height));
+      // Last-resort fallback to procedural generation
+      setTerrain(generateTerrain(mapData.width || CONSTANTS.MAP_WIDTH, mapData.height || CONSTANTS.MAP_HEIGHT));
     }
   }, [gameEngine, gameEngine?.map, gameEngine?.units, mapData.width, mapData.height]);
 
@@ -216,7 +255,7 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
 
   // Draw terrain symbols
   const drawTerrainSymbol = (ctx, centerX, centerY, terrain) => {
-    const terrainInfo = TERRAIN_TYPES[terrain.type];
+    const terrainInfo = getTerrainInfo(terrain.type);
     if (!terrainInfo) return;
 
     ctx.fillStyle = '#000';
@@ -324,8 +363,8 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         }
         
         exploredCount++;
-        const terrainInfo = TERRAIN_TYPES[tile.type];
-        ctx.fillStyle = terrainInfo.color;
+  const terrainInfo = getTerrainInfo(tile.type) || { color: '#000000' };
+  ctx.fillStyle = terrainInfo.color;
         ctx.fillRect(
           col * tileWidth,
           row * tileHeight,

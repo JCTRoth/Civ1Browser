@@ -45,14 +45,31 @@ const MiniMap = ({ gameEngine }) => {
     canvas.height = MINIMAP_HEIGHT;
 
     // Clear canvas
+    // Defensive reset of context state (HMR/other renders can leave globalCompositeOperation or globalAlpha changed)
+    try {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1.0;
+      ctx.imageSmoothingEnabled = false;
+    } catch (e) {
+      // some browsers may be read-only for certain properties on certain contexts
+    }
+
     ctx.clearRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT);
+    // Fill a neutral background so any fully-transparent drawing doesn't show as black
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT);
 
     // Calculate scale factors
     const scaleX = MINIMAP_WIDTH / dataSource.width;
     const scaleY = MINIMAP_HEIGHT / dataSource.height;
 
-    // Draw terrain tiles with visibility/exploration shading
-    let drawn = 0;
+  // Cache fog state so the minimap still works if arrays are missing/empty early on
+  const hasRevealedData = Array.isArray(dataSource.revealed) && dataSource.revealed.length === dataSource.tiles.length;
+  const hasVisibilityData = Array.isArray(dataSource.visibility) && dataSource.visibility.length === dataSource.tiles.length;
+  const anyRevealed = hasRevealedData ? dataSource.revealed.some(Boolean) : false;
+
+  // Draw terrain tiles with visibility/exploration shading
+  let drawn = 0;
     for (let row = 0; row < dataSource.height; row++) {
       for (let col = 0; col < dataSource.width; col++) {
         const tileIndex = row * dataSource.width + col;
@@ -68,29 +85,25 @@ const MiniMap = ({ gameEngine }) => {
           console.warn('[MiniMap] Missing terrain props for type:', tile.type);
           window.__MINIMAP_MISSED_TYPE_REPORTED = true;
         }
-        let baseColor = terrainProps ? terrainProps.color : '#555555';
+        const baseColor = terrainProps ? terrainProps.color : '#555555';
 
-        // Apply fog of war shading
-        const isExplored = dataSource.revealed ? dataSource.revealed[tileIndex] : false;
-        const isVisible = dataSource.visibility ? dataSource.visibility[tileIndex] : false;
-        
-        if (!isExplored) {
-          // Show unexplored as dark grey so the map isn't a solid black rectangle
-          baseColor = '#111111';
-        } else if (isExplored && !isVisible) {
-          // Darken explored but not currently visible
-          // Simple darkening: blend with black
-            const c = baseColor.replace('#','');
-            if (c.length === 6) {
-              const r = parseInt(c.substring(0,2),16)*0.4;
-              const g = parseInt(c.substring(2,4),16)*0.4;
-              const b = parseInt(c.substring(4,6),16)*0.4;
-              baseColor = `rgb(${r|0},${g|0},${b|0})`;
-            }
-        }
-
+        // Always draw underlying terrain first so the minimap never renders as a solid void
         ctx.fillStyle = baseColor;
-        ctx.fillRect(x, y, scaleX+1, scaleY+1); // +1 to avoid gaps at low scale
+        ctx.fillRect(x, y, scaleX + 1, scaleY + 1); // +1 to avoid gaps at low scale
+
+        // Apply fog-of-war as translucent overlays so unexplored areas remain readable
+        const isExplored = hasRevealedData ? dataSource.revealed[tileIndex] : true;
+        const isVisible = hasVisibilityData ? dataSource.visibility[tileIndex] : true;
+
+        if (hasRevealedData && anyRevealed) {
+          if (!isExplored) {
+            ctx.fillStyle = 'rgba(6, 9, 14, 0.55)';
+            ctx.fillRect(x, y, scaleX + 1, scaleY + 1);
+          } else if (!isVisible) {
+            ctx.fillStyle = 'rgba(9, 13, 20, 0.25)';
+            ctx.fillRect(x, y, scaleX + 1, scaleY + 1);
+          }
+        }
         drawn++;
       }
     }
@@ -101,6 +114,8 @@ const MiniMap = ({ gameEngine }) => {
       console.log('[MiniMap] Drew', drawn, 'tiles on minimap.');
       window.__MINIMAP_DRAWN_ONCE = true;
     }
+
+    // (debug logs removed)
 
     // Draw cities
     if (cities && cities.length > 0) {
