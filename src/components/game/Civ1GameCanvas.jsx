@@ -306,28 +306,40 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     ctx.fillText(city.size.toString(), centerX + 10, centerY - 10);
   };
 
-  // Draw unit
-  const drawUnit = (ctx, centerX, centerY, unit) => {
+  // Draw unit (alpha optional for blinking)
+  const drawUnit = (ctx, centerX, centerY, unit, alpha = 1) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // Scale factor for icon - make everything 5x bigger
+    const scale = 4;
+    const baseRadius = 10; // previous radius
+    const radius = baseRadius * scale;
+
     // Unit background
     ctx.fillStyle = unit.owner === 0 ? '#4169E1' : '#DC143C';
     ctx.beginPath();
-    ctx.arc(centerX, centerY, 10, 0, 2 * Math.PI);
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
     ctx.fill();
 
-    // Unit border
+    // Unit border (scale stroke width a bit)
     ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(2, 0.5 * scale);
     ctx.stroke();
 
     // Unit icon (prefer unit.icon, then UNIT_TYPES lookup)
     ctx.fillStyle = '#FFF';
-    ctx.font = 'bold 12px monospace';
+    // Scale font size by same factor
+    const fontSize = 12 * scale;
+    ctx.font = `bold ${fontSize}px monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const unitTypeKey = unit.type?.toUpperCase();
     const typeDef = unitTypeKey ? (UNIT_TYPES[unitTypeKey] || null) : null;
     const icon = unit.icon || typeDef?.icon || '⚔️';
     ctx.fillText(icon, centerX, centerY);
+
+    ctx.restore();
   };
 
   // Render minimap
@@ -432,7 +444,7 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
   };
 
   // Render the map (optimized with throttling)
-  const render = () => {
+  const render = (currentTime = performance.now()) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -525,7 +537,19 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         if (gameEngine && camera.zoom > 0.3 && isVisible) {
           const unit = gameEngine.units?.find(u => u.col === col && u.row === row);
           if (unit) {
-            drawUnit(ctx, x, y, unit);
+            // Determine if this unit should blink: belongs to active player and has moves remaining
+            const isActivePlayersUnit = unit.civilizationId === gameState.activePlayer;
+            const hasMoves = (unit.movesRemaining || 0) > 0;
+            let alpha = 1;
+            if (isActivePlayersUnit && hasMoves) {
+              // Blink using a smooth sine wave based on currentTime
+              const period = 2000; // ms per full cycle
+              const t = (currentTime % period) / period; // 0..1
+              const sine = Math.sin(t * Math.PI * 2); // -1..1
+              // Map to [0.35, 1.0]
+              alpha = 0.675 + 0.325 * (sine + 1) / 2; // between ~0.35 and 1.0
+            }
+            drawUnit(ctx, x, y, unit, alpha);
           }
         }
         
@@ -624,6 +648,34 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         const hex = screenToHex(x, y);
         setSelectedHex(hex);
         setContextMenu(null); // Hide context menu on left click
+
+        // If we have a gameEngine available, try to select unit/city or move selected unit
+        if (gameEngine) {
+          // Prefer engine helper methods when present
+          const unitAt = typeof gameEngine.getUnitAt === 'function'
+            ? gameEngine.getUnitAt(hex.col, hex.row)
+            : gameEngine.units?.find(u => u.col === hex.col && u.row === hex.row) || null;
+
+          const cityAt = typeof gameEngine.getCityAt === 'function'
+            ? gameEngine.getCityAt(hex.col, hex.row)
+            : gameEngine.cities?.find(c => c.col === hex.col && c.row === hex.row) || null;
+
+          if (unitAt) {
+            // Select the clicked unit
+            if (actions && typeof actions.selectUnit === 'function') actions.selectUnit(unitAt.id);
+          } else if (cityAt) {
+            if (actions && typeof actions.selectCity === 'function') actions.selectCity(cityAt.id);
+          } else if (gameState.selectedUnit) {
+            // Attempt to move the currently selected unit to the clicked hex
+            const moved = gameEngine.moveUnit(gameState.selectedUnit, hex.col, hex.row);
+            if (!moved) {
+              // Provide feedback when move failed
+              if (actions && typeof actions.addNotification === 'function') {
+                actions.addNotification({ type: 'warning', message: 'Move failed: invalid destination or no moves remaining' });
+              }
+            }
+          }
+        }
       }
     }
   };
@@ -769,7 +821,21 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         break;
         
       case 'buildCity':
-        // Build a new city
+        // Prefer engine action if available
+        const tile = contextMenu.tile;
+        if (gameEngine && tile?.unit && (tile.unit.type === 'settlers' || tile.unit.type === 'settler')) {
+          // Use engine to found city using unit id when possible
+          const unitId = tile.unit.id || gameState.selectedUnit || null;
+          if (unitId) {
+            const ok = gameEngine.foundCity(unitId);
+            if (!ok && actions && typeof actions.addNotification === 'function') {
+              actions.addNotification({ type: 'warning', message: 'Failed to found city with engine' });
+            }
+            break;
+          }
+        }
+
+        // Fallback: Build a new city locally in terrain view
         const cityTerrain = [...terrain];
         cityTerrain[contextMenu.hex.row][contextMenu.hex.col].city = {
           name: 'New City',
@@ -853,12 +919,12 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     
     const animate = (currentTime) => {
       animationFrameRef.current = requestAnimationFrame(animate);
-      
+
       // Throttle rendering to target FPS
       const elapsed = currentTime - lastFrameTime;
       if (elapsed > frameInterval) {
         lastFrameTime = currentTime - (elapsed % frameInterval);
-        render();
+        render(currentTime);
       }
     };
     

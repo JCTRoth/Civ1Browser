@@ -8,7 +8,6 @@ const BottomPanel = ({ gameEngine }) => {
   const selectedCity = useGameStore(state => state.selectedCity);
   const uiState = useGameStore(state => state.uiState);
   const actions = useGameStore(state => state.actions);
-  const [, gameActions] = useAtom(gameActionsAtom);
 
   // Don't show panel if nothing is selected
   if (!uiState.showUnitPanel && !uiState.showCityPanel) {
@@ -141,7 +140,7 @@ const BottomPanel = ({ gameEngine }) => {
             <div className="col-md-6">
               <div className="unit-actions">
                 <ButtonGroup vertical className="w-100">
-                  {selectedUnit.type === 'settler' && (
+                  {(selectedUnit.type === 'settler' || selectedUnit.type === 'settlers') && (
                     <Button 
                       variant="outline-primary" 
                       size="sm"
