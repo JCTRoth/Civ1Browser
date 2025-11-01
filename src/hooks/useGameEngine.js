@@ -57,6 +57,8 @@ export const useGameEngine = (gameEngine) => {
           actions.updateUnits(gameEngine.getAllUnits());
           actions.updateTechnologies(gameEngine.technologies);
           actions.updateVisibility();
+          // Focus camera on next unit for active player
+          actions.focusOnNextUnit();
           break;
 
         default:
@@ -83,6 +85,8 @@ export const useGameEngine = (gameEngine) => {
       
       console.log('[useGameEngine] Calling updateVisibility...');
       actions.updateVisibility();
+      // Focus camera on player's first movable unit at start
+      actions.focusOnNextUnit();
       console.log('[useGameEngine] Initial sync complete');
     }
 

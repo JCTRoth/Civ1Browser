@@ -130,6 +130,34 @@ export const useGameStore = create((set, get) => ({
       };
     }),
 
+    focusOnNextUnit: () => set(state => {
+      // Find next unit belonging to active player that still has moves
+      const activeId = state.gameState.activePlayer;
+      const candidate = state.units.find(u => u.civilizationId === activeId && (u.movesRemaining || 0) > 0);
+      if (!candidate) return state;
+
+      // Calculate camera center to place the unit in screen center
+      const HEX_WIDTH = 32 * Math.sqrt(3);
+      const VERT_DISTANCE = 64 * 0.75;
+      const zoom = state.camera.zoom || 2.0;
+      const startX = candidate.col * HEX_WIDTH + (candidate.row % 2) * (HEX_WIDTH / 2);
+      const startY = candidate.row * VERT_DISTANCE;
+
+      const newCamera = {
+        x: startX - (typeof window !== 'undefined' ? (window.innerWidth / 2) / zoom : 0),
+        y: startY - (typeof window !== 'undefined' ? (window.innerHeight / 2) / zoom : 0),
+        zoom: zoom
+      };
+
+      console.log('[Store] focusOnNextUnit: Focusing camera on unit', { unitId: candidate.id, col: candidate.col, row: candidate.row });
+
+      return {
+        ...state,
+        gameState: { ...state.gameState, selectedUnit: candidate.id },
+        camera: { ...state.camera, ...newCamera }
+      };
+    }),
+
     updateCamera: (cameraUpdate) => set(state => ({
       camera: { ...state.camera, ...cameraUpdate }
     })),
@@ -222,11 +250,15 @@ export const useGameStore = create((set, get) => ({
       // Clear current visibility (but keep revealed status)
       // Revealed tiles stay permanently visible
 
-      // Reveal around all units that have sight capabilities
+      // Reveal around all of the active player's units only
       for (const unit of units) {
+        if (unit.civilizationId !== state.gameState.activePlayer) {
+          continue;
+        }
+
         // Check if unit has sight range > 0
-        const unitTypeKey = unit.type.toUpperCase();
-        const unitType = UNIT_TYPES[unitTypeKey];
+        const unitTypeKey = unit.type?.toUpperCase();
+        const unitType = unitTypeKey ? UNIT_TYPES[unitTypeKey] : null;
         const sightRange = unitType?.sightRange || 0;
         
         if (sightRange > 0) {
@@ -240,9 +272,9 @@ export const useGameStore = create((set, get) => ({
         }
       }
 
-      // Reveal around all player cities (civilizationId === 0)
+      // Reveal around all player cities (civilizationId === active player)
       for (const city of cities) {
-        if (city.civilizationId === 0) {
+        if (city.civilizationId === state.gameState.activePlayer) {
           const cityViewRadius = 2; // Cities can see 2 tiles away
           console.log('[Store] updateVisibility: Processing player city', {
             cityName: city.name,

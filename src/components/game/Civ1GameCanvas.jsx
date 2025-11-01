@@ -353,20 +353,14 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         }
         
         // Draw units as small dots (visible units or units with sight)
-        if (tile.unit) {
-          const unitTypeKey = tile.unit.type?.toUpperCase();
-          const unitType = unitTypeKey ? UNIT_TYPES[unitTypeKey] : null;
-          const hasSight = unitType?.sightRange > 0;
-
-          if (isVisible || hasSight) {
-            ctx.fillStyle = tile.unit.owner === 0 ? '#FFFFFF' : '#FF0000';
-            ctx.fillRect(
-              col * tileWidth + tileWidth/3,
-              row * tileHeight + tileHeight/3,
-              tileWidth/3,
-              tileHeight/3
-            );
-          }
+        if (tile.unit && isVisible) {
+          ctx.fillStyle = tile.unit.owner === 0 ? '#FFFFFF' : '#FF0000';
+          ctx.fillRect(
+            col * tileWidth + tileWidth/3,
+            row * tileHeight + tileHeight/3,
+            tileWidth/3,
+            tileHeight/3
+          );
         }
         
         // Apply fog overlay for explored but not currently visible tiles
