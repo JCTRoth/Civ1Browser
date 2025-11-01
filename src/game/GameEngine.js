@@ -829,7 +829,8 @@ export default class GameEngine {
   renderUnit(ctx, unit) {
     const center = this.hexGrid.hexToScreen(unit.col, unit.row);
     const civ = this.civilizations[unit.civilizationId];
-    const unitProps = UNIT_PROPS[unit.type];
+  const unitProps = UNIT_PROPS[unit.type];
+  const unitTypeDef = UNIT_TYPES[unit.type?.toUpperCase()] || null;
     
     // Draw unit background
     ctx.beginPath();
@@ -844,7 +845,7 @@ export default class GameEngine {
     ctx.fillStyle = '#ffffff';
     ctx.font = '10px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(unitProps?.icon || '?', center.x, center.y + 3);
+    ctx.fillText(unitTypeDef?.icon || unitProps?.icon || '?', center.x, center.y + 3);
   }
 
   /**

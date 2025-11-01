@@ -399,6 +399,7 @@ export const UNIT_TYPES = {
     defense: 0,
     movement: 1,
     sightRange: 2,
+    icon: '👷',
     requires: null,
     description: 'Non-combat: builds cities & improvements'
   },
@@ -410,6 +411,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 1,
     sightRange: 1,
+    icon: '🛺',
     requires: 'trade',
     description: 'Non-combat: trade unit'
   },
@@ -421,6 +423,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 1,
     sightRange: 1,
+    icon: '🕊️',
     requires: 'writing',
     description: 'Non-combat: diplomacy'
   },
@@ -432,6 +435,7 @@ export const UNIT_TYPES = {
     defense: 0,
     movement: 2,
     sightRange: 1,
+    icon: '🛞',
     requires: 'the_wheel',
     description: 'Non-combat: transport'
   },
@@ -445,6 +449,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 1,
     sightRange: 1,
+    icon: '🪖',
     requires: null,
     description: 'Basic early infantry'
   },
@@ -456,6 +461,7 @@ export const UNIT_TYPES = {
     defense: 2,
     movement: 1,
     sightRange: 1,
+    icon: '🛡️',
     requires: 'bronze_working',
     description: 'Defensive ancient infantry'
   },
@@ -467,6 +473,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 1,
     sightRange: 1,
+    icon: '⚔️',
     requires: 'iron_working',
     description: 'Offensive ancient infantry'
   },
@@ -478,6 +485,7 @@ export const UNIT_TYPES = {
     defense: 3,
     movement: 1,
     sightRange: 1,
+    icon: '🔫',
     requires: 'gunpowder',
     description: 'Gunpowder infantry'
   },
@@ -489,6 +497,7 @@ export const UNIT_TYPES = {
     defense: 5,
     movement: 1,
     sightRange: 1,
+    icon: '🎯',
     requires: 'conscription',
     description: 'Advanced infantry'
   },
@@ -500,6 +509,7 @@ export const UNIT_TYPES = {
     defense: 6,
     movement: 3,
     sightRange: 2,
+    icon: '🚜',
     requires: 'labor_union',
     description: 'Modern infantry with high mobility'
   },
@@ -513,6 +523,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 2,
     sightRange: 2,
+    icon: '🐎',
     requires: 'horseback_riding',
     description: 'Early fast cavalry'
   },
@@ -524,6 +535,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 2,
     sightRange: 2,
+    icon: '🛶',
     requires: 'the_wheel',
     description: 'Ancient fast cavalry'
   },
@@ -535,6 +547,7 @@ export const UNIT_TYPES = {
     defense: 2,
     movement: 2,
     sightRange: 2,
+    icon: '♞',
     requires: 'chivalry',
     description: 'Medieval cavalry with balanced stats'
   },
@@ -546,6 +559,8 @@ export const UNIT_TYPES = {
     defense: 8,
     movement: 4,
     sightRange: 2,
+    // replacement for a corrupted emoji sequence — use a short text fallback
+    icon: 'TANK',
     requires: 'automobile',
     description: 'Heavy modern tank'
   },
@@ -559,6 +574,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 1,
     sightRange: 1,
+    icon: '💣',
     requires: 'mathematics',
     description: 'Early artillery unit'
   },
@@ -570,6 +586,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 1,
     sightRange: 1,
+    icon: '🎯',
     requires: 'metallurgy',
     description: 'Improved artillery'
   },
@@ -583,6 +600,7 @@ export const UNIT_TYPES = {
     defense: 0,
     movement: 3,
     sightRange: 2,
+    icon: '⛵',
     requires: 'map_making',
     description: 'Early naval transport/exploration'
   },
@@ -594,6 +612,7 @@ export const UNIT_TYPES = {
     defense: 2,
     movement: 3,
     sightRange: 2,
+    icon: '⛵',
     requires: 'navigation',
     description: 'Early weaponized naval ship'
   },
@@ -605,6 +624,7 @@ export const UNIT_TYPES = {
     defense: 4,
     movement: 4,
     sightRange: 2,
+    icon: '🚢',
     requires: 'magnetism',
     description: 'Mid-game naval combat ship'
   },
@@ -616,6 +636,7 @@ export const UNIT_TYPES = {
     defense: 8,
     movement: 4,
     sightRange: 2,
+    icon: '🛳️',
     requires: 'steam_engine',
     description: 'Early armored naval ship'
   },
@@ -627,6 +648,7 @@ export const UNIT_TYPES = {
     defense: 8,
     movement: 4,
     sightRange: 2,
+    icon: '🚢',
     requires: 'combustion',
     description: 'Late-game naval attack ship'
   },
@@ -638,6 +660,7 @@ export const UNIT_TYPES = {
     defense: 12,
     movement: 4,
     sightRange: 2,
+    icon: '🛥️',
     requires: 'steel',
     description: 'Powerful late-game naval battleship'
   },
@@ -649,6 +672,7 @@ export const UNIT_TYPES = {
     defense: 10,
     movement: 4,
     sightRange: 2,
+    icon: '✈️',
     requires: 'advanced_flight',
     description: 'Naval air unit carrier'
   },
@@ -660,6 +684,8 @@ export const UNIT_TYPES = {
     defense: 7,
     movement: 4,
     sightRange: 2,
+    // replacement for a corrupted emoji sequence — use a short text fallback
+    icon: 'SUB',
     requires: 'mass_production',
     description: 'Stealthy naval attacker'
   },
@@ -671,6 +697,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 3,
     sightRange: 2,
+    icon: '🚢',
     requires: 'industrialization',
     description: 'Naval troop transport unit'
   },
@@ -684,6 +711,7 @@ export const UNIT_TYPES = {
     defense: 2,
     movement: 10,
     sightRange: 3,
+    icon: '🛩️',
     requires: 'flight',
     description: 'Late game fast air unit'
   },
@@ -695,6 +723,7 @@ export const UNIT_TYPES = {
     defense: 1,
     movement: 8,
     sightRange: 2,
+    icon: '✈️',
     requires: 'advanced_flight',
     description: 'Heavy air attack unit'
   },
@@ -706,6 +735,7 @@ export const UNIT_TYPES = {
     defense: 0,
     movement: 20,
     sightRange: 0,
+    icon: '☢️',
     requires: 'rocketry',
     description: 'Ultimate area-effect weapon (air)'
   }

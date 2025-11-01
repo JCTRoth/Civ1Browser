@@ -274,26 +274,21 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     ctx.beginPath();
     ctx.arc(centerX, centerY, 10, 0, 2 * Math.PI);
     ctx.fill();
-    
+
     // Unit border
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 2;
     ctx.stroke();
-    
-    // Unit symbol
+
+    // Unit icon (prefer unit.icon, then UNIT_TYPES lookup)
     ctx.fillStyle = '#FFF';
     ctx.font = 'bold 12px monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    const unitSymbols = {
-      'Archer': '🏹',
-      'Warrior': '⚔️',
-      'Settler': '👨‍🌾',
-      'Trireme': '🚢'
-    };
-    
-    ctx.fillText(unitSymbols[unit.type] || '⚔️', centerX, centerY);
+    const unitTypeKey = unit.type?.toUpperCase();
+    const typeDef = unitTypeKey ? (UNIT_TYPES[unitTypeKey] || null) : null;
+    const icon = unit.icon || typeDef?.icon || '⚔️';
+    ctx.fillText(icon, centerX, centerY);
   };
 
   // Render minimap
@@ -375,13 +370,6 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         }
       }
     }
-    
-    console.log('[Civ1GameCanvas] Minimap render stats:', {
-      totalTiles,
-      exploredCount,
-      unexploredCount: totalTiles - exploredCount,
-      exploredPercentage: totalTiles > 0 ? ((exploredCount / totalTiles) * 100).toFixed(1) + '%' : '0%'
-    });
     
     // Draw viewport rectangle
     const viewportStartCol = Math.floor(camera.x / HEX_WIDTH);

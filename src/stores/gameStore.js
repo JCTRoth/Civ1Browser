@@ -343,7 +343,16 @@ export const useGameStore = create((set, get) => ({
       };
     }),
 
-    updateUnits: (units) => set({ units }),
+    updateUnits: (units) => set(state => {
+      // Enrich units with icon from UNIT_TYPES if available
+      const enriched = (units || []).map(u => {
+        const key = u.type?.toUpperCase();
+        const typeDef = key ? (UNIT_TYPES[key] || null) : null;
+        const icon = typeDef?.icon || u.icon || '🔸';
+        return { ...u, icon };
+      });
+      return { units: enriched };
+    }),
 
     updateCities: (cities) => set({ cities }),
 
