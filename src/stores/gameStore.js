@@ -31,6 +31,7 @@ export const useGameStore = create((set, get) => ({
     gamePhase: 'menu', // 'menu', 'loading', 'playing', 'paused'
     selectedHex: null,
     selectedUnit: null,
+    activeUnit: null,
     selectedCity: null,
     activePlayer: 0,
     mapGenerated: false,
@@ -100,7 +101,7 @@ export const useGameStore = create((set, get) => ({
     })),
 
     selectUnit: (unitId) => set(state => ({
-      gameState: { ...state.gameState, selectedUnit: unitId, selectedCity: null },
+      gameState: { ...state.gameState, selectedUnit: unitId, activeUnit: unitId, selectedCity: null },
       uiState: { ...state.uiState, showUnitPanel: !!unitId, showCityPanel: false }
     })),
 
@@ -153,7 +154,7 @@ export const useGameStore = create((set, get) => ({
 
       return {
         ...state,
-        gameState: { ...state.gameState, selectedUnit: candidate.id },
+        gameState: { ...state.gameState, selectedUnit: candidate.id, activeUnit: candidate.id },
         camera: { ...state.camera, ...newCamera }
       };
     }),

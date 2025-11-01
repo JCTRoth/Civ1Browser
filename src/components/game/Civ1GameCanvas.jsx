@@ -821,21 +821,7 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         break;
         
       case 'buildCity':
-        // Prefer engine action if available
-        const tile = contextMenu.tile;
-        if (gameEngine && tile?.unit && (tile.unit.type === 'settlers' || tile.unit.type === 'settler')) {
-          // Use engine to found city using unit id when possible
-          const unitId = tile.unit.id || gameState.selectedUnit || null;
-          if (unitId) {
-            const ok = gameEngine.foundCity(unitId);
-            if (!ok && actions && typeof actions.addNotification === 'function') {
-              actions.addNotification({ type: 'warning', message: 'Failed to found city with engine' });
-            }
-            break;
-          }
-        }
-
-        // Fallback: Build a new city locally in terrain view
+        // Build a new city
         const cityTerrain = [...terrain];
         cityTerrain[contextMenu.hex.row][contextMenu.hex.col].city = {
           name: 'New City',

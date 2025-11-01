@@ -26,10 +26,26 @@ export const useGameEngine = (gameEngine) => {
           console.log('[useGameEngine] NEW_GAME: Initial game state updated');
           break;
 
-        case 'UNIT_MOVED':
+        case 'UNIT_MOVED': {
+          // Sync units and visibility
           actions.updateUnits(gameEngine.getAllUnits());
           actions.updateVisibility();
+
+          // eventData.unit is the moved unit
+          const moved = eventData && eventData.unit ? eventData.unit : null;
+          if (moved) {
+            // If unit has moves remaining, keep it as active; otherwise advance to next unit
+            const movesLeft = moved.movesRemaining || 0;
+            if (movesLeft > 0) {
+              actions.selectUnit(moved.id);
+            } else {
+              // Move to next unit that can act
+              actions.focusOnNextUnit();
+            }
+          }
+
           break;
+        }
 
         case 'COMBAT_VICTORY':
         case 'COMBAT_DEFEAT':
