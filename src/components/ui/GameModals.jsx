@@ -1,16 +1,15 @@
 import React from 'react';
-import { useAtom } from 'jotai';
 import { Modal, Button, Tab, Tabs, Card, ListGroup } from 'react-bootstrap';
-import { uiStateAtom, gameActionsAtom, technologiesAtom, currentPlayerAtom } from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 
 const GameModals = ({ gameEngine }) => {
-  const [uiState] = useAtom(uiStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
-  const [technologies] = useAtom(technologiesAtom);
-  const [currentPlayer] = useAtom(currentPlayerAtom);
+  const uiState = useGameStore(state => state.uiState);
+  const actions = useGameStore(state => state.actions);
+  const technologies = useGameStore(state => state.technologies);
+  const currentPlayer = useGameStore(state => state.currentPlayer);
 
   const handleCloseDialog = () => {
-    gameActions({ type: 'HIDE_DIALOG' });
+    actions.hideDialog();
   };
 
   const handleNewGame = () => {
@@ -56,7 +55,7 @@ const GameModals = ({ gameEngine }) => {
           <Button 
             variant="outline-light" 
             size="lg"
-            onClick={() => gameActions({ type: 'SHOW_DIALOG', payload: 'help' })}
+            onClick={() => actions.showDialog('help')}
           >
             <i className="bi bi-question-circle"></i> Help
           </Button>

@@ -1,6 +1,5 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { Provider } from 'jotai'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 //import App from './App.jsx'
 //import SimpleGameApp from './SimpleGameApp.jsx'
@@ -15,9 +14,7 @@ import './styles/index.css'
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <Provider>
-        <Civ1App />
-      </Provider>
+      <Civ1App />
     </ErrorBoundary>
   </React.StrictMode>,
 )

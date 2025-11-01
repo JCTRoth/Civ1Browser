@@ -1,21 +1,14 @@
 import React from 'react';
-import { useAtom } from 'jotai';
 import { Card, ListGroup, Badge, Button } from 'react-bootstrap';
-import { 
-  currentPlayerAtom, 
-  playerUnitsAtom, 
-  playerCitiesAtom,
-  uiStateAtom,
-  gameActionsAtom
-} from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 import MiniMap from './MiniMap';
 
 const SidePanel = ({ gameEngine }) => {
-  const [currentPlayer] = useAtom(currentPlayerAtom);
-  const [playerUnits] = useAtom(playerUnitsAtom);
+  const currentPlayer = useGameStore(state => state.currentPlayer);
+  const playerUnits = useGameStore(state => state.playerUnits);
   const [playerCities] = useAtom(playerCitiesAtom);
-  const [uiState] = useAtom(uiStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const uiState = useGameStore(state => state.uiState);
+  const actions = useGameStore(state => state.actions);
 
   if (!currentPlayer) {
     return (
@@ -34,7 +27,7 @@ const SidePanel = ({ gameEngine }) => {
       {/* Mobile backdrop */}
       <div 
         className={`mobile-menu-backdrop ${!uiState.sidebarCollapsed ? 'show' : ''} d-md-none`}
-        onClick={() => gameActions({ type: 'TOGGLE_UI', payload: 'sidebarCollapsed' })}
+        onClick={() => actions.toggleUI('sidebarCollapsed')}
       />
       
       <div className={`game-side-panel ${!uiState.sidebarCollapsed ? 'show' : ''}`}>
@@ -43,7 +36,7 @@ const SidePanel = ({ gameEngine }) => {
           <Button 
             variant="outline-light" 
             size="sm"
-            onClick={() => gameActions({ type: 'TOGGLE_UI', payload: 'sidebarCollapsed' })}
+            onClick={() => actions.toggleUI('sidebarCollapsed')}
           >
             <i className="bi bi-x-lg"></i> Close
           </Button>

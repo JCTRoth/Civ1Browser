@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { useAtom } from 'jotai';
 import { Container } from 'react-bootstrap';
-import { gameStateAtom, gameActionsAtom } from './stores/gameStore';
+
+// Stores
+import { useGameStore } from './stores/gameStore';
+
+// Game Engine
 import GameEngine from './game/GameEngine';
 
 function SimpleGameApp() {
-  const [gameState, setGameState] = useAtom(gameStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const gameState = useGameStore(state => state.gameState);
+  const actions = useGameStore(state => state.actions);
   const [gameEngine, setGameEngine] = useState(null);
   const [error, setError] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -36,21 +39,13 @@ function SimpleGameApp() {
   // Game actions
   const handleStartGame = () => {
     console.log('Starting new game...');
-    setGameState(prev => ({
-      ...prev,
-      gamePhase: 'loading',
-      isLoading: true
-    }));
+    actions.setLoading(true);
     
     // Simulate game start
     setTimeout(() => {
-      setGameState(prev => ({
-        ...prev,
-        gamePhase: 'playing',
-        isLoading: false,
-        isGameStarted: true,
-        mapGenerated: true
-      }));
+      actions.startGame();
+      actions.updateGameState({ mapGenerated: true });
+      actions.setLoading(false);
       console.log('Game started!');
     }, 2000);
   };

@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { useAtom } from 'jotai';
-import { gameStateAtom } from '../stores/gameStore.js';
+import { useGameStore } from '../stores/gameStore.js';
 import GameEngine from '../game/GameEngine.js';
 
 const MinimalApp = () => {
   console.log('MinimalApp rendering...');
-  const [gameState] = useAtom(gameStateAtom);
+  const gameState = useGameStore(state => state.gameState);
   const [initStatus, setInitStatus] = useState('Testing GameEngine import...');
   
   useEffect(() => {

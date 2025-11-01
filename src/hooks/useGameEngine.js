@@ -1,19 +1,11 @@
 import { useEffect } from 'react';
-import { useAtom } from 'jotai';
-import {
-  gameActionsAtom,
-  mapAtom,
-  unitsAtom,
-  citiesAtom,
-  civilizationsAtom,
-  technologiesAtom
-} from '../stores/gameStore';
+import { useGameStore } from '../stores/gameStore';
 
 /**
- * Custom hook to integrate GameEngine with Jotai state
+ * Custom hook to integrate GameEngine with Zustand state
  */
 export const useGameEngine = (gameEngine) => {
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const actions = useGameStore(state => state.actions);
 
   useEffect(() => {
     if (!gameEngine) return;
@@ -22,48 +14,42 @@ export const useGameEngine = (gameEngine) => {
     gameEngine.onStateChange = (eventType, eventData) => {
       switch (eventType) {
         case 'NEW_GAME':
-          // Update all game state atoms
-          gameActions({ type: 'UPDATE_MAP', payload: eventData.map });
-          gameActions({ type: 'UPDATE_UNITS', payload: eventData.units });
-          gameActions({ type: 'UPDATE_CITIES', payload: eventData.cities });
-          gameActions({ type: 'UPDATE_CIVILIZATIONS', payload: eventData.civilizations });
-          gameActions({ type: 'UPDATE_TECHNOLOGIES', payload: eventData.technologies });
-          gameActions({ type: 'START_GAME' });
+          // Update all game state
+          actions.updateMap(eventData.map);
+          actions.updateUnits(eventData.units);
+          actions.updateCities(eventData.cities);
+          actions.updateCivilizations(eventData.civilizations);
+          actions.updateTechnologies(eventData.technologies);
+          actions.startGame();
           break;
 
         case 'UNIT_MOVED':
-          gameActions({ type: 'UPDATE_UNITS', payload: gameEngine.getAllUnits() });
+          actions.updateUnits(gameEngine.getAllUnits());
           break;
 
         case 'COMBAT_VICTORY':
         case 'COMBAT_DEFEAT':
-          gameActions({ type: 'UPDATE_UNITS', payload: gameEngine.getAllUnits() });
-          gameActions({ 
-            type: 'ADD_NOTIFICATION', 
-            payload: { 
-              type: eventType === 'COMBAT_VICTORY' ? 'success' : 'warning',
-              message: eventType === 'COMBAT_VICTORY' ? 'Victory in combat!' : 'Unit defeated in combat!'
-            } 
+          actions.updateUnits(gameEngine.getAllUnits());
+          actions.addNotification({
+            type: eventType === 'COMBAT_VICTORY' ? 'success' : 'warning',
+            message: eventType === 'COMBAT_VICTORY' ? 'Victory in combat!' : 'Unit defeated in combat!'
           });
           break;
 
         case 'CITY_FOUNDED':
-          gameActions({ type: 'UPDATE_CITIES', payload: gameEngine.getAllCities() });
-          gameActions({ type: 'UPDATE_UNITS', payload: gameEngine.getAllUnits() });
-          gameActions({ 
-            type: 'ADD_NOTIFICATION', 
-            payload: { 
-              type: 'info',
-              message: `${eventData.city.name} founded!`
-            } 
+          actions.updateCities(gameEngine.getAllCities());
+          actions.updateUnits(gameEngine.getAllUnits());
+          actions.addNotification({
+            type: 'info',
+            message: `${eventData.city.name} founded!`
           });
           break;
 
         case 'TURN_PROCESSED':
-          gameActions({ type: 'UPDATE_CIVILIZATIONS', payload: gameEngine.civilizations });
-          gameActions({ type: 'UPDATE_CITIES', payload: gameEngine.getAllCities() });
-          gameActions({ type: 'UPDATE_UNITS', payload: gameEngine.getAllUnits() });
-          gameActions({ type: 'UPDATE_TECHNOLOGIES', payload: gameEngine.technologies });
+          actions.updateCivilizations(gameEngine.civilizations);
+          actions.updateCities(gameEngine.getAllCities());
+          actions.updateUnits(gameEngine.getAllUnits());
+          actions.updateTechnologies(gameEngine.technologies);
           break;
 
         default:
@@ -73,11 +59,11 @@ export const useGameEngine = (gameEngine) => {
 
     // Initial state sync
     if (gameEngine.isInitialized) {
-      gameActions({ type: 'UPDATE_MAP', payload: gameEngine.map });
-      gameActions({ type: 'UPDATE_UNITS', payload: gameEngine.getAllUnits() });
-      gameActions({ type: 'UPDATE_CITIES', payload: gameEngine.getAllCities() });
-      gameActions({ type: 'UPDATE_CIVILIZATIONS', payload: gameEngine.civilizations });
-      gameActions({ type: 'UPDATE_TECHNOLOGIES', payload: gameEngine.technologies });
+      actions.updateMap(gameEngine.map);
+      actions.updateUnits(gameEngine.getAllUnits());
+      actions.updateCities(gameEngine.getAllCities());
+      actions.updateCivilizations(gameEngine.civilizations);
+      actions.updateTechnologies(gameEngine.technologies);
     }
 
     return () => {
@@ -86,14 +72,14 @@ export const useGameEngine = (gameEngine) => {
         gameEngine.onStateChange = null;
       }
     };
-  }, [gameEngine, gameActions]);
+  }, [gameEngine, actions]);
 };
 
 /**
  * Custom hook for game controls
  */
 export const useGameControls = (gameEngine) => {
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const actions = useGameStore(state => state.actions);
 
   const controls = {
     newGame: () => {
@@ -103,18 +89,18 @@ export const useGameControls = (gameEngine) => {
     },
 
     nextTurn: () => {
-      gameActions({ type: 'NEXT_TURN' });
+      actions.nextTurn();
       if (gameEngine) {
         gameEngine.processTurn();
       }
     },
 
     selectUnit: (unitId) => {
-      gameActions({ type: 'SELECT_UNIT', payload: unitId });
+      actions.selectUnit(unitId);
     },
 
     selectCity: (cityId) => {
-      gameActions({ type: 'SELECT_CITY', payload: cityId });
+      actions.selectCity(cityId);
     },
 
     moveUnit: (unitId, col, row) => {
@@ -158,7 +144,7 @@ export const useGameControls = (gameEngine) => {
       }
 
       // Update units state
-      gameActions({ type: 'UPDATE_UNITS', payload: gameEngine.getAllUnits() });
+      actions.updateUnits(gameEngine.getAllUnits());
     }
   };
 

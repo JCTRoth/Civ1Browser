@@ -1,15 +1,14 @@
 import React, { useRef, useEffect, useCallback } from 'react';
-import { useAtom } from 'jotai';
-import { cameraAtom, gameActionsAtom, gameStateAtom } from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 
 const GameCanvas = ({ gameEngine }) => {
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
   const lastRenderTime = useRef(0);
   
-  const [camera] = useAtom(cameraAtom);
-  const [gameState] = useAtom(gameStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const camera = useGameStore(state => state.camera);
+  const gameState = useGameStore(state => state.gameState);
+  const actions = useGameStore(state => state.actions);
   
   // Mouse and touch interaction state
   const mouseState = useRef({
@@ -152,13 +151,10 @@ const GameCanvas = ({ gameEngine }) => {
         const newWorldCenterX = (center.x / newZoom) + camera.x;
         const newWorldCenterY = (center.y / newZoom) + camera.y;
         
-        gameActions({
-          type: 'UPDATE_CAMERA',
-          payload: {
-            zoom: newZoom,
-            x: camera.x + (worldCenterX - newWorldCenterX),
-            y: camera.y + (worldCenterY - newWorldCenterY)
-          }
+        actions.updateCamera({
+          zoom: newZoom,
+          x: camera.x + (worldCenterX - newWorldCenterX),
+          y: camera.y + (worldCenterY - newWorldCenterY)
         });
       }
       
@@ -181,7 +177,7 @@ const GameCanvas = ({ gameEngine }) => {
     }
     
     event.preventDefault();
-  }, [camera, gameActions]);
+  }, [camera, actions]);
 
   const handleMouseUp = useCallback((event) => {
     if (mouseState.current.isPinching) {
@@ -223,16 +219,16 @@ const GameCanvas = ({ gameEngine }) => {
     
     if (gameEngine.isValidHex(hex.col, hex.row)) {
       // Handle hex selection
-      gameActions({ type: 'SELECT_HEX', payload: hex });
+      actions.selectHex(hex);
       
       // Check for unit or city at this location
       const unit = gameEngine.getUnitAt(hex.col, hex.row);
       const city = gameEngine.getCityAt(hex.col, hex.row);
       
       if (unit) {
-        gameActions({ type: 'SELECT_UNIT', payload: unit.id });
+        actions.selectUnit(unit.id);
       } else if (city) {
-        gameActions({ type: 'SELECT_CITY', payload: city.id });
+        actions.selectCity(city.id);
       } else {
         // Try to move selected unit
         if (gameState.selectedUnit) {
@@ -240,7 +236,7 @@ const GameCanvas = ({ gameEngine }) => {
         }
       }
     }
-  }, [gameEngine, camera, gameActions, gameState.selectedUnit]);
+  }, [gameEngine, camera, actions, gameState.selectedUnit]);
 
   const handleWheel = useCallback((event) => {
     event.preventDefault();
@@ -260,15 +256,12 @@ const GameCanvas = ({ gameEngine }) => {
     const newWorldMouseX = (mouseX / newZoom) + camera.x;
     const newWorldMouseY = (mouseY / newZoom) + camera.y;
     
-    gameActions({
-      type: 'UPDATE_CAMERA',
-      payload: {
-        zoom: newZoom,
-        x: camera.x + (worldMouseX - newWorldMouseX),
-        y: camera.y + (worldMouseY - newWorldMouseY)
-      }
+    actions.updateCamera({
+      zoom: newZoom,
+      x: camera.x + (worldMouseX - newWorldMouseX),
+      y: camera.y + (worldMouseY - newWorldMouseY)
     });
-  }, [camera, gameActions]);
+  }, [camera, actions]);
 
   // Handle right-click for context menu
   const handleContextMenu = useCallback((event) => {

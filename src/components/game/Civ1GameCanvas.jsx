@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useAtom } from 'jotai';
-import { gameStateAtom, mapAtom, cameraAtom } from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 
 const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
   const canvasRef = useRef(null);
-  const [gameState] = useAtom(gameStateAtom);
-  const [mapData] = useAtom(mapAtom);
-  const [camera, setCamera] = useAtom(cameraAtom);
+  const gameState = useGameStore(state => state.gameState);
+  const mapData = useGameStore(state => state.map);
+  const camera = useGameStore(state => state.camera);
+  const actions = useGameStore(state => state.actions);
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [selectedHex, setSelectedHex] = useState({ col: 5, row: 5 });
@@ -532,11 +532,10 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
       const dx = e.clientX - lastMousePos.x;
       const dy = e.clientY - lastMousePos.y;
       
-      setCamera(prev => ({
-        ...prev,
-        x: prev.x - dx / prev.zoom,
-        y: prev.y - dy / prev.zoom
-      }));
+      actions.updateCamera({
+        x: camera.x - dx / camera.zoom,
+        y: camera.y - dy / camera.zoom
+      });
       
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
@@ -562,11 +561,10 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         const clickedRow = Math.floor(y / tileHeight);
         
         // Center camera on clicked position
-        setCamera(prev => ({
-          ...prev,
-          x: clickedCol * HEX_WIDTH - (canvas.width / prev.zoom) / 2,
-          y: clickedRow * VERT_DISTANCE - (canvas.height / prev.zoom) / 2
-        }));
+        actions.updateCamera({
+          x: clickedCol * HEX_WIDTH - (canvas.width / camera.zoom) / 2,
+          y: clickedRow * VERT_DISTANCE - (canvas.height / camera.zoom) / 2
+        });
       } else {
         const hex = screenToHex(x, y);
         setSelectedHex(hex);
@@ -731,11 +729,10 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
       case 'centerView':
         // Center camera on selected hex
         const { x, y } = hexToScreen(contextMenu.hex.col, contextMenu.hex.row);
-        setCamera(prev => ({
-          ...prev,
+        actions.updateCamera({
           x: contextMenu.hex.col * HEX_WIDTH - canvasRef.current.width / 2,
           y: contextMenu.hex.row * VERT_DISTANCE - canvasRef.current.height / 2
-        }));
+        });
         break;
         
       case 'fortify':
@@ -786,12 +783,11 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     const worldYAfter = (mouseY / newZoom) + camera.y;
     
     // Adjust camera to keep mouse position stable
-    setCamera(prev => ({
-      ...prev,
+    actions.updateCamera({
       zoom: newZoom,
-      x: prev.x - (worldXAfter - worldXBefore),
-      y: prev.y - (worldYAfter - worldYBefore)
-    }));
+      x: camera.x - (worldXAfter - worldXBefore),
+      y: camera.y - (worldYAfter - worldYBefore)
+    });
   };
 
   // Optimized animation loop with frame throttling

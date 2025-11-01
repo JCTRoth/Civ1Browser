@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useAtom } from 'jotai';
 import { Container } from 'react-bootstrap';
 
 // Components
@@ -11,15 +10,15 @@ import BottomPanel from './components/ui/BottomPanel';
 import GameModals from './components/ui/GameModals';
 
 // Stores
-import { gameStateAtom, gameActionsAtom } from './stores/gameStore';
+import { useGameStore } from './stores/gameStore';
 
 // Game Engine
 import GameEngine from './game/GameEngine';
 import { useGameEngine } from './hooks/useGameEngine';
 
 function App() {
-  const [gameState] = useAtom(gameStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const gameState = useGameStore(state => state.gameState);
+  const actions = useGameStore(state => state.actions);
   const [gameEngine, setGameEngine] = useState(null);
   const [error, setError] = useState(null);
 
@@ -28,31 +27,28 @@ function App() {
     const initializeGame = async () => {
       try {
         console.log('App: Starting initialization...');
-        gameActions({ type: 'SET_LOADING', payload: true });
+        actions.setLoading(true);
         
         // Create game engine instance
         const engine = new GameEngine();
         await engine.initialize();
         
         setGameEngine(engine);
-        gameActions({ type: 'SET_LOADING', payload: false });
+        actions.setLoading(false);
         console.log('App: Initialization complete');
         
       } catch (error) {
         console.error('Failed to initialize game:', error);
         setError(error.message);
-        gameActions({ 
-          type: 'ADD_NOTIFICATION', 
-          payload: { 
-            type: 'error', 
-            message: 'Failed to initialize game. Please refresh and try again.' 
-          } 
+        actions.addNotification({
+          type: 'error',
+          message: 'Failed to initialize game. Please refresh and try again.'
         });
       }
     };
 
     initializeGame();
-  }, [gameActions]);
+  }, [actions]);
 
   // Connect game engine to React state management
   useGameEngine(gameEngine);
@@ -79,26 +75,26 @@ function App() {
 
       switch (event.key.toLowerCase()) {
         case 'h':
-          gameActions({ type: 'SHOW_DIALOG', payload: 'help' });
+          actions.showDialog('help');
           break;
         case 'escape':
-          gameActions({ type: 'HIDE_DIALOG' });
+          actions.hideDialog();
           break;
         case 'enter':
         case ' ':
           if (gameState.gamePhase === 'playing') {
-            gameActions({ type: 'NEXT_TURN' });
+            actions.nextTurn();
             gameEngine.processTurn();
           }
           break;
         case 'm':
-          gameActions({ type: 'TOGGLE_UI', payload: 'showMinimap' });
+          actions.toggleUI('showMinimap');
           break;
         case 't':
-          gameActions({ type: 'SHOW_DIALOG', payload: 'tech' });
+          actions.showDialog('tech');
           break;
         case 'd':
-          gameActions({ type: 'SHOW_DIALOG', payload: 'diplomacy' });
+          actions.showDialog('diplomacy');
           break;
         default:
           break;
@@ -107,7 +103,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [gameEngine, gameState.isLoading, gameState.gamePhase, gameActions]);
+  }, [gameEngine, gameState.isLoading, gameState.gamePhase, actions]);
 
   // Show loading screen during initialization
   if (gameState.isLoading || !gameEngine) {

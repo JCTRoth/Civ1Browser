@@ -1,16 +1,15 @@
 import React from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
-import { useAtom } from 'jotai';
-import { settingsAtom } from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 
 function SettingsModal({ show, onHide }) {
-  const [settings, setSettings] = useAtom(settingsAtom);
+  const settings = useGameStore(state => state.settings);
+  const actions = useGameStore(state => state.actions);
 
   const handleChange = (key, value) => {
-    setSettings(prev => ({
-      ...prev,
+    actions.updateSettings({
       [key]: parseFloat(value) || value
-    }));
+    });
   };
 
   const resetDefaults = () => {

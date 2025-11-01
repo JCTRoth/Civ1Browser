@@ -162,6 +162,8 @@ body {
   height: 150px;
   border: 2px solid #34495e;
   background-color: #1a1a1a;
+  position: relative; /* Ensure absolute debug label positions correctly */
+  overflow: hidden;
 }
 
 .unit-panel, .city-panel {

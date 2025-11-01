@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAtom } from 'jotai';
-import { gameStateAtom, gameActionsAtom, settingsAtom, cameraAtom } from './stores/gameStore';
+import { useGameStore } from './stores/gameStore';
 import GameEngine from './game/GameEngine';
 import Civ1GameCanvas from './components/game/Civ1GameCanvas';
 import HexDetailModal from './components/ui/HexDetailModal';
@@ -8,10 +7,11 @@ import SettingsModal from './components/ui/SettingsModal';
 import GameSetupModal from './components/ui/GameSetupModal';
 
 function Civ1App() {
-  const [gameState, setGameState] = useAtom(gameStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
-  const [settings] = useAtom(settingsAtom);
-  const [camera, setCamera] = useAtom(cameraAtom);
+  const gameState = useGameStore(state => state.gameState);
+  const actions = useGameStore(state => state.actions);
+  const settings = useGameStore(state => state.settings);
+  const camera = useGameStore(state => state.camera);
+  const setCamera = useGameStore(state => state.actions.updateCamera);
   const [gameEngine, setGameEngine] = useState(null);
   const [error, setError] = useState(null);
   const [selectedCity, setSelectedCity] = useState(null);
@@ -41,8 +41,7 @@ function Civ1App() {
       console.log('Player settler at:', playerSettler);
       
       // Update game state with engine data including map
-      setGameState(prev => ({
-        ...prev,
+      actions.updateGameState({
         gamePhase: 'playing',
         isGameStarted: true,
         mapGenerated: true,
@@ -52,7 +51,7 @@ function Civ1App() {
         cities: engine.cities,
         civilizations: engine.civilizations,
         map: engine.map
-      }));
+      });
       
       // Center camera on player's starting settler with a small delay to ensure rendering is ready
       if (playerSettler) {
@@ -92,7 +91,7 @@ function Civ1App() {
   useEffect(() => {
     // Game initialization now happens in handleGameStart after setup modal
     // No auto-initialization
-  }, [setGameState]);
+  }, []);
 
   // Handle menu actions
   const handleMenuClick = (menu, event) => {

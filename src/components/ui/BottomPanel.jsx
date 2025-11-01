@@ -1,18 +1,13 @@
 import React from 'react';
-import { useAtom } from 'jotai';
 import { Card, Button, ButtonGroup, ProgressBar, ListGroup } from 'react-bootstrap';
-import { 
-  selectedUnitAtom, 
-  selectedCityAtom, 
-  uiStateAtom,
-  gameActionsAtom 
-} from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 import { UNIT_PROPS, BUILDING_PROPS } from '../../utils/constants';
 
 const BottomPanel = ({ gameEngine }) => {
-  const [selectedUnit] = useAtom(selectedUnitAtom);
-  const [selectedCity] = useAtom(selectedCityAtom);
-  const [uiState] = useAtom(uiStateAtom);
+  const selectedUnit = useGameStore(state => state.selectedUnit);
+  const selectedCity = useGameStore(state => state.selectedCity);
+  const uiState = useGameStore(state => state.uiState);
+  const actions = useGameStore(state => state.actions);
   const [, gameActions] = useAtom(gameActionsAtom);
 
   // Don't show panel if nothing is selected
@@ -56,13 +51,13 @@ const BottomPanel = ({ gameEngine }) => {
 
     switch (action) {
       case 'change_production':
-        gameActions({ type: 'SHOW_DIALOG', payload: 'city-production' });
+        actions.showDialog('city-production');
         break;
       case 'buy_unit':
-        gameActions({ type: 'SHOW_DIALOG', payload: 'city-purchase' });
+        actions.showDialog('city-purchase');
         break;
       case 'manage_citizens':
-        gameActions({ type: 'SHOW_DIALOG', payload: 'city-citizens' });
+        actions.showDialog('city-citizens');
         break;
       default:
         console.log('Unknown city action:', action);
@@ -89,7 +84,7 @@ const BottomPanel = ({ gameEngine }) => {
           <Button 
             variant="outline-secondary" 
             size="sm"
-            onClick={() => gameActions({ type: 'SELECT_UNIT', payload: null })}
+            onClick={() => actions.selectUnit(null)}
           >
             <i className="bi bi-x"></i>
           </Button>
@@ -218,7 +213,7 @@ const BottomPanel = ({ gameEngine }) => {
           <Button 
             variant="outline-secondary" 
             size="sm"
-            onClick={() => gameActions({ type: 'SELECT_CITY', payload: null })}
+            onClick={() => actions.selectCity(null)}
           >
             <i className="bi bi-x"></i>
           </Button>
@@ -315,7 +310,7 @@ const BottomPanel = ({ gameEngine }) => {
                   <Button 
                     variant="outline-warning" 
                     size="sm"
-                    onClick={() => gameActions({ type: 'SHOW_DIALOG', payload: 'city-details' })}
+                    onClick={() => actions.showDialog('city-details')}
                   >
                     <i className="bi bi-info-circle"></i> City Details
                   </Button>
@@ -355,8 +350,8 @@ const BottomPanel = ({ gameEngine }) => {
       <div 
         className={`mobile-menu-backdrop ${showPanel ? 'show' : ''} d-md-none`}
         onClick={() => {
-          gameActions({ type: 'SELECT_UNIT', payload: null });
-          gameActions({ type: 'SELECT_CITY', payload: null });
+          actions.selectUnit(null);
+          actions.selectCity(null);
         }}
       />
       

@@ -1,343 +1,242 @@
-import { atom } from 'jotai';
+import { create } from 'zustand';
 import { CONSTANTS } from '../utils/constants.js';
 
-// Game State Atoms
-export const gameStateAtom = atom({
-  isLoading: false,
-  isGameStarted: false,
-  currentTurn: 1,
-  gamePhase: 'menu', // 'menu', 'loading', 'playing', 'paused'
-  selectedHex: null,
-  selectedUnit: null,
-  selectedCity: null,
-  activePlayer: 0,
-  mapGenerated: false,
-  winner: null
-});
+// Zustand store replacing Jotai atoms
+export const useGameStore = create((set, get) => ({
+  // Game State
+  gameState: {
+    isLoading: false,
+    isGameStarted: false,
+    currentTurn: 1,
+    gamePhase: 'menu', // 'menu', 'loading', 'playing', 'paused'
+    selectedHex: null,
+    selectedUnit: null,
+    selectedCity: null,
+    activePlayer: 0,
+    mapGenerated: false,
+    winner: null
+  },
 
-// Map State Atoms
-export const mapAtom = atom({
-  width: CONSTANTS.MAP_WIDTH,
-  height: CONSTANTS.MAP_HEIGHT,
-  tiles: [],
-  visibility: [], // Fog of war
-  revealed: []    // Permanently revealed tiles
-});
+  // Map State
+  map: {
+    width: CONSTANTS.MAP_WIDTH,
+    height: CONSTANTS.MAP_HEIGHT,
+    tiles: [],
+    visibility: [], // Fog of war
+    revealed: []    // Permanently revealed tiles
+  },
 
-// Camera State Atoms
-export const cameraAtom = atom({
-  x: 0,
-  y: 0,
-  zoom: 2.0,
-  minZoom: 0.5,
-  maxZoom: 3.0
-});
+  // Camera State
+  camera: {
+    x: 0,
+    y: 0,
+    zoom: 2.0,
+    minZoom: 0.5,
+    maxZoom: 3.0
+  },
 
-// Units State Atoms
-export const unitsAtom = atom([]);
+  // Units State
+  units: [],
 
-// Cities State Atoms
-export const citiesAtom = atom([]);
+  // Cities State
+  cities: [],
 
-// Civilizations State Atoms
-export const civilizationsAtom = atom([]);
+  // Civilizations State
+  civilizations: [],
 
-// Current Player Atom (derived)
-export const currentPlayerAtom = atom((get) => {
-  const gameState = get(gameStateAtom);
-  const civilizations = get(civilizationsAtom);
-  return civilizations[gameState.activePlayer] || null;
-});
+  // UI State
+  uiState: {
+    showMinimap: true,
+    showUnitPanel: false,
+    showCityPanel: false,
+    showTechTree: false,
+    showDiplomacy: false,
+    showGameMenu: false,
+    activeDialog: null, // 'city', 'tech', 'diplomacy', 'game-menu', null
+    sidebarCollapsed: false,
+    notifications: []
+  },
 
-// Player Resources Atom (derived)
-export const playerResourcesAtom = atom((get) => {
-  const currentPlayer = get(currentPlayerAtom);
-  if (!currentPlayer) {
-    return {
-      food: 0,
-      production: 0,
-      trade: 0,
-      science: 0,
-      gold: 0
-    };
-  }
-  return {
-    food: currentPlayer.resources?.food || 0,
-    production: currentPlayer.resources?.production || 0,
-    trade: currentPlayer.resources?.trade || 0,
-    science: currentPlayer.resources?.science || 0,
-    gold: currentPlayer.resources?.gold || 0
-  };
-});
+  // Settings
+  settings: {
+    uiScale: 1.0,        // Overall UI scale multiplier (0.5 to 2.0)
+    menuFontSize: 12,    // Top menu font size in pixels
+    sidebarWidth: 140,   // Left sidebar width in pixels
+    minimapHeight: 120,  // Minimap height in pixels
+    civListFontSize: 10  // Civilization list font size
+  },
 
-// UI State Atoms
-export const uiStateAtom = atom({
-  showMinimap: true,
-  showUnitPanel: false,
-  showCityPanel: false,
-  showTechTree: false,
-  showDiplomacy: false,
-  showGameMenu: false,
-  activeDialog: null, // 'city', 'tech', 'diplomacy', 'game-menu', null
-  sidebarCollapsed: false,
-  notifications: []
-});
+  // Technology State
+  technologies: [],
 
-// Settings Atom
-export const settingsAtom = atom({
-  uiScale: 1.0,        // Overall UI scale multiplier (0.5 to 2.0)
-  menuFontSize: 12,    // Top menu font size in pixels
-  sidebarWidth: 140,   // Left sidebar width in pixels
-  minimapHeight: 120,  // Minimap height in pixels
-  civListFontSize: 10  // Civilization list font size
-});
+  // Actions
+  actions: {
+    startGame: () => set(state => ({
+      gameState: { ...state.gameState, isGameStarted: true, gamePhase: 'playing' }
+    })),
 
-// Selected Unit Details Atom (derived)
-export const selectedUnitAtom = atom((get) => {
-  const gameState = get(gameStateAtom);
-  const units = get(unitsAtom);
-  
-  if (!gameState.selectedUnit) return null;
-  
-  return units.find(unit => unit.id === gameState.selectedUnit) || null;
-});
+    selectHex: (hex) => set(state => ({
+      gameState: { ...state.gameState, selectedHex: hex }
+    })),
 
-// Selected City Details Atom (derived)
-export const selectedCityAtom = atom((get) => {
-  const gameState = get(gameStateAtom);
-  const cities = get(citiesAtom);
-  
-  if (!gameState.selectedCity) return null;
-  
-  return cities.find(city => city.id === gameState.selectedCity) || null;
-});
+    selectUnit: (unitId) => set(state => ({
+      gameState: { ...state.gameState, selectedUnit: unitId, selectedCity: null },
+      uiState: { ...state.uiState, showUnitPanel: !!unitId, showCityPanel: false }
+    })),
 
-// Player Units Atom (derived)
-export const playerUnitsAtom = atom((get) => {
-  const currentPlayer = get(currentPlayerAtom);
-  const units = get(unitsAtom);
-  
-  if (!currentPlayer) return [];
-  
-  return units.filter(unit => unit.civilizationId === currentPlayer.id);
-});
+    selectCity: (cityId) => set(state => ({
+      gameState: { ...state.gameState, selectedCity: cityId, selectedUnit: null },
+      uiState: { ...state.uiState, showCityPanel: !!cityId, showUnitPanel: false }
+    })),
 
-// Player Cities Atom (derived)
-export const playerCitiesAtom = atom((get) => {
-  const currentPlayer = get(currentPlayerAtom);
-  const cities = get(citiesAtom);
-  
-  if (!currentPlayer) return [];
-  
-  return cities.filter(city => city.civilizationId === currentPlayer.id);
-});
+    nextTurn: () => set(state => {
+      const nextPlayer = (state.gameState.activePlayer + 1) % state.civilizations.length;
+      const nextTurn = nextPlayer === 0 ? state.gameState.currentTurn + 1 : state.gameState.currentTurn;
 
-// Technology State Atoms
-export const technologiesAtom = atom([]);
-
-// Actions for updating state
-export const gameActionsAtom = atom(
-  null,
-  (get, set, action) => {
-    switch (action.type) {
-      case 'START_GAME':
-        set(gameStateAtom, prev => ({
-          ...prev,
-          isGameStarted: true,
-          gamePhase: 'playing'
-        }));
-        break;
-
-      case 'SELECT_HEX':
-        set(gameStateAtom, prev => ({
-          ...prev,
-          selectedHex: action.payload
-        }));
-        break;
-
-      case 'SELECT_UNIT':
-        set(gameStateAtom, prev => ({
-          ...prev,
-          selectedUnit: action.payload,
-          selectedCity: null
-        }));
-        set(uiStateAtom, prev => ({
-          ...prev,
-          showUnitPanel: !!action.payload,
-          showCityPanel: false
-        }));
-        break;
-
-      case 'SELECT_CITY':
-        set(gameStateAtom, prev => ({
-          ...prev,
-          selectedCity: action.payload,
-          selectedUnit: null
-        }));
-        set(uiStateAtom, prev => ({
-          ...prev,
-          showCityPanel: !!action.payload,
-          showUnitPanel: false
-        }));
-        break;
-
-      case 'NEXT_TURN':
-        const gameState = get(gameStateAtom);
-        const civilizations = get(civilizationsAtom);
-        const nextPlayer = (gameState.activePlayer + 1) % civilizations.length;
-        const nextTurn = nextPlayer === 0 ? gameState.currentTurn + 1 : gameState.currentTurn;
-        
-        set(gameStateAtom, prev => ({
-          ...prev,
+      return {
+        gameState: {
+          ...state.gameState,
           activePlayer: nextPlayer,
           currentTurn: nextTurn,
           selectedUnit: null,
           selectedCity: null,
           selectedHex: null
-        }));
-        
-        set(uiStateAtom, prev => ({
-          ...prev,
+        },
+        uiState: {
+          ...state.uiState,
           showUnitPanel: false,
           showCityPanel: false
-        }));
-        break;
+        }
+      };
+    }),
 
-      case 'UPDATE_CAMERA':
-        set(cameraAtom, prev => ({
-          ...prev,
-          ...action.payload
-        }));
-        break;
+    updateCamera: (cameraUpdate) => set(state => ({
+      camera: { ...state.camera, ...cameraUpdate }
+    })),
 
-      case 'TOGGLE_UI':
-        set(uiStateAtom, prev => ({
-          ...prev,
-          [action.payload]: !prev[action.payload]
-        }));
-        break;
+    toggleUI: (key) => set(state => ({
+      uiState: { ...state.uiState, [key]: !state.uiState[key] }
+    })),
 
-      case 'SHOW_DIALOG':
-        set(uiStateAtom, prev => ({
-          ...prev,
-          activeDialog: action.payload
-        }));
-        break;
+    showDialog: (dialog) => set(state => ({
+      uiState: { ...state.uiState, activeDialog: dialog }
+    })),
 
-      case 'HIDE_DIALOG':
-        set(uiStateAtom, prev => ({
-          ...prev,
-          activeDialog: null
-        }));
-        break;
+    hideDialog: () => set(state => ({
+      uiState: { ...state.uiState, activeDialog: null }
+    })),
 
-      case 'ADD_NOTIFICATION':
-        set(uiStateAtom, prev => ({
-          ...prev,
-          notifications: [
-            ...prev.notifications,
-            {
-              id: Date.now(),
-              ...action.payload
-            }
-          ]
-        }));
-        break;
+    addNotification: (notification) => set(state => ({
+      uiState: {
+        ...state.uiState,
+        notifications: [
+          ...state.uiState.notifications,
+          { id: Date.now(), ...notification }
+        ]
+      }
+    })),
 
-      case 'REMOVE_NOTIFICATION':
-        set(uiStateAtom, prev => ({
-          ...prev,
-          notifications: prev.notifications.filter(n => n.id !== action.payload)
-        }));
-        break;
+    removeNotification: (id) => set(state => ({
+      uiState: {
+        ...state.uiState,
+        notifications: state.uiState.notifications.filter(n => n.id !== id)
+      }
+    })),
 
-      case 'SET_LOADING':
-        set(gameStateAtom, prev => ({
-          ...prev,
-          isLoading: action.payload
-        }));
-        break;
+    setLoading: (isLoading) => set(state => ({
+      gameState: { ...state.gameState, isLoading }
+    })),
 
-      case 'UPDATE_MAP':
-        set(mapAtom, prev => ({
-          ...prev,
-          ...action.payload
-        }));
-        break;
+    updateMap: (mapUpdate) => set(state => ({
+      map: { ...state.map, ...mapUpdate }
+    })),
 
-      case 'UPDATE_UNITS':
-        set(unitsAtom, action.payload);
-        break;
+    updateUnits: (units) => set({ units }),
 
-      case 'UPDATE_CITIES':
-        set(citiesAtom, action.payload);
-        break;
+    updateCities: (cities) => set({ cities }),
 
-      case 'UPDATE_CIVILIZATIONS':
-        set(civilizationsAtom, action.payload);
-        break;
+    updateCivilizations: (civilizations) => set({ civilizations }),
 
-      case 'UPDATE_TECHNOLOGIES':
-        set(technologiesAtom, action.payload);
-        break;
+    updateTechnologies: (technologies) => set({ technologies }),
 
-      default:
-        console.warn('Unknown action type:', action.type);
+    updateGameState: (updates) => set(state => ({
+      gameState: { ...state.gameState, ...updates }
+    })),
+
+    updateSettings: (updates) => set(state => ({
+      settings: { ...state.settings, ...updates }
+    }))
+  },
+
+  // Computed selectors (equivalent to derived atoms)
+  get currentPlayer() {
+    const { gameState, civilizations } = get();
+    return civilizations[gameState.activePlayer] || null;
+  },
+
+  get playerResources() {
+    const currentPlayer = get().currentPlayer;
+    if (!currentPlayer) {
+      return { food: 0, production: 0, trade: 0, science: 0, gold: 0 };
     }
-  }
-);
+    return {
+      food: currentPlayer.resources?.food || 0,
+      production: currentPlayer.resources?.production || 0,
+      trade: currentPlayer.resources?.trade || 0,
+      science: currentPlayer.resources?.science || 0,
+      gold: currentPlayer.resources?.gold || 0
+    };
+  },
 
-// Selectors for complex derived state
-export const visibleTilesAtom = atom((get) => {
-  const map = get(mapAtom);
-  const camera = get(cameraAtom);
-  
-  // Calculate which tiles are visible based on camera position and zoom
-  // This would be used by the renderer to optimize drawing
-  const viewportTiles = [];
-  
-  // Simple implementation - in a real game you'd calculate the actual viewport
-  for (let x = 0; x < map.width; x++) {
-    for (let y = 0; y < map.height; y++) {
-      viewportTiles.push({ x, y });
+  get selectedUnit() {
+    const { gameState, units } = get();
+    if (!gameState.selectedUnit) return null;
+    return units.find(unit => unit.id === gameState.selectedUnit) || null;
+  },
+
+  get selectedCity() {
+    const { gameState, cities } = get();
+    if (!gameState.selectedCity) return null;
+    return cities.find(city => city.id === gameState.selectedCity) || null;
+  },
+
+  get playerUnits() {
+    const { currentPlayer, units } = get();
+    if (!currentPlayer) return [];
+    return units.filter(unit => unit.civilizationId === currentPlayer.id);
+  },
+
+  get playerCities() {
+    const { currentPlayer, cities } = get();
+    if (!currentPlayer) return [];
+    return cities.filter(city => city.civilizationId === currentPlayer.id);
+  },
+
+  get visibleTiles() {
+    const { map, camera } = get();
+
+    // Calculate which tiles are visible based on camera position and zoom
+    const viewportTiles = [];
+
+    // Simple implementation - in a real game you'd calculate the actual viewport
+    for (let x = 0; x < map.width; x++) {
+      for (let y = 0; y < map.height; y++) {
+        viewportTiles.push({ x, y });
+      }
     }
+
+    return viewportTiles;
+  },
+
+  get gameStats() {
+    const { gameState, civilizations, cities, units } = get();
+
+    return {
+      turn: gameState.currentTurn,
+      totalCities: cities.length,
+      totalUnits: units.length,
+      aliveCivilizations: civilizations.filter(civ => civ.isAlive).length,
+      gameStarted: gameState.isGameStarted
+    };
   }
-  
-  return viewportTiles;
-});
-
-export const gameStatsAtom = atom((get) => {
-  const gameState = get(gameStateAtom);
-  const civilizations = get(civilizationsAtom);
-  const cities = get(citiesAtom);
-  const units = get(unitsAtom);
-  
-  return {
-    turn: gameState.currentTurn,
-    totalCities: cities.length,
-    totalUnits: units.length,
-    aliveCivilizations: civilizations.filter(civ => civ.isAlive).length,
-    gameStarted: gameState.isGameStarted
-  };
-});
-
-// Export all atoms
-export default {
-  gameStateAtom,
-  mapAtom,
-  cameraAtom,
-  unitsAtom,
-  citiesAtom,
-  civilizationsAtom,
-  currentPlayerAtom,
-  playerResourcesAtom,
-  uiStateAtom,
-  selectedUnitAtom,
-  selectedCityAtom,
-  playerUnitsAtom,
-  playerCitiesAtom,
-  technologiesAtom,
-  gameActionsAtom,
-  visibleTilesAtom,
-  gameStatsAtom
-};
+}));

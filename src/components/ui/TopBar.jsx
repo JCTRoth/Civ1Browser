@@ -1,35 +1,34 @@
 import React from 'react';
-import { useAtom } from 'jotai';
 import { Navbar, Nav, Button, Badge } from 'react-bootstrap';
-import { playerResourcesAtom, gameStatsAtom, gameActionsAtom, uiStateAtom } from '../../stores/gameStore';
+import { useGameStore } from '../../stores/gameStore';
 
 const TopBar = ({ gameEngine }) => {
-  const [resources] = useAtom(playerResourcesAtom);
-  const [gameStats] = useAtom(gameStatsAtom);
-  const [uiState] = useAtom(uiStateAtom);
-  const [, gameActions] = useAtom(gameActionsAtom);
+  const resources = useGameStore(state => state.playerResources);
+  const gameStats = useGameStore(state => state.gameStats);
+  const uiState = useGameStore(state => state.uiState);
+  const actions = useGameStore(state => state.actions);
 
   const handleNextTurn = () => {
-    gameActions({ type: 'NEXT_TURN' });
+    actions.nextTurn();
     if (gameEngine) {
       gameEngine.processTurn();
     }
   };
 
   const handleShowMenu = () => {
-    gameActions({ type: 'SHOW_DIALOG', payload: 'game-menu' });
+    actions.showDialog('game-menu');
   };
 
   const handleShowTechTree = () => {
-    gameActions({ type: 'SHOW_DIALOG', payload: 'tech' });
+    actions.showDialog('tech');
   };
 
   const handleShowDiplomacy = () => {
-    gameActions({ type: 'SHOW_DIALOG', payload: 'diplomacy' });
+    actions.showDialog('diplomacy');
   };
 
   const handleToggleSidePanel = () => {
-    gameActions({ type: 'TOGGLE_UI', payload: 'sidebarCollapsed' });
+    actions.toggleUI('sidebarCollapsed');
   };
 
   return (
