@@ -20,11 +20,9 @@ function SimpleGameApp() {
       try {
         console.log('SimpleGameApp: Starting initialization...');
         
-        // Create game engine
-        const engine = new GameEngine();
-        console.log('SimpleGameApp: GameEngine created:', engine);
-        
-        setGameEngine(engine);
+      // Create game engine
+      const engine = new GameEngine(actions);
+      console.log('SimpleGameApp: GameEngine created:', engine);        setGameEngine(engine);
         console.log('SimpleGameApp: Initialization complete!');
         
       } catch (error) {

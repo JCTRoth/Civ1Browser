@@ -5,13 +5,14 @@ import GameEngine from '../game/GameEngine.js';
 const MinimalApp = () => {
   console.log('MinimalApp rendering...');
   const gameState = useGameStore(state => state.gameState);
+  const actions = useGameStore(state => state.actions);
   const [initStatus, setInitStatus] = useState('Testing GameEngine import...');
   
   useEffect(() => {
     console.log('MinimalApp useEffect running...');
     try {
       console.log('Trying to create GameEngine...');
-      const gameEngine = new GameEngine();
+      const gameEngine = new GameEngine(actions);
       console.log('GameEngine created successfully:', gameEngine);
       setInitStatus('GameEngine created successfully!');
     } catch (error) {

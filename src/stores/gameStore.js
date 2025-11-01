@@ -1,5 +1,25 @@
 import { create } from 'zustand';
 import { CONSTANTS } from '../utils/constants.js';
+import { HexGrid } from '../game/hexGrid.js';
+import { UNIT_TYPES } from '../game/gameData.js';
+
+// Helper function for visibility calculations
+const setVisibilityAreaInternal = (visibility, revealed, centerCol, centerRow, radius, mapWidth, mapHeight) => {
+  const hexGrid = new HexGrid(mapWidth, mapHeight);
+
+  for (let row = centerRow - radius; row <= centerRow + radius; row++) {
+    for (let col = centerCol - radius; col <= centerCol + radius; col++) {
+      if (row >= 0 && row < mapHeight && col >= 0 && col < mapWidth) {
+        const index = row * mapWidth + col;
+        if (hexGrid.hexDistance(centerCol, centerRow, col, row) <= radius) {
+          visibility[index] = true;
+          // Also mark as explored when first seen
+          revealed[index] = true;
+        }
+      }
+    }
+  }
+};
 
 // Zustand store replacing Jotai atoms
 export const useGameStore = create((set, get) => ({
@@ -147,9 +167,149 @@ export const useGameStore = create((set, get) => ({
       gameState: { ...state.gameState, isLoading }
     })),
 
-    updateMap: (mapUpdate) => set(state => ({
-      map: { ...state.map, ...mapUpdate }
-    })),
+    updateMap: (mapUpdate) => set(state => {
+      const newMap = { ...state.map, ...mapUpdate };
+
+      // Initialize visibility arrays if tiles are provided and arrays don't exist or are wrong size
+      if (mapUpdate.tiles && mapUpdate.tiles.length > 0) {
+        const totalTiles = mapUpdate.tiles.length;
+        if (!newMap.visibility || newMap.visibility.length !== totalTiles) {
+          newMap.visibility = new Array(totalTiles).fill(false);
+        }
+        if (!newMap.revealed || newMap.revealed.length !== totalTiles) {
+          newMap.revealed = new Array(totalTiles).fill(false);
+        }
+        console.log('[Store] updateMap: Initialized visibility arrays', {
+          totalTiles,
+          visibilityLength: newMap.visibility.length,
+          revealedLength: newMap.revealed.length,
+          visibilityTrueCount: newMap.visibility.filter(v => v).length,
+          revealedTrueCount: newMap.revealed.filter(r => r).length
+        });
+      }
+
+      console.log('[Store] updateMap: Final map state', {
+        width: newMap.width,
+        height: newMap.height,
+        tilesLength: newMap.tiles?.length || 0,
+        visibilityLength: newMap.visibility?.length || 0,
+        revealedLength: newMap.revealed?.length || 0
+      });
+
+      return {
+        map: newMap
+      };
+    }),
+
+    // Visibility management actions
+    updateVisibility: () => set(state => {
+      const { map, units, cities } = state;
+      if (!map.tiles || map.tiles.length === 0) {
+        console.log('[Store] updateVisibility: No tiles to update visibility for');
+        return state;
+      }
+
+      console.log('[Store] updateVisibility: Starting visibility update', {
+        unitsCount: units.length,
+        citiesCount: cities.length,
+        mapSize: `${map.width}x${map.height}`
+      });
+
+      // Create new visibility arrays
+      const newVisibility = new Array(map.tiles.length).fill(false);
+      const newRevealed = [...(map.revealed || new Array(map.tiles.length).fill(false))];
+
+      // Clear current visibility (but keep revealed status)
+      // Revealed tiles stay permanently visible
+
+      // Reveal around all units that have sight capabilities
+      for (const unit of units) {
+        // Check if unit has sight range > 0
+        const unitTypeKey = unit.type.toUpperCase();
+        const unitType = UNIT_TYPES[unitTypeKey];
+        const sightRange = unitType?.sightRange || 0;
+        
+        if (sightRange > 0) {
+          console.log('[Store] updateVisibility: Processing unit with sight', {
+            unitType: unit.type,
+            sightRange,
+            position: `${unit.col},${unit.row}`,
+            civilizationId: unit.civilizationId
+          });
+          setVisibilityAreaInternal(newVisibility, newRevealed, unit.col, unit.row, sightRange, map.width, map.height);
+        }
+      }
+
+      // Reveal around all player cities (civilizationId === 0)
+      for (const city of cities) {
+        if (city.civilizationId === 0) {
+          const cityViewRadius = 2; // Cities can see 2 tiles away
+          console.log('[Store] updateVisibility: Processing player city', {
+            cityName: city.name,
+            position: `${city.col},${city.row}`,
+            viewRadius: cityViewRadius
+          });
+          setVisibilityAreaInternal(newVisibility, newRevealed, city.col, city.row, cityViewRadius, map.width, map.height);
+        }
+      }
+
+      console.log('[Store] updateVisibility: Final visibility state', {
+        visibilityTrueCount: newVisibility.filter(v => v).length,
+        revealedTrueCount: newRevealed.filter(r => r).length,
+        totalTiles: map.tiles.length
+      });
+
+      return {
+        ...state,
+        map: {
+          ...map,
+          visibility: newVisibility,
+          revealed: newRevealed
+        }
+      };
+    }),
+
+    revealArea: (centerCol, centerRow, radius) => set(state => {
+      const { map } = state;
+      if (!map.tiles || map.tiles.length === 0) {
+        console.log('[Store] revealArea: No tiles to reveal');
+        return state;
+      }
+
+      const newVisibility = [...map.visibility];
+      const newRevealed = [...(map.revealed || new Array(map.tiles.length).fill(false))];
+
+      setVisibilityAreaInternal(newVisibility, newRevealed, centerCol, centerRow, radius, map.width, map.height);
+
+      // Also mark as explored (revealed)
+      for (let row = centerRow - radius; row <= centerRow + radius; row++) {
+        for (let col = centerCol - radius; col <= centerCol + radius; col++) {
+          if (row >= 0 && row < map.height && col >= 0 && col < map.width) {
+            const index = row * map.width + col;
+            // Simple distance check (could be improved with hex distance)
+            const distance = Math.sqrt((col - centerCol) ** 2 + (row - centerRow) ** 2);
+            if (distance <= radius) {
+              newRevealed[index] = true;
+            }
+          }
+        }
+      }
+
+      console.log('[Store] revealArea: Revealed area', {
+        centerCol, centerRow, radius,
+        visibilityTrueCount: newVisibility.filter(v => v).length,
+        revealedTrueCount: newRevealed.filter(r => r).length
+      });
+
+      return {
+        ...state,
+        map: {
+          ...map,
+          visibility: newVisibility,
+          revealed: newRevealed
+        }
+      };
+    }),
 
     updateUnits: (units) => set({ units }),
 

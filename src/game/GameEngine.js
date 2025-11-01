@@ -7,7 +7,8 @@ import { CIVILIZATIONS, TECHNOLOGIES, UNIT_TYPES } from './gameData.js';
  * Manages all game systems and state
  */
 export default class GameEngine {
-  constructor() {
+  constructor(storeActions = null) {
+    this.storeActions = storeActions;
     this.hexGrid = null;
     this.map = null;
     this.units = [];
@@ -61,7 +62,16 @@ export default class GameEngine {
     await this.generateWorld();
     await this.createCivilizations();
     await this.initializeTechnologies();
-    
+
+    // Push freshly generated state into the store if available before computing visibility
+    if (this.storeActions) {
+      this.storeActions.updateMap(this.map);
+      this.storeActions.updateUnits(this.units);
+      this.storeActions.updateCities(this.cities);
+      this.storeActions.updateCivilizations(this.civilizations);
+      this.storeActions.updateTechnologies(this.technologies);
+    }
+
     // Initialize fog of war visibility
     this.updateVisibility();
     
@@ -222,8 +232,8 @@ export default class GameEngine {
 
         this.units.push(settler);
         
-        // Reveal area around starting position
-        this.revealArea(startPos.col, startPos.row, 2);
+        // Note: Starting area reveal is now handled in useGameEngine hook after map sync
+        // this.revealArea(startPos.col, startPos.row, 2);
       }
 
       this.civilizations.push(civ);
@@ -239,50 +249,18 @@ export default class GameEngine {
    * Reveal map tiles around a position
    */
   revealArea(centerCol, centerRow, radius) {
-    if (!this.map) return;
-    
-    for (let row = centerRow - radius; row <= centerRow + radius; row++) {
-      for (let col = centerCol - radius; col <= centerCol + radius; col++) {
-        const tile = this.getTileAt(col, row);
-        if (tile && this.hexGrid.hexDistance(centerCol, centerRow, col, row) <= radius) {
-          tile.visible = true;
-          tile.explored = true;
-        }
-      }
+    if (this.storeActions) {
+      this.storeActions.revealArea(centerCol, centerRow, radius);
     }
   }
 
   /**
    * Update fog of war visibility for all tiles
-   * Clears current visibility and recalculates based on unit/city positions
+   * Delegates to store actions for centralized visibility management
    */
   updateVisibility() {
-    if (!this.map) return;
-    
-    // First, clear all visibility (but keep explored status)
-    for (const tile of this.map.tiles) {
-      tile.visible = false;
-    }
-    
-    // Reveal around all player units
-    for (const unit of this.units) {
-      if (unit.civilizationId === 0) { // Player civilization
-        // Get sight range from unit type, default to 1 if not specified
-        let viewRadius = 1;
-        const unitTypeKey = unit.type.toUpperCase();
-        if (UNIT_TYPES[unitTypeKey] && UNIT_TYPES[unitTypeKey].sightRange) {
-          viewRadius = UNIT_TYPES[unitTypeKey].sightRange;
-        }
-        this.setVisibilityArea(unit.col, unit.row, viewRadius);
-      }
-    }
-    
-    // Reveal around all player cities
-    for (const city of this.cities) {
-      if (city.civilizationId === 0) { // Player civilization
-        const cityViewRadius = 2; // Cities can see 2 tiles away
-        this.setVisibilityArea(city.col, city.row, cityViewRadius);
-      }
+    if (this.storeActions) {
+      this.storeActions.updateVisibility();
     }
   }
 

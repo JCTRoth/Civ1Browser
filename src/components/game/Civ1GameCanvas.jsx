@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../stores/gameStore';
+import { UNIT_TYPES } from '../../game/gameData.js';
 
 const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
   const canvasRef = useRef(null);
@@ -94,12 +95,15 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
           const tileIndex = row * mapData.width + col;
           const tile = gameEngine.map.tiles[tileIndex];
           if (tile) {
+            const visibleFromStore = mapData.visibility?.[tileIndex] ?? tile.visible ?? false;
+            const exploredFromStore = mapData.revealed?.[tileIndex] ?? tile.explored ?? false;
+
             terrainGrid[row][col] = {
               type: tile.type,
               resource: tile.resource,
               improvement: tile.improvement,
-              visible: tile.visible,
-              explored: tile.explored
+              visible: visibleFromStore,
+              explored: exploredFromStore
             };
           }
         }
@@ -113,26 +117,38 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
 
   // Update terrain visibility when game state changes
   useEffect(() => {
-    if (gameEngine && terrain && gameEngine.map && gameEngine.map.tiles) {
+    console.log('[Civ1GameCanvas] Updating terrain visibility', {
+      hasTerrain: !!terrain,
+      hasVisibility: !!mapData.visibility,
+      hasRevealed: !!mapData.revealed,
+      visibilityLength: mapData.visibility?.length || 0,
+      revealedLength: mapData.revealed?.length || 0,
+      visibilityTrueCount: mapData.visibility?.filter(v => v).length || 0,
+      revealedTrueCount: mapData.revealed?.filter(r => r).length || 0
+    });
+
+    if (terrain && mapData.visibility && mapData.revealed) {
       // Update visibility without recreating the entire grid
       const updatedTerrain = [...terrain];
       for (let row = 0; row < mapData.height; row++) {
         if (!updatedTerrain[row]) updatedTerrain[row] = [];
         for (let col = 0; col < mapData.width; col++) {
           const tileIndex = row * mapData.width + col;
-          const tile = gameEngine.map.tiles[tileIndex];
-          if (tile && updatedTerrain[row][col]) {
+          if (updatedTerrain[row][col]) {
             updatedTerrain[row][col] = {
               ...updatedTerrain[row][col],
-              visible: tile.visible,
-              explored: tile.explored
+              visible: mapData.visibility[tileIndex] || false,
+              explored: mapData.revealed[tileIndex] || false
             };
           }
         }
       }
       setTerrain(updatedTerrain);
+      console.log('[Civ1GameCanvas] Terrain visibility updated');
+    } else {
+      console.log('[Civ1GameCanvas] Skipping terrain visibility update - missing data');
     }
-  }, [gameState.currentTurn, gameEngine?.units?.length]);
+  }, [gameState.currentTurn, mapData.visibility, mapData.revealed]);
 
   // Select player's starting settler when game starts
   useEffect(() => {
@@ -290,10 +306,14 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
     const tileHeight = minimapHeight / mapData.height;
     
     // Draw all terrain as colored pixels
+    let exploredCount = 0;
+    let totalTiles = 0;
     for (let row = 0; row < mapData.height; row++) {
       for (let col = 0; col < mapData.width; col++) {
         const tile = terrain[row]?.[col];
         if (!tile) continue;
+        
+        totalTiles++;
         
         // Fog of War: Only render explored tiles
         if (!tile.explored) {
@@ -308,6 +328,7 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
           continue;
         }
         
+        exploredCount++;
         const terrainInfo = TERRAIN_TYPES[tile.type];
         ctx.fillStyle = terrainInfo.color;
         ctx.fillRect(
@@ -331,15 +352,21 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
           );
         }
         
-        // Draw units as small dots (only if visible)
-        if (tile.unit && isVisible) {
-          ctx.fillStyle = tile.unit.owner === 0 ? '#FFFFFF' : '#FF0000';
-          ctx.fillRect(
-            col * tileWidth + tileWidth/3,
-            row * tileHeight + tileHeight/3,
-            tileWidth/3,
-            tileHeight/3
-          );
+        // Draw units as small dots (visible units or units with sight)
+        if (tile.unit) {
+          const unitTypeKey = tile.unit.type?.toUpperCase();
+          const unitType = unitTypeKey ? UNIT_TYPES[unitTypeKey] : null;
+          const hasSight = unitType?.sightRange > 0;
+
+          if (isVisible || hasSight) {
+            ctx.fillStyle = tile.unit.owner === 0 ? '#FFFFFF' : '#FF0000';
+            ctx.fillRect(
+              col * tileWidth + tileWidth/3,
+              row * tileHeight + tileHeight/3,
+              tileWidth/3,
+              tileHeight/3
+            );
+          }
         }
         
         // Apply fog overlay for explored but not currently visible tiles
@@ -354,6 +381,13 @@ const Civ1GameCanvas = ({ minimap = false, onExamineHex, gameEngine }) => {
         }
       }
     }
+    
+    console.log('[Civ1GameCanvas] Minimap render stats:', {
+      totalTiles,
+      exploredCount,
+      unexploredCount: totalTiles - exploredCount,
+      exploredPercentage: totalTiles > 0 ? ((exploredCount / totalTiles) * 100).toFixed(1) + '%' : '0%'
+    });
     
     // Draw viewport rectangle
     const viewportStartCol = Math.floor(camera.x / HEX_WIDTH);

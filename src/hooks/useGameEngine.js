@@ -14,22 +14,27 @@ export const useGameEngine = (gameEngine) => {
     gameEngine.onStateChange = (eventType, eventData) => {
       switch (eventType) {
         case 'NEW_GAME':
+          console.log('[useGameEngine] NEW_GAME: Updating map and initial visibility');
           // Update all game state
           actions.updateMap(eventData.map);
           actions.updateUnits(eventData.units);
           actions.updateCities(eventData.cities);
           actions.updateCivilizations(eventData.civilizations);
           actions.updateTechnologies(eventData.technologies);
+          actions.updateVisibility(); // Calculate initial visibility around starting units
           actions.startGame();
+          console.log('[useGameEngine] NEW_GAME: Initial game state updated');
           break;
 
         case 'UNIT_MOVED':
           actions.updateUnits(gameEngine.getAllUnits());
+          actions.updateVisibility();
           break;
 
         case 'COMBAT_VICTORY':
         case 'COMBAT_DEFEAT':
           actions.updateUnits(gameEngine.getAllUnits());
+          actions.updateVisibility();
           actions.addNotification({
             type: eventType === 'COMBAT_VICTORY' ? 'success' : 'warning',
             message: eventType === 'COMBAT_VICTORY' ? 'Victory in combat!' : 'Unit defeated in combat!'
@@ -39,6 +44,7 @@ export const useGameEngine = (gameEngine) => {
         case 'CITY_FOUNDED':
           actions.updateCities(gameEngine.getAllCities());
           actions.updateUnits(gameEngine.getAllUnits());
+          actions.updateVisibility();
           actions.addNotification({
             type: 'info',
             message: `${eventData.city.name} founded!`
@@ -50,6 +56,7 @@ export const useGameEngine = (gameEngine) => {
           actions.updateCities(gameEngine.getAllCities());
           actions.updateUnits(gameEngine.getAllUnits());
           actions.updateTechnologies(gameEngine.technologies);
+          actions.updateVisibility();
           break;
 
         default:
@@ -59,11 +66,24 @@ export const useGameEngine = (gameEngine) => {
 
     // Initial state sync
     if (gameEngine.isInitialized) {
+      console.log('[useGameEngine] Initial sync starting...');
       actions.updateMap(gameEngine.map);
       actions.updateUnits(gameEngine.getAllUnits());
       actions.updateCities(gameEngine.getAllCities());
       actions.updateCivilizations(gameEngine.civilizations);
       actions.updateTechnologies(gameEngine.technologies);
+      
+      // Reveal starting area around player's settler
+      const playerSettler = gameEngine.units.find(u => u.civilizationId === 0 && u.type === 'settlers');
+      console.log('[useGameEngine] Player settler found:', playerSettler);
+      if (playerSettler) {
+        console.log('[useGameEngine] Revealing area around settler at', playerSettler.col, playerSettler.row);
+        actions.revealArea(playerSettler.col, playerSettler.row, 2);
+      }
+      
+      console.log('[useGameEngine] Calling updateVisibility...');
+      actions.updateVisibility();
+      console.log('[useGameEngine] Initial sync complete');
     }
 
     return () => {

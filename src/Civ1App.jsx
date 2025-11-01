@@ -5,6 +5,7 @@ import Civ1GameCanvas from './components/game/Civ1GameCanvas';
 import HexDetailModal from './components/ui/HexDetailModal';
 import SettingsModal from './components/ui/SettingsModal';
 import GameSetupModal from './components/ui/GameSetupModal';
+import { useGameEngine } from './hooks/useGameEngine';
 
 function Civ1App() {
   const gameState = useGameStore(state => state.gameState);
@@ -24,35 +25,36 @@ function Civ1App() {
   const [terrainData, setTerrainData] = useState(null);
   const menuRefs = React.useRef({});
 
+  // Connect game engine to React state management
+  useGameEngine(gameEngine);
+
   // Handle game start with chosen settings
   const handleGameStart = async (gameSettings) => {
     try {
       console.log('Starting new game with settings:', gameSettings);
       setShowGameSetup(false);
-      
-      const engine = new GameEngine();
+
+      const engine = new GameEngine(actions);
       await engine.initialize(gameSettings);
-      setGameEngine(engine);
-      
-      // Get player's starting settler position
-      const playerSettler = engine.units.find(u => u.civilizationId === 0 && u.type === 'settler');
-      
-      console.log('Game started with units:', engine.units);
-      console.log('Player settler at:', playerSettler);
-      
-      // Update game state with engine data including map
+
+      // Mark the game as started once engine state is ready in the store
+      actions.startGame();
       actions.updateGameState({
-        gamePhase: 'playing',
-        isGameStarted: true,
         mapGenerated: true,
         currentTurn: engine.currentTurn,
-        currentYear: engine.currentYear,
-        units: engine.units,
-        cities: engine.cities,
-        civilizations: engine.civilizations,
-        map: engine.map
+        currentYear: engine.currentYear
       });
-      
+
+      setGameEngine(engine);
+
+      // Get player's starting settler position
+      const playerSettler = engine.units.find(
+        (u) => u.civilizationId === 0 && u.type === 'settlers'
+      );
+
+      console.log('Game started with units:', engine.units);
+      console.log('Player settler at:', playerSettler);
+
       // Center camera on player's starting settler with a small delay to ensure rendering is ready
       if (playerSettler) {
         setTimeout(() => {

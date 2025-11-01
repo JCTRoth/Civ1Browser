@@ -30,7 +30,7 @@ function App() {
         actions.setLoading(true);
         
         // Create game engine instance
-        const engine = new GameEngine();
+        const engine = new GameEngine(actions);
         await engine.initialize();
         
         setGameEngine(engine);

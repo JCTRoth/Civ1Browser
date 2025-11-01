@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useGameStore } from '../../stores/gameStore';
 import { CONSTANTS } from '../../utils/constants';
+import { UNIT_TYPES } from '../../game/gameData.js';
 
 // Top-level evaluation marker for debugging whether this module is actually loaded by Vite/React
 if (typeof window !== 'undefined') {
@@ -15,6 +16,9 @@ const MiniMap = ({ gameEngine }) => {
   const canvasRef = useRef(null);
   const camera = useGameStore(state => state.camera);
   const actions = useGameStore(state => state.actions);
+  const mapData = useGameStore(state => state.map);
+  const cities = useGameStore(state => state.cities);
+  const units = useGameStore(state => state.units);
 
   const MINIMAP_WIDTH = 200;
   const MINIMAP_HEIGHT = 150;
@@ -26,8 +30,8 @@ const MiniMap = ({ gameEngine }) => {
       return;
     }
 
-    // Use gameEngine.map directly for latest visibility data (like main canvas)
-    const dataSource = gameEngine ? gameEngine.map : null;
+    // Use map data from store for consistent visibility data
+    const dataSource = mapData;
 
     if (!dataSource) {
       return;
@@ -67,10 +71,13 @@ const MiniMap = ({ gameEngine }) => {
         let baseColor = terrainProps ? terrainProps.color : '#555555';
 
         // Apply fog of war shading
-        if (!tile.explored) {
+        const isExplored = dataSource.revealed ? dataSource.revealed[tileIndex] : false;
+        const isVisible = dataSource.visibility ? dataSource.visibility[tileIndex] : false;
+        
+        if (!isExplored) {
           // Show unexplored as dark grey so the map isn't a solid black rectangle
           baseColor = '#111111';
-        } else if (tile.explored && !tile.visible) {
+        } else if (isExplored && !isVisible) {
           // Darken explored but not currently visible
           // Simple darkening: blend with black
             const c = baseColor.replace('#','');
@@ -96,36 +103,47 @@ const MiniMap = ({ gameEngine }) => {
     }
 
     // Draw cities
-    if (gameEngine) {
-      const cities = gameEngine.getAllCities();
+    if (cities && cities.length > 0) {
       ctx.fillStyle = '#ffff00';
       
       for (const city of cities) {
-        const x = city.col * scaleX;
-        const y = city.row * scaleY;
+        const tileIndex = city.row * dataSource.width + city.col;
+        const isVisible = dataSource.visibility ? dataSource.visibility[tileIndex] : false;
         
-        ctx.beginPath();
-        ctx.arc(x + scaleX/2, y + scaleY/2, Math.max(1, scaleX/3), 0, Math.PI * 2);
-        ctx.fill();
+        if (isVisible) {
+          const x = city.col * scaleX;
+          const y = city.row * scaleY;
+          
+          ctx.beginPath();
+          ctx.arc(x + scaleX/2, y + scaleY/2, Math.max(1, scaleX/3), 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 
     // Draw units (simplified)
-    if (gameEngine) {
-      const units = gameEngine.getAllUnits();
+    if (units && units.length > 0) {
       
       for (const unit of units) {
-        const x = unit.col * scaleX;
-        const y = unit.row * scaleY;
+        const tileIndex = unit.row * dataSource.width + unit.col;
+        const isVisible = dataSource.visibility ? dataSource.visibility[tileIndex] : false;
+        const unitTypeKey = unit.type.toUpperCase();
+        const unitType = UNIT_TYPES[unitTypeKey];
+        const hasSight = unitType?.sightRange > 0;
         
-        // Different colors for different players
-        if (unit.civilizationId === 0) {
-          ctx.fillStyle = '#00ff00'; // Player units in green
-        } else {
-          ctx.fillStyle = '#ff0000'; // AI units in red
+        if (isVisible || hasSight) {
+          const x = unit.col * scaleX;
+          const y = unit.row * scaleY;
+          
+          // Different colors for different players
+          if (unit.civilizationId === 0) {
+            ctx.fillStyle = '#00ff00'; // Player units in green
+          } else {
+            ctx.fillStyle = '#ff0000'; // AI units in red
+          }
+          
+          ctx.fillRect(x, y, Math.max(1, scaleX/2), Math.max(1, scaleY/2));
         }
-        
-        ctx.fillRect(x, y, Math.max(1, scaleX/2), Math.max(1, scaleY/2));
       }
     }
 
@@ -144,7 +162,7 @@ const MiniMap = ({ gameEngine }) => {
       Math.min(MINIMAP_HEIGHT - viewportY, viewportH)
     );
 
-  }, [camera, gameEngine, gameEngine?.map?.tiles?.length, gameEngine?.currentTurn, gameEngine?.isInitialized]);
+  }, [camera, mapData, mapData?.tiles?.length, cities, units, gameEngine?.currentTurn, gameEngine?.isInitialized]);
 
   // Handle minimap clicks to move camera
   const handleMinimapClick = (event) => {
@@ -156,8 +174,8 @@ const MiniMap = ({ gameEngine }) => {
     const y = event.clientY - rect.top;
 
     // Convert minimap coordinates to world coordinates
-    const worldX = (x / MINIMAP_WIDTH) * gameEngine.map.width * 32;
-    const worldY = (y / MINIMAP_HEIGHT) * gameEngine.map.height * 24;
+    const worldX = (x / MINIMAP_WIDTH) * mapData.width * 32;
+    const worldY = (y / MINIMAP_HEIGHT) * mapData.height * 24;
 
     // Center camera on clicked position
     actions.updateCamera({
