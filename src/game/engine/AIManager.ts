@@ -5,7 +5,16 @@
 import { AIUtility } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
 import { SettlementEvaluator } from './SettlementEvaluator';
-import type { Unit } from '../../../types/game';
+import {
+  assessCityThreat,
+  calculateDangerThreshold,
+  collectCityThreatSamples,
+  computeCityGarrisonStrength,
+  scoreEnemyTarget,
+  type CityThreatAssessment,
+  type CityThreatSample
+} from './AIStrategy';
+import type { Unit, City } from '../../../types/game';
 
 export class AIManager {
   private gameEngine: any;
@@ -59,6 +68,10 @@ export class AIManager {
 
     const aiUnits = this.gameEngine.units.filter((u: Unit) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0);
     console.log(`[AI] Found ${aiUnits.length} units with moves remaining for civilization ${civilizationId}`);
+
+    const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+    this.updateOffensivePlan(civilizationId, storage, roundNumber);
 
     for (const unit of aiUnits) {
 
@@ -206,6 +219,15 @@ export class AIManager {
    */
   private chooseAITarget(unit: any): { col: number; row: number } | null {
     if (!this.gameEngine.map || !this.gameEngine.squareGrid) return null;
+
+    // Combat units consider strategic objectives first
+    if (this.isCombatUnit(unit)) {
+      const strategicTarget = this.selectStrategicTarget(unit as Unit);
+      if (strategicTarget) {
+        console.log(`[AI] Strategic target chosen for ${unit.type} ${unit.id} -> (${strategicTarget.col}, ${strategicTarget.row})`);
+        return strategicTarget;
+      }
+    }
 
     // Special handling for settlers: use SettlementEvaluator to find best city location
     if (unit.type === 'settler') {
@@ -633,6 +655,268 @@ export class AIManager {
     return null;
   }
 
+  private isCombatUnit(unit: Unit): boolean {
+    const nonCombatTypes = new Set(['settler', 'caravan', 'diplomat', 'worker']);
+    if (nonCombatTypes.has(unit.type)) {
+      return false;
+    }
+    return (unit.attack || 0) > 0.5;
+  }
+
+  private selectStrategicTarget(unit: Unit): { col: number; row: number } | null {
+    if (!this.gameEngine.squareGrid) {
+      return null;
+    }
+
+    const storage = this.gameEngine.getPlayerStorage(unit.civilizationId);
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+
+    const defensiveTarget = this.findDefensiveAssignment(unit, storage, roundNumber);
+    if (defensiveTarget) {
+      return defensiveTarget;
+    }
+
+    const offensivePlanTarget = this.getOffensivePlanTarget(unit, storage);
+    if (offensivePlanTarget) {
+      return offensivePlanTarget;
+    }
+
+    const offensiveTarget = this.findOffensiveAssignment(unit, storage, roundNumber);
+    if (offensiveTarget) {
+      return offensiveTarget;
+    }
+
+    return null;
+  }
+
+  private updateOffensivePlan(civilizationId: number, storage: any, roundNumber: number): void {
+    if (!storage) {
+      return;
+    }
+
+    storage.turnData = storage.turnData || {};
+
+    const threatenedCities = this.identifyThreatenedCities(civilizationId, storage, roundNumber);
+    if (threatenedCities.length > 0) {
+      storage.turnData.offensivePlan = null;
+      return;
+    }
+
+    const bestTarget = this.findBestOffensiveTarget(civilizationId, storage, roundNumber);
+    if (!bestTarget) {
+      storage.turnData.offensivePlan = null;
+      return;
+    }
+
+    const availableStrength = this.calculateAvailableArmyStrength(civilizationId);
+    const requiredStrength = this.estimateRequiredStrength(bestTarget.location.type);
+
+    if (availableStrength < requiredStrength) {
+      storage.turnData.offensivePlan = null;
+      return;
+    }
+
+    const combatUnits = this.gameEngine.units.filter((unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit));
+    const requiredUnits = Math.min(combatUnits.length, Math.max(3, Math.ceil(requiredStrength / 2)));
+
+    storage.turnData.offensivePlan = {
+      target: { col: bestTarget.location.col, row: bestTarget.location.row },
+      targetType: bestTarget.location.type,
+      score: bestTarget.score,
+      requiredUnits,
+      assignedUnitIds: [] as string[],
+      roundPrepared: roundNumber
+    };
+  }
+
+  private getOffensivePlanTarget(unit: Unit, storage: any): { col: number; row: number } | null {
+    const plan = storage?.turnData?.offensivePlan;
+    if (!plan || !plan.target) {
+      return null;
+    }
+
+    plan.assignedUnitIds = plan.assignedUnitIds || [];
+
+    if (plan.assignedUnitIds.includes(unit.id)) {
+      return plan.target;
+    }
+
+    if (plan.assignedUnitIds.length < plan.requiredUnits) {
+      plan.assignedUnitIds.push(unit.id);
+      return plan.target;
+    }
+
+    return null;
+  }
+
+  private findBestOffensiveTarget(civilizationId: number, storage: any, roundNumber: number): { location: any; score: number } | null {
+    if (!storage || !storage.enemyLocations || storage.enemyLocations.size === 0) {
+      return null;
+    }
+
+    const friendlyCities = this.gameEngine.cities.filter((city: City) => city.civilizationId === civilizationId);
+    let best: { location: any; score: number } | null = null;
+
+    for (const enemyList of storage.enemyLocations.values()) {
+      for (const location of enemyList) {
+        const reference = friendlyCities.length > 0
+          ? friendlyCities
+          : this.gameEngine.units.filter((u: Unit) => u.civilizationId === civilizationId);
+        if (reference.length === 0) {
+          continue;
+        }
+
+        const estimatedDistance = reference.reduce((min: number, entity: any) => {
+          const distance = this.gameEngine.squareGrid!.squareDistance(entity.col, entity.row, location.col, location.row);
+          return Math.min(min, distance);
+        }, Infinity);
+
+        const isVisible = typeof this.gameEngine.isVisibleToPlayer === 'function'
+          ? this.gameEngine.isVisibleToPlayer(civilizationId, location.col, location.row)
+          : false;
+
+        const { score } = scoreEnemyTarget({
+          location,
+          distance: isFinite(estimatedDistance) ? estimatedDistance : 0,
+          currentRound: roundNumber,
+          isCurrentlyVisible: isVisible
+        });
+
+        if (score < 25) {
+          continue;
+        }
+
+        if (!best || score > best.score) {
+          best = { location, score };
+        }
+      }
+    }
+
+    return best;
+  }
+
+  private calculateAvailableArmyStrength(civilizationId: number): number {
+    return this.gameEngine.units
+      .filter((unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit))
+      .reduce((total: number, unit: Unit) => {
+        const attackStrength = Math.max(1, unit.attack || 0);
+        const defenseSupport = Math.max(0, (unit.defense || 0) * 0.5); // count half of defensive stat for offensive push
+        return total + attackStrength + defenseSupport;
+      }, 0);
+  }
+
+  private estimateRequiredStrength(targetType: 'city' | 'unit' | undefined): number {
+    const base = targetType === 'city' ? 10 : 5;
+    const difficulty = this.gameEngine.gameSettings?.difficulty ?? 'PRINCE';
+    const modifiers: Record<string, number> = {
+      CHIEFTAIN: 1.1,
+      WARLORD: 1.05,
+      PRINCE: 1,
+      KING: 0.9,
+      EMPEROR: 0.85
+    };
+    const modifier = modifiers[difficulty.toUpperCase()] ?? 1;
+    return base * modifier;
+  }
+
+  private findOffensiveAssignment(unit: Unit, storage: any, roundNumber: number): { col: number; row: number } | null {
+    if (!storage || !storage.enemyLocations || storage.enemyLocations.size === 0) {
+      return null;
+    }
+
+    let bestTarget: { col: number; row: number; score: number } | null = null;
+
+    for (const enemyList of storage.enemyLocations.values()) {
+      for (const location of enemyList) {
+        const distance = this.gameEngine.squareGrid!.squareDistance(unit.col, unit.row, location.col, location.row);
+        const isVisible = typeof this.gameEngine.isVisibleToPlayer === 'function'
+          ? this.gameEngine.isVisibleToPlayer(unit.civilizationId, location.col, location.row)
+          : false;
+
+        const { score } = scoreEnemyTarget({
+          location,
+          distance,
+          currentRound: roundNumber,
+          isCurrentlyVisible: isVisible
+        });
+
+        if (score < 10) {
+          continue;
+        }
+
+        if (!bestTarget || score > bestTarget.score) {
+          bestTarget = { col: location.col, row: location.row, score };
+        }
+      }
+    }
+
+    return bestTarget ? { col: bestTarget.col, row: bestTarget.row } : null;
+  }
+
+  private findDefensiveAssignment(unit: Unit, storage: any, roundNumber: number): { col: number; row: number } | null {
+    const threatenedCities = this.identifyThreatenedCities(unit.civilizationId, storage, roundNumber);
+    if (threatenedCities.length === 0) {
+      return null;
+    }
+
+    const ranked = threatenedCities
+      .map(entry => ({
+        ...entry,
+        distance: this.gameEngine.squareGrid!.squareDistance(unit.col, unit.row, entry.city.col, entry.city.row)
+      }))
+      .sort((a, b) => {
+        if (b.assessment.netThreat !== a.assessment.netThreat) {
+          return b.assessment.netThreat - a.assessment.netThreat;
+        }
+        return a.distance - b.distance;
+      });
+
+    const best = ranked[0];
+    if (!best) {
+      return null;
+    }
+
+    if (best.assessment.closestSample && typeof best.assessment.closestSample.col === 'number' && typeof best.assessment.closestSample.row === 'number') {
+      return { col: best.assessment.closestSample.col, row: best.assessment.closestSample.row };
+    }
+
+    return { col: best.city.col, row: best.city.row };
+  }
+
+  private identifyThreatenedCities(civilizationId: number, storage: any, roundNumber: number): Array<{ city: City; assessment: CityThreatAssessment }> {
+    if (!this.gameEngine.squareGrid) {
+      return [];
+    }
+
+    const threatened: Array<{ city: City; assessment: CityThreatAssessment }> = [];
+    const friendlyCities = this.gameEngine.cities.filter(city => city.civilizationId === civilizationId);
+
+    const currentYear = this.gameEngine.currentYear ?? -4000;
+    const difficulty = this.gameEngine.gameSettings?.difficulty ?? 'PRINCE';
+    const dynamicThreshold = calculateDangerThreshold(currentYear, difficulty);
+
+    for (const city of friendlyCities) {
+      const garrisonStrength = computeCityGarrisonStrength(this.gameEngine, city, civilizationId);
+      const samples = collectCityThreatSamples(this.gameEngine, city, civilizationId, storage, roundNumber);
+      if (samples.length === 0) {
+        continue;
+      }
+
+      const assessment = assessCityThreat({
+        city: { id: city.id, col: city.col, row: city.row },
+        samples,
+        garrisonStrength,
+        defensiveBonus: 0,
+        dangerThreshold: dynamicThreshold
+      });
+
+      if (assessment.needsDefense) {
+        threatened.push({ city, assessment });
+      }
+    }
+
+    return threatened;
+  }
   /**
    * Emit event for AI target highlighting
    */

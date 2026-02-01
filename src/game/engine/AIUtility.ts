@@ -1,13 +1,52 @@
 import { TERRAIN_PROPS } from '@/utils/Constants';
 import type { SquareCoordinate } from '../HexGrid';
 
+// Cache for terrain costs to avoid repeated lookups
+const terrainCostCache = new Map<string, number>();
+const terrainPassableCache = new Map<string, boolean>();
+
 /**
  * AI Utility class for intelligent movement decisions
  * Analyzes terrain around units and calculates movement costs
+ * Optimized with caching and early termination
  */
 export class AIUtility {
   /**
+   * Get cached terrain cost
+   */
+  private static getCachedTerrainCost(terrainType: string): number {
+    let cost = terrainCostCache.get(terrainType);
+    if (cost === undefined) {
+      cost = Math.max(1, TERRAIN_PROPS[terrainType]?.movement || 1);
+      terrainCostCache.set(terrainType, cost);
+    }
+    return cost;
+  }
+
+  /**
+   * Get cached terrain passability
+   */
+  private static getCachedPassable(terrainType: string): boolean {
+    let passable = terrainPassableCache.get(terrainType);
+    if (passable === undefined) {
+      passable = TERRAIN_PROPS[terrainType]?.passable !== false;
+      terrainPassableCache.set(terrainType, passable);
+    }
+    return passable;
+  }
+
+  /**
+   * Calculate Chebyshev distance (optimized)
+   */
+  static chebyshevDistance(col1: number, row1: number, col2: number, row2: number): number {
+    const dx = col1 > col2 ? col1 - col2 : col2 - col1;
+    const dy = row1 > row2 ? row1 - row2 : row2 - row1;
+    return dx > dy ? dx : dy;
+  }
+
+  /**
    * Analyze terrain around a unit and return best movement options
+   * Optimized with single-pass analysis and early collection of cheapest moves
    */
   static analyzeSurroundingTerrain(
     unitCol: number,
@@ -28,40 +67,51 @@ export class AIUtility {
 
     let totalCost = 0;
     let validCount = 0;
+    const neighborsLength = neighbors.length;
 
-    for (const neighbor of neighbors) {
-      if (!isValidSquare(neighbor.col, neighbor.row)) continue;
+    // Pre-allocate arrays for better performance
+    analysis.allMoves = new Array(neighborsLength);
+    let allMovesIdx = 0;
 
-      const tile = getTileAt(neighbor.col, neighbor.row);
+    for (let i = 0; i < neighborsLength; i++) {
+      const neighbor = neighbors[i];
+      const { col, row } = neighbor;
+
+      if (!isValidSquare(col, row)) continue;
+
+      const tile = getTileAt(col, row);
       if (!tile) continue;
 
       const terrainType = tile.type;
-      const isPassable = TERRAIN_PROPS[terrainType]?.passable !== false;
-      const moveCost = Math.max(1, TERRAIN_PROPS[terrainType]?.movement || 1);
-      const otherUnit = getUnitAt(neighbor.col, neighbor.row);
-      const isOccupied = !!otherUnit;
-      const isAllyOccupied = otherUnit && otherUnit.civilizationId !== undefined; // Would be filtered by GameEngine
+      const isPassable = this.getCachedPassable(terrainType);
+      const moveCost = this.getCachedTerrainCost(terrainType);
+      const otherUnit = getUnitAt(col, row);
+      const isOccupied = otherUnit !== null && otherUnit !== undefined;
+      const isAllyOccupied = isOccupied && otherUnit.civilizationId !== undefined;
 
       const moveOption: MoveOption = {
-        col: neighbor.col,
-        row: neighbor.row,
+        col,
+        row,
         terrainType,
         moveCost,
         isPassable,
         isOccupied,
-        distance: Math.max(Math.abs(neighbor.col - unitCol), Math.abs(neighbor.row - unitRow)),
+        distance: this.chebyshevDistance(col, row, unitCol, unitRow),
       };
 
-      analysis.allMoves.push(moveOption);
+      analysis.allMoves[allMovesIdx++] = moveOption;
 
       if (isPassable && !isAllyOccupied) {
         analysis.passableMoves.push(moveOption);
         totalCost += moveCost;
         validCount++;
 
-        // Track min/max costs
+        // Track min/max costs and collect cheapest moves in single pass
         if (moveCost < analysis.minCost) {
           analysis.minCost = moveCost;
+          analysis.cheapestMoves = [moveOption];
+        } else if (moveCost === analysis.minCost) {
+          analysis.cheapestMoves.push(moveOption);
         }
         if (moveCost > analysis.maxCost) {
           analysis.maxCost = moveCost;
@@ -69,10 +119,8 @@ export class AIUtility {
       }
     }
 
-    // Find all cheapest moves
-    if (analysis.minCost !== Infinity) {
-      analysis.cheapestMoves = analysis.passableMoves.filter(m => m.moveCost === analysis.minCost);
-    }
+    // Trim allMoves array
+    analysis.allMoves.length = allMovesIdx;
 
     // Calculate average cost
     if (validCount > 0) {
@@ -84,48 +132,69 @@ export class AIUtility {
 
   /**
    * Choose the best move from available options
-   * Prioritizes: low cost > no occupation > not combat-oriented
+   * Prioritizes: low cost > closest to target > unoccupied
+   * Optimized with early exit and reduced comparisons
    */
   static chooseBestMove(
     analysis: TerrainAnalysis,
     targetCol?: number,
     targetRow?: number
   ): MoveOption | null {
-    if (analysis.passableMoves.length === 0) {
+    const { passableMoves, cheapestMoves } = analysis;
+
+    if (passableMoves.length === 0) {
       return null;
     }
 
+    // Early exit: single option
+    if (passableMoves.length === 1) {
+      return passableMoves[0];
+    }
+
     // Prefer cheapest moves first
-    if (analysis.cheapestMoves.length > 0) {
+    if (cheapestMoves.length > 0) {
+      // Early exit: single cheapest option
+      if (cheapestMoves.length === 1) {
+        return cheapestMoves[0];
+      }
+
       // If there's a specific target, prefer moves closer to it
       if (targetCol !== undefined && targetRow !== undefined) {
-        let bestMove = analysis.cheapestMoves[0];
-        let bestDistance = Math.max(
-          Math.abs(bestMove.col - targetCol),
-          Math.abs(bestMove.row - targetRow)
-        );
+        let bestMove = cheapestMoves[0];
+        let bestDistance = this.chebyshevDistance(bestMove.col, bestMove.row, targetCol, targetRow);
 
-        for (const move of analysis.cheapestMoves) {
-          const dist = Math.max(
-            Math.abs(move.col - targetCol),
-            Math.abs(move.row - targetRow)
-          );
+        const len = cheapestMoves.length;
+        for (let i = 1; i < len; i++) {
+          const move = cheapestMoves[i];
+          const dist = this.chebyshevDistance(move.col, move.row, targetCol, targetRow);
           if (dist < bestDistance) {
             bestDistance = dist;
             bestMove = move;
+            // Early exit if adjacent to target
+            if (dist === 1) return bestMove;
           }
         }
         return bestMove;
       }
 
-      // Otherwise just pick the first cheap move
-      return analysis.cheapestMoves[0];
+      // Prefer unoccupied tiles among cheapest
+      for (let i = 0; i < cheapestMoves.length; i++) {
+        if (!cheapestMoves[i].isOccupied) {
+          return cheapestMoves[i];
+        }
+      }
+      return cheapestMoves[0];
     }
 
-    // Fallback: pick cheapest available move
-    let bestMove = analysis.passableMoves[0];
-    for (const move of analysis.passableMoves) {
-      if (move.moveCost < bestMove.moveCost) {
+    // Fallback: pick cheapest available move with optimized loop
+    let bestMove = passableMoves[0];
+    let bestCost = bestMove.moveCost;
+    const len = passableMoves.length;
+
+    for (let i = 1; i < len; i++) {
+      const move = passableMoves[i];
+      if (move.moveCost < bestCost) {
+        bestCost = move.moveCost;
         bestMove = move;
       }
     }
@@ -208,28 +277,153 @@ export class AIUtility {
 
   /**
    * Find nearest own city for a unit
+   * Optimized with early exit for adjacent cities and pre-filtering
    */
   static findNearestOwnCity(
     unitCol: number,
     unitRow: number,
     unitCivilizationId: number,
     cities: any[],
-    squareDistance: (col1: number, row1: number, col2: number, row2: number) => number
+    squareDistance?: (col1: number, row1: number, col2: number, row2: number) => number
   ): any {
+    if (!cities || cities.length === 0) return null;
+
+    // Use internal distance function if not provided
+    const distFn = squareDistance || this.chebyshevDistance;
+
     let nearestCity = null;
     let minDistance = Infinity;
+    const citiesLen = cities.length;
 
-    for (const city of cities) {
-      if (city.civilizationId === unitCivilizationId) {
-        const distance = squareDistance(unitCol, unitRow, city.col, city.row);
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestCity = city;
-        }
+    for (let i = 0; i < citiesLen; i++) {
+      const city = cities[i];
+      if (city.civilizationId !== unitCivilizationId) continue;
+
+      const distance = distFn(unitCol, unitRow, city.col, city.row);
+
+      // Early exit: if distance is 0 or 1, we're at or adjacent to a city
+      if (distance <= 1) {
+        return city;
+      }
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestCity = city;
       }
     }
 
     return nearestCity;
+  }
+
+  /**
+   * Calculate threat level at a position based on nearby enemies
+   * Useful for defensive positioning and retreat decisions
+   */
+  static calculateThreatLevel(
+    col: number,
+    row: number,
+    civilizationId: number,
+    getUnitsInRadius: (col: number, row: number, radius: number) => any[],
+    radius: number = 3
+  ): number {
+    const nearbyUnits = getUnitsInRadius(col, row, radius);
+    let threat = 0;
+
+    for (const unit of nearbyUnits) {
+      if (unit.civilizationId !== civilizationId) {
+        const distance = this.chebyshevDistance(col, row, unit.col, unit.row);
+        // Threat decreases with distance, combat units are more threatening
+        const unitThreat = (unit.attack || 1) / (distance + 1);
+        threat += unitThreat;
+      }
+    }
+
+    return threat;
+  }
+
+  /**
+   * Evaluate strategic value of a position
+   * Considers terrain, resources, and tactical advantage
+   */
+  static evaluatePosition(
+    col: number,
+    row: number,
+    getTileAt: (col: number, row: number) => any,
+    civilizationId: number,
+    getCityAt?: (col: number, row: number) => any
+  ): number {
+    const tile = getTileAt(col, row);
+    if (!tile) return 0;
+
+    let value = 0;
+
+    // Base terrain value
+    const props = TERRAIN_PROPS[tile.type];
+    if (props) {
+      value += (props.food || 0) * 2 + (props.production || 0) * 1.5 + (props.trade || 0);
+    }
+
+    // Defensive bonus for hills/forests
+    if (tile.type === 'hills' || tile.type === 'forest') {
+      value += 2;
+    }
+
+    // Resource bonus
+    if (tile.resource) {
+      value += 5;
+    }
+
+    // Strategic position near water
+    if (tile.river || tile.type === 'coast') {
+      value += 1;
+    }
+
+    return value;
+  }
+
+  /**
+   * Find best defensive position within range
+   */
+  static findBestDefensivePosition(
+    unitCol: number,
+    unitRow: number,
+    neighbors: SquareCoordinate[],
+    getTileAt: (col: number, row: number) => any,
+    getUnitAt: (col: number, row: number) => any,
+    isValidSquare: (col: number, row: number) => boolean
+  ): SquareCoordinate | null {
+    let bestPosition: SquareCoordinate | null = null;
+    let bestDefenseValue = -Infinity;
+
+    for (const neighbor of neighbors) {
+      if (!isValidSquare(neighbor.col, neighbor.row)) continue;
+
+      const tile = getTileAt(neighbor.col, neighbor.row);
+      if (!tile) continue;
+
+      const isPassable = this.getCachedPassable(tile.type);
+      if (!isPassable) continue;
+
+      const otherUnit = getUnitAt(neighbor.col, neighbor.row);
+      if (otherUnit) continue;
+
+      let defenseValue = 0;
+
+      // Hills provide best defense
+      if (tile.type === 'hills') defenseValue += 4;
+      else if (tile.type === 'forest') defenseValue += 2;
+      else if (tile.type === 'mountains') defenseValue += 3;
+
+      // Fortification bonus
+      if (tile.fortress) defenseValue += 5;
+
+      if (defenseValue > bestDefenseValue) {
+        bestDefenseValue = defenseValue;
+        bestPosition = neighbor;
+      }
+    }
+
+    return bestPosition;
   }
 }
 

@@ -6,6 +6,7 @@ export interface SearchResult {
   distance: number;
   targetType: 'unit' | 'city';
   targetId: string;
+  priority: number; // Higher = more important target
 }
 
 export interface EnemyLocation {
@@ -15,6 +16,70 @@ export interface EnemyLocation {
   id: string;
   discoveredRound: number;
   lastSeenRound: number;
+}
+
+/**
+ * Min-heap for efficient enemy prioritization
+ */
+class PriorityQueue<T> {
+  private items: T[] = [];
+  private compareFn: (a: T, b: T) => number;
+
+  constructor(compareFn: (a: T, b: T) => number) {
+    this.compareFn = compareFn;
+  }
+
+  push(item: T): void {
+    this.items.push(item);
+    this.bubbleUp(this.items.length - 1);
+  }
+
+  pop(): T | undefined {
+    if (this.items.length === 0) return undefined;
+    const result = this.items[0];
+    const last = this.items.pop();
+    if (this.items.length > 0 && last !== undefined) {
+      this.items[0] = last;
+      this.bubbleDown(0);
+    }
+    return result;
+  }
+
+  peek(): T | undefined {
+    return this.items[0];
+  }
+
+  get length(): number {
+    return this.items.length;
+  }
+
+  private bubbleUp(index: number): void {
+    while (index > 0) {
+      const parentIndex = (index - 1) >> 1;
+      if (this.compareFn(this.items[index], this.items[parentIndex]) >= 0) break;
+      [this.items[index], this.items[parentIndex]] = [this.items[parentIndex], this.items[index]];
+      index = parentIndex;
+    }
+  }
+
+  private bubbleDown(index: number): void {
+    const length = this.items.length;
+    while (true) {
+      const leftChild = (index << 1) + 1;
+      const rightChild = leftChild + 1;
+      let smallest = index;
+
+      if (leftChild < length && this.compareFn(this.items[leftChild], this.items[smallest]) < 0) {
+        smallest = leftChild;
+      }
+      if (rightChild < length && this.compareFn(this.items[rightChild], this.items[smallest]) < 0) {
+        smallest = rightChild;
+      }
+      if (smallest === index) break;
+      [this.items[index], this.items[smallest]] = [this.items[smallest], this.items[index]];
+      index = smallest;
+    }
+  }
 }
 
 /**
@@ -84,10 +149,15 @@ export class EnemySearcher {
   }
 
   /**
-   * Calculate square distance between two points
+   * Calculate square distance between two points (Chebyshev distance)
+   * Optimized with bitwise abs
    */
   private static squareDistance(col1: number, row1: number, col2: number, row2: number): number {
-    return Math.max(Math.abs(col1 - col2), Math.abs(row1 - row2));
+    const dx = col1 - col2;
+    const dy = row1 - row2;
+    const absDx = dx < 0 ? -dx : dx;
+    const absDy = dy < 0 ? -dy : dy;
+    return absDx > absDy ? absDx : absDy;
   }
 
   /**
@@ -144,6 +214,7 @@ export class EnemySearcher {
   /**
    * Find nearest enemy with city prioritization
    * Cities are valuable targets and take precedence over units
+   * Optimized with early termination and efficient spiral search
    * 
    * @param startCol Starting column
    * @param startRow Starting row
@@ -172,21 +243,46 @@ export class EnemySearcher {
     }
 
     const effectiveMaxRadius = maxRadius || Math.max(mapWidth, mapHeight);
-    const visited = new Set<string>();
+    
+    // Use a more efficient visited tracking with bit operations
+    const visited = new Uint8Array((mapWidth * mapHeight + 7) >> 3);
+    const setVisited = (col: number, row: number): void => {
+      const idx = row * mapWidth + col;
+      visited[idx >> 3] |= 1 << (idx & 7);
+    };
+    const isVisited = (col: number, row: number): boolean => {
+      const idx = row * mapWidth + col;
+      return (visited[idx >> 3] & (1 << (idx & 7))) !== 0;
+    };
     
     let nearestCity: SearchResult | null = null;
     let nearestUnit: SearchResult | null = null;
+    let nearestCityDistance = Infinity;
+    let nearestUnitDistance = Infinity;
     let checkedCount = 0;
     let visibleCount = 0;
 
+    // Early termination thresholds
+    const EARLY_CITY_THRESHOLD = 3; // If we find a city this close, stop searching
+    const MAX_SEARCH_TILES = Math.min(mapWidth * mapHeight * 0.3, 5000); // Limit search
+
     // Search in spiral order, prioritizing cities
     for (const { col, row } of this.generateArchimedeanSpiral(startCol, startRow, effectiveMaxRadius)) {
-      // Bounds check
+      // Early termination if we've found a close enough city
+      if (nearestCity && nearestCityDistance <= EARLY_CITY_THRESHOLD) {
+        break;
+      }
+
+      // Stop if we've searched too many tiles
+      if (checkedCount > MAX_SEARCH_TILES) {
+        break;
+      }
+
+      // Bounds check (inline for performance)
       if (col < 0 || col >= mapWidth || row < 0 || row >= mapHeight) continue;
 
-      const key = `${col},${row}`;
-      if (visited.has(key)) continue;
-      visited.add(key);
+      if (isVisited(col, row)) continue;
+      setVisited(col, row);
 
       checkedCount++;
 
@@ -195,38 +291,46 @@ export class EnemySearcher {
 
       visibleCount++;
 
+      const distance = this.squareDistance(startCol, startRow, col, row);
+
+      // Skip if farther than current best city (cities are priority)
+      if (nearestCity && distance > nearestCityDistance) continue;
+
       // Check for enemy city (prioritized)
       const city = getCityAt(col, row);
-      if (city && city.civilizationId !== civilizationId && !nearestCity) {
-        const distance = this.squareDistance(startCol, startRow, col, row);
-        nearestCity = {
-          col,
-          row,
-          distance,
-          targetType: 'city',
-          targetId: city.id
-        };
-        // Don't return yet - continue searching for other cities at same distance
-        if (distance > 5) break; // City found reasonably close, stop searching
+      if (city && city.civilizationId !== civilizationId) {
+        if (distance < nearestCityDistance) {
+          nearestCityDistance = distance;
+          nearestCity = {
+            col,
+            row,
+            distance,
+            targetType: 'city',
+            targetId: city.id,
+            priority: 100 - distance // Higher priority for closer cities
+          };
+          // Early exit if very close
+          if (distance <= EARLY_CITY_THRESHOLD) break;
+        }
         continue;
       }
 
       // Check for enemy unit (secondary priority)
-      const unit = getUnitAt(col, row);
-      if (unit && unit.civilizationId !== civilizationId && !nearestUnit) {
-        const distance = this.squareDistance(startCol, startRow, col, row);
-        nearestUnit = {
-          col,
-          row,
-          distance,
-          targetType: 'unit',
-          targetId: unit.id
-        };
-        continue;
+      // Only if no nearby city found
+      if (!nearestCity || distance < nearestCityDistance) {
+        const unit = getUnitAt(col, row);
+        if (unit && unit.civilizationId !== civilizationId && distance < nearestUnitDistance) {
+          nearestUnitDistance = distance;
+          nearestUnit = {
+            col,
+            row,
+            distance,
+            targetType: 'unit',
+            targetId: unit.id,
+            priority: 50 - distance // Lower priority than cities
+          };
+        }
       }
-
-      // Stop after checking reasonable radius
-      if (checkedCount > mapWidth * mapHeight * 0.5) break;
     }
 
     // Return city if found, otherwise unit
@@ -237,7 +341,7 @@ export class EnemySearcher {
       if (this.VERBOSE_LOGGING) {
         console.log(`[EnemySearcher] Checked ${checkedCount} tiles, ${visibleCount} visible`);
       }
-    } else {
+    } else if (this.VERBOSE_LOGGING) {
       console.log(`[EnemySearcher] ❌ No enemy found (checked ${visibleCount}/${checkedCount} tiles)`);
     }
 
@@ -245,8 +349,9 @@ export class EnemySearcher {
   }
 
   /**
-   * Find all enemies within a radius, sorted by distance
+   * Find all enemies within a radius, sorted by distance and priority
    * Useful for AI decision-making about threat level
+   * Optimized with efficient data structures
    */
   public static findAllEnemiesInRadius(
     startCol: number,
@@ -259,27 +364,41 @@ export class EnemySearcher {
     civilizationId: number,
     maxRadius: number
   ): SearchResult[] {
-    const enemies: SearchResult[] = [];
-    const visited = new Set<string>();
+    // Pre-allocate with estimated capacity
+    const cities: SearchResult[] = [];
+    const units: SearchResult[] = [];
+    
+    // Use efficient visited tracking
+    const visited = new Uint8Array((mapWidth * mapHeight + 7) >> 3);
+    const setVisited = (col: number, row: number): void => {
+      const idx = row * mapWidth + col;
+      visited[idx >> 3] |= 1 << (idx & 7);
+    };
+    const isVisited = (col: number, row: number): boolean => {
+      const idx = row * mapWidth + col;
+      return (visited[idx >> 3] & (1 << (idx & 7))) !== 0;
+    };
 
     for (const { col, row } of this.generateArchimedeanSpiral(startCol, startRow, maxRadius)) {
       if (col < 0 || col >= mapWidth || row < 0 || row >= mapHeight) continue;
 
-      const key = `${col},${row}`;
-      if (visited.has(key)) continue;
-      visited.add(key);
+      if (isVisited(col, row)) continue;
+      setVisited(col, row);
 
       if (!this.isTileVisible(col, row, isVisible)) continue;
+
+      const distance = this.squareDistance(startCol, startRow, col, row);
 
       // Check city first (higher priority)
       const city = getCityAt(col, row);
       if (city && city.civilizationId !== civilizationId) {
-        enemies.push({
+        cities.push({
           col,
           row,
-          distance: this.squareDistance(startCol, startRow, col, row),
+          distance,
           targetType: 'city',
-          targetId: city.id
+          targetId: city.id,
+          priority: 100 - distance
         });
         continue;
       }
@@ -287,24 +406,23 @@ export class EnemySearcher {
       // Check unit
       const unit = getUnitAt(col, row);
       if (unit && unit.civilizationId !== civilizationId) {
-        enemies.push({
+        units.push({
           col,
           row,
-          distance: this.squareDistance(startCol, startRow, col, row),
+          distance,
           targetType: 'unit',
-          targetId: unit.id
+          targetId: unit.id,
+          priority: 50 - distance
         });
       }
     }
 
-    // Sort: cities first, then by distance
-    enemies.sort((a, b) => {
-      if (a.targetType === 'city' && b.targetType === 'unit') return -1;
-      if (a.targetType === 'unit' && b.targetType === 'city') return 1;
-      return a.distance - b.distance;
-    });
+    // Sort cities by distance, then units by distance
+    cities.sort((a, b) => a.distance - b.distance);
+    units.sort((a, b) => a.distance - b.distance);
 
-    return enemies;
+    // Return cities first, then units (pre-sorted)
+    return cities.concat(units);
   }
 
   /**

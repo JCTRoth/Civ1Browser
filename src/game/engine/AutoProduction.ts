@@ -4,6 +4,14 @@
  */
 
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
+import {
+  assessCityThreat,
+  calculateDangerThreshold,
+  collectCityThreatSamples,
+  computeCityGarrisonStrength,
+  type CityThreatAssessment
+} from './AIStrategy';
+import type { City } from '../../../types/game';
 
 export class AutoProduction {
   private gameEngine: any;
@@ -25,14 +33,20 @@ export class AutoProduction {
         return false;
       }
 
-      // If city already has current production, don't override it
+      const threatAssessment = this.evaluateCityThreat(city);
+
       if (city.currentProduction) {
-        console.log('[AutoProduction] City already has production:', city.currentProduction);
-        return true;
+        if (threatAssessment?.needsDefense && !this.isDefensiveProduction(city.currentProduction)) {
+          console.log('[AutoProduction] City under threat, overriding existing production');
+          this.gameEngine.removeCurrentProduction(city.id);
+        } else {
+          console.log('[AutoProduction] City already has production:', city.currentProduction);
+          return true;
+        }
       }
 
       // Determine what the city should produce based on its state
-      const productionItem = this.determineProductionItem(city);
+      const productionItem = this.determineProductionItem(city, threatAssessment);
       
       if (productionItem) {
         console.log('[AutoProduction] Setting production item:', productionItem);
@@ -54,13 +68,14 @@ export class AutoProduction {
   /**
    * Determine what production item a city should build
    */
-  private determineProductionItem(city: any): any | null {
+  private determineProductionItem(city: any, threatAssessment?: CityThreatAssessment | null): any | null {
     // Priority order:
     // 1. Basic military unit if city has no defenders
-    // 2. Essential buildings (granary, barracks)
-    // 3. Worker/Settler if needed
-    // 4. Military units
-    // 5. Economy buildings
+    // 2. Emergency reinforcements for threatened cities
+    // 3. Offensive campaign reinforcements
+    // 4. Essential buildings (granary, barracks)
+    // 5. Worker/Settler if needed
+    // 6. Military units as default
 
     // Check for city defenders
     const unitsInCity = this.gameEngine.units.filter(
@@ -73,17 +88,22 @@ export class AutoProduction {
     });
 
     // 1. Build a defender if none exists
-    if (!hasDefender) {
-      console.log('[AutoProduction] City needs defender');
-      return {
-        type: 'unit',
-        itemType: 'warrior',
-        name: UNIT_PROPS.warrior.name,
-        cost: UNIT_PROPS.warrior.cost
-      };
+    if (!hasDefender || threatAssessment?.needsDefense) {
+      console.log('[AutoProduction] City needs defender (threat-triggered:', !!threatAssessment?.needsDefense, ')');
+      return this.buildDefenderProduction(city, threatAssessment);
     }
 
-    // 2. Check for essential buildings
+    if (threatAssessment && threatAssessment.netThreat > 0) {
+      console.log('[AutoProduction] Elevated threat detected, reinforcing garrison');
+      return this.buildDefenderProduction(city, threatAssessment);
+    }
+
+    if (this.shouldSupportOffensivePlan(city)) {
+      console.log('[AutoProduction] Supporting offensive plan with new attacker');
+      return this.buildOffensiveProduction(city);
+    }
+
+    // 4. Check for essential buildings
     const hasGranary = city.buildings?.some((b: any) => b === 'granary' || b.type === 'granary');
     if (!hasGranary && BUILDING_PROPS.granary) {
       console.log('[AutoProduction] City needs granary');
@@ -106,7 +126,7 @@ export class AutoProduction {
       };
     }
 
-    // 3. Build settlers if civilization has few cities
+    // 5. Build settlers if civilization has few cities
     const civCities = this.gameEngine.cities.filter((c: any) => c.civilizationId === city.civilizationId);
     if (civCities.length < 3 && city.population >= 2) {
       console.log('[AutoProduction] Civilization needs more cities');
@@ -118,14 +138,131 @@ export class AutoProduction {
       };
     }
 
-    // 4. Build military units (default to warrior)
+    // 6. Build military units (default to warrior)
     console.log('[AutoProduction] Building default military unit');
+    return this.buildDefenderProduction(city, threatAssessment);
+  }
+
+  private evaluateCityThreat(city: City): CityThreatAssessment | null {
+    if (!this.gameEngine.squareGrid) {
+      return null;
+    }
+
+    const storage = typeof this.gameEngine.getPlayerStorage === 'function'
+      ? this.gameEngine.getPlayerStorage(city.civilizationId)
+      : undefined;
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+    const samples = collectCityThreatSamples(this.gameEngine, city, city.civilizationId, storage, roundNumber);
+    if (samples.length === 0) {
+      return null;
+    }
+
+    const garrisonStrength = computeCityGarrisonStrength(this.gameEngine, city, city.civilizationId);
+    const dangerThreshold = calculateDangerThreshold(this.gameEngine.currentYear ?? -4000, this.gameEngine.gameSettings?.difficulty ?? 'PRINCE');
+
+    return assessCityThreat({
+      city: { id: city.id, col: city.col, row: city.row },
+      samples,
+      garrisonStrength,
+      defensiveBonus: 0,
+      dangerThreshold
+    });
+  }
+
+  private isDefensiveProduction(currentProduction: any): boolean {
+    if (!currentProduction || currentProduction.type !== 'unit') {
+      return false;
+    }
+    const unitProps = UNIT_PROPS[currentProduction.itemType];
+    if (!unitProps) {
+      return false;
+    }
+    return (unitProps.defense || 0) >= (unitProps.attack || 0);
+  }
+
+  private buildDefenderProduction(city: City, threatAssessment?: CityThreatAssessment | null) {
+    const unitType = this.selectDefenderType(this.gameEngine.currentYear ?? -4000);
+    const unitProps = UNIT_PROPS[unitType];
+    const production = {
+      type: 'unit',
+      itemType: unitType,
+      name: unitProps.name,
+      cost: unitProps.cost
+    };
+
+    if (threatAssessment) {
+      console.log('[AutoProduction] Threat level', threatAssessment.netThreat.toFixed(2), '-> producing', unitProps.name);
+    }
+
+    return production;
+  }
+
+  private selectDefenderType(currentYear: number): string {
+    const modern = ['riflemen', 'musketeer', 'phalanx', 'warrior'];
+    const medieval = ['musketeer', 'phalanx', 'warrior'];
+    const ancient = ['phalanx', 'warrior'];
+
+    const preference = currentYear >= 1750 ? modern : currentYear >= 500 ? medieval : ancient;
+
+    for (const unitType of preference) {
+      if (UNIT_PROPS[unitType]) {
+        return unitType;
+      }
+    }
+
+    return 'warrior';
+  }
+
+  private shouldSupportOffensivePlan(city: City): boolean {
+    const storage = typeof this.gameEngine.getPlayerStorage === 'function'
+      ? this.gameEngine.getPlayerStorage(city.civilizationId)
+      : undefined;
+    const plan = storage?.turnData?.offensivePlan;
+    if (!plan || city.population < 2) {
+      return false;
+    }
+
+    const offensiveUnits = this.countOffensiveUnits(city.civilizationId);
+    return offensiveUnits < plan.requiredUnits;
+  }
+
+  private countOffensiveUnits(civilizationId: number): number {
+    return this.gameEngine.units.filter((unit: any) => unit.civilizationId === civilizationId && this.isOffensiveUnitType(unit.type)).length;
+  }
+
+  private isOffensiveUnitType(unitType: string): boolean {
+    const props = UNIT_PROPS[unitType];
+    if (!props) {
+      return false;
+    }
+    return (props.attack || 0) >= (props.defense || 0);
+  }
+
+  private buildOffensiveProduction(city: City) {
+    const unitType = this.selectOffensiveUnitType(this.gameEngine.currentYear ?? -4000);
+    const unitProps = UNIT_PROPS[unitType];
     return {
       type: 'unit',
-      itemType: 'warrior',
-      name: UNIT_PROPS.warrior.name,
-      cost: UNIT_PROPS.warrior.cost
+      itemType: unitType,
+      name: unitProps.name,
+      cost: unitProps.cost
     };
+  }
+
+  private selectOffensiveUnitType(currentYear: number): string {
+    const modern = ['cavalry', 'knights', 'archer', 'warrior'];
+    const medieval = ['knights', 'archer', 'warrior'];
+    const ancient = ['archer', 'warrior'];
+
+    const preference = currentYear >= 1500 ? modern : currentYear >= 500 ? medieval : ancient;
+
+    for (const unitType of preference) {
+      if (UNIT_PROPS[unitType]) {
+        return unitType;
+      }
+    }
+
+    return 'warrior';
   }
 
   /**
