@@ -1,10 +1,22 @@
 /**
  * AIManager - Manages AI behavior for civilizations
+ * 
+ * Coordinates all AI subsystems: strategy selection, technology research,
+ * army coordination, building production, and unit targeting.
  */
 
 import { AIUtility } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
 import { SettlementEvaluator } from './SettlementEvaluator';
+import { AIStrategySelector } from './AIStrategySelector';
+import { AICoordinator } from './AICoordinator';
+import { AIResearch } from './AIResearch';
+import {
+  createDefaultAIState,
+  canBuildUnit,
+  type AIState,
+  type StrategyProfile,
+} from './AITypes';
 import {
   assessCityThreat,
   calculateDangerThreshold,
@@ -61,17 +73,72 @@ export class AIManager {
     }
     console.log(`[AI] 🤖 Starting AI turn for civilization ${civilizationId} (${civ.name})`);
 
-    // Timing now coordinated by RoundManager; this method focuses only on AI logic
-
     // Small delay before AI starts so player can observe
     await this.gameEngine.sleep(250);
 
-    const aiUnits = this.gameEngine.units.filter((u: Unit) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0);
-    console.log(`[AI] Found ${aiUnits.length} units with moves remaining for civilization ${civilizationId}`);
-
+    // ─── Phase 0: Initialize / retrieve AI state ───────────────────────
     const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+
+    if (storage) {
+      if (!storage.turnData) storage.turnData = {};
+      if (!storage.turnData.aiState) {
+        storage.turnData.aiState = createDefaultAIState();
+      }
+    }
+    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+
+    // ─── Phase 1: Strategy evaluation ──────────────────────────────────
+    const gameState = this.buildGameState(civilizationId);
+    const newStrategy = AIStrategySelector.evaluateStrategy(civ, gameState, aiState);
+    if (newStrategy !== aiState.strategyProfile) {
+      console.log(`[AI] Strategy changed: ${aiState.strategyProfile} -> ${newStrategy} for civ ${civilizationId}`);
+      aiState.strategyProfile = newStrategy;
+      aiState.lastStrategyEvaluation = roundNumber;
+    }
+
+    // ─── Phase 2: Technology research ──────────────────────────────────
+    if (!civ.currentResearch) {
+      const techChoice = AIResearch.selectResearch(civ, aiState.strategyProfile, gameState);
+      if (techChoice) {
+        console.log(`[AI] Research selected: ${techChoice.techId} (score: ${techChoice.score.toFixed(1)}, reason: ${techChoice.reason})`);
+        aiState.researchPriority = techChoice;
+        // Use GameEngine's setResearch to properly set the tech
+        if (typeof this.gameEngine.setResearch === 'function') {
+          this.gameEngine.setResearch(civilizationId, techChoice.techId);
+        }
+      }
+    }
+
+    // ─── Phase 3: Update offensive plan & army groups ──────────────────
     this.updateOffensivePlan(civilizationId, storage, roundNumber);
+
+    // Build army groups from known enemy positions
+    const combatUnits = this.gameEngine.units.filter(
+      (u: Unit) => u.civilizationId === civilizationId && this.isCombatUnit(u)
+    );
+    const targets = this.getKnownEnemyTargets(civilizationId, storage);
+
+    if (combatUnits.length >= 3 && targets.length > 0) {
+      const distFn = (c1: number, r1: number, c2: number, r2: number) =>
+        this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
+
+      aiState.armyGroups = AICoordinator.formArmyGroups(
+        combatUnits, targets, aiState.armyGroups, distFn
+      );
+      AICoordinator.updateGroupStatuses(
+        aiState.armyGroups, combatUnits, distFn
+      );
+    }
+
+    // Save updated state back
+    if (storage?.turnData) {
+      storage.turnData.aiState = aiState;
+    }
+
+    // ─── Phase 4: Process units ────────────────────────────────────────
+    const aiUnits = this.gameEngine.units.filter((u: Unit) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0);
+    console.log(`[AI] Found ${aiUnits.length} units with moves remaining for civilization ${civilizationId}`);
 
     for (const unit of aiUnits) {
 
@@ -220,8 +287,36 @@ export class AIManager {
   private chooseAITarget(unit: any): { col: number; row: number } | null {
     if (!this.gameEngine.map || !this.gameEngine.squareGrid) return null;
 
-    // Combat units consider strategic objectives first
+    const storage = this.gameEngine.getPlayerStorage?.(unit.civilizationId);
+    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+
+    // ── Retreat check for combat units ──
     if (this.isCombatUnit(unit)) {
+      const localEnemyStrength = this.estimateLocalEnemyStrength(unit);
+      const unitStrength = Math.max(1, unit.attack || 0) + (unit.defense || 0) * 0.5;
+      const isInGroup = aiState.armyGroups.some(g => g.unitIds.includes(unit.id));
+
+      if (AICoordinator.shouldRetreat(unitStrength, localEnemyStrength, isInGroup)) {
+        console.log(`[AI] Unit ${unit.id} retreating (own: ${unitStrength.toFixed(1)}, enemy: ${localEnemyStrength.toFixed(1)})`);
+        const friendlyCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === unit.civilizationId);
+        const distFn = (c1: number, r1: number, c2: number, r2: number) =>
+          this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
+        const retreat = AICoordinator.getRetreatTarget(
+          unit.col, unit.row, friendlyCities, aiState.armyGroups, distFn
+        );
+        if (retreat) return retreat;
+      }
+    }
+
+    // ── Army group targeting for combat units ──
+    if (this.isCombatUnit(unit)) {
+      const groupTarget = AICoordinator.getGroupTarget(unit.id, aiState.armyGroups);
+      if (groupTarget) {
+        console.log(`[AI] Army group target for ${unit.id}: (${groupTarget.col},${groupTarget.row}) [${groupTarget.groupStatus}]`);
+        return { col: groupTarget.col, row: groupTarget.row };
+      }
+
+      // Fall back to strategic targeting
       const strategicTarget = this.selectStrategicTarget(unit as Unit);
       if (strategicTarget) {
         console.log(`[AI] Strategic target chosen for ${unit.type} ${unit.id} -> (${strategicTarget.col}, ${strategicTarget.row})`);
@@ -234,7 +329,7 @@ export class AIManager {
       console.log(`[AI-SETTLER] Settler detected at (${unit.col}, ${unit.row}), using SettlementEvaluator`);
 
       try {
-        const bestLocation = this.findBestSettlementForSettler(unit);
+        const bestLocation = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
         if (bestLocation) {
           console.log(`[AI-SETTLER] SettlementEvaluator found best location at (${bestLocation.col}, ${bestLocation.row}) with score ${bestLocation.score}`);
           return { col: bestLocation.col, row: bestLocation.row };
@@ -410,6 +505,17 @@ export class AIManager {
       return { col: unexplored.col, row: unexplored.row };
     }
 
+    // ScoutMemory: re-scout stale enemy positions if no immediate exploration targets
+    if (unit.type === 'scout' && this.gameEngine.scoutMemory) {
+      const staleTarget = this.gameEngine.scoutMemory.getNearestUnexploredTarget?.(
+        unit.col, unit.row, unit.civilizationId
+      );
+      if (staleTarget) {
+        console.log(`[AI-SCOUT] ScoutMemory target at (${staleTarget.col},${staleTarget.row})`);
+        return { col: staleTarget.col, row: staleTarget.row };
+      }
+    }
+
     // Special exploration logic for scouts when no immediate unexplored tiles
     if (unit.type === 'scout') {
       const scoutExplorationTarget = this.findScoutExplorationTarget(unit);
@@ -463,7 +569,7 @@ export class AIManager {
   /**
    * Find best settlement location for a settler
    */
-  private findBestSettlementForSettler(unit: any): { col: number; row: number; score: number } | null {
+  private findBestSettlementForSettler(unit: any, strategy: StrategyProfile = 'balanced_growth'): { col: number; row: number; score: number } | null {
     console.log(`[AI-SETTLER] Evaluating settlement locations for settler at (${unit.col}, ${unit.row})`);
 
     // Track position history to detect oscillation
@@ -507,9 +613,9 @@ export class AIManager {
       return null;
     }
 
-    // Choose appropriate weights based on game state
-    const weights = SettlementEvaluator.balancedGrowthWeights();
-    console.log(`[AI-SETTLER] Using strategy: Balanced Growth with weights:`, weights);
+    // Choose appropriate weights based on strategy
+    const weights = this.getSettlementWeightsForStrategy(strategy);
+    console.log(`[AI-SETTLER] Using strategy: ${strategy} with weights:`, weights);
 
     // Use SettlementEvaluator to find best location
     const bestLocation = SettlementEvaluator.findBestSettlementLocation(
@@ -923,5 +1029,108 @@ export class AIManager {
   private highlightAITarget(col: number, row: number, color: string = 'rgba(255,0,0,0.4)') {
     // Emit event for UI layer to handle highlighting
     this.gameEngine.onStateChange && this.gameEngine.onStateChange('AI_TARGET_HIGHLIGHT', { col, row, color });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // New integrated helpers
+  // ──────────────────────────────────────────────────────────────────────
+
+  /** Build a snapshot of game state for strategy/research evaluation */
+  private buildGameState(civilizationId: number): {
+    currentYear: number;
+    roundNumber: number;
+    numCities: number;
+    totalPopulation: number;
+    numMilitaryUnits: number;
+    isAtWar: boolean;
+    knownEnemyCities: number;
+  } {
+    const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) || [];
+    const civ = this.gameEngine.civilizations?.[civilizationId];
+    const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
+
+    let knownEnemyCities = 0;
+    if (storage?.enemyLocations) {
+      for (const enemies of storage.enemyLocations.values()) {
+        knownEnemyCities += enemies.filter((e: any) => e.type === 'city').length;
+      }
+    }
+
+    return {
+      currentYear: this.gameEngine.currentYear ?? -4000,
+      roundNumber: this.gameEngine.roundManager?.getRoundNumber?.() ?? 0,
+      numCities: cities.length,
+      totalPopulation: cities.reduce((sum: number, c: any) => sum + (c.population || 1), 0),
+      numMilitaryUnits: this.gameEngine.units?.filter(
+        (u: any) => u.civilizationId === civilizationId && this.isCombatUnit(u as Unit)
+      ).length ?? 0,
+      isAtWar: civ?.warWith?.size > 0,
+      knownEnemyCities,
+    };
+  }
+
+  /** Estimate total enemy combat strength in the 2-tile radius around a unit */
+  private estimateLocalEnemyStrength(unit: Unit): number {
+    if (!this.gameEngine.squareGrid) return 0;
+
+    const radius = 2;
+    let enemyStrength = 0;
+
+    for (const other of this.gameEngine.units) {
+      if (other.civilizationId === unit.civilizationId) continue;
+      const dist = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, other.col, other.row);
+      if (dist <= radius) {
+        enemyStrength += Math.max(1, other.attack || 0) + (other.defense || 0) * 0.5;
+      }
+    }
+
+    return enemyStrength;
+  }
+
+  /** Get known enemy targets from player storage for army group formation */
+  private getKnownEnemyTargets(
+    civilizationId: number,
+    storage: any
+  ): Array<{ col: number; row: number; type: 'city' | 'unit'; estimatedStrength: number }> {
+    const targets: Array<{ col: number; row: number; type: 'city' | 'unit'; estimatedStrength: number }> = [];
+    if (!storage?.enemyLocations) return targets;
+
+    for (const enemyList of storage.enemyLocations.values()) {
+      for (const loc of enemyList) {
+        // Estimate strength: cities have higher estimated defense
+        const estimatedStrength = loc.type === 'city' ? 8 : 3;
+        targets.push({
+          col: loc.col,
+          row: loc.row,
+          type: loc.type,
+          estimatedStrength,
+        });
+      }
+    }
+
+    // Sort: prioritize cities over units
+    return targets.sort((a, b) => {
+      if (a.type === 'city' && b.type !== 'city') return -1;
+      if (a.type !== 'city' && b.type === 'city') return 1;
+      return b.estimatedStrength - a.estimatedStrength;
+    });
+  }
+
+  /** Map strategy to settlement evaluation weights */
+  private getSettlementWeightsForStrategy(strategy: StrategyProfile) {
+    switch (strategy) {
+      case 'military_expansion':
+        return SettlementEvaluator.productionPowerhouseWeights();
+      case 'science_focus':
+      case 'wonder_rush':
+        return SettlementEvaluator.tradeCommerceWeights();
+      case 'early_expansion':
+        return SettlementEvaluator.balancedGrowthWeights();
+      case 'defensive_turtle':
+        return SettlementEvaluator.productionPowerhouseWeights();
+      case 'balanced_growth':
+      default:
+        return SettlementEvaluator.balancedGrowthWeights();
+    }
   }
 }

@@ -346,7 +346,40 @@ export class TurnManager {
 
   private handleResearch(civilizationId: number) {
     console.log(`[TurnManager] Research phase for civ ${civilizationId}`);
-    // Placeholder: integrate tech progression selection
+    
+    // If AI has no current research, select one via AIResearch
+    const civ = this.gameEngine.civilizations?.[civilizationId];
+    if (civ && !civ.isHuman && !civ.currentResearch && typeof this.gameEngine.setResearch === 'function') {
+      try {
+        const { AIResearch } = require('./AIResearch');
+        const { createDefaultAIState } = require('./AITypes');
+        const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
+        const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
+        const strategy = aiState.strategyProfile ?? 'balanced_growth';
+
+        const gameState = {
+          currentYear: this.gameEngine.currentYear ?? -4000,
+          roundNumber: this.roundNumber,
+          numCities: this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId).length ?? 0,
+          totalPopulation: this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId)
+            .reduce((s: number, c: any) => s + (c.population || 1), 0) ?? 0,
+          numMilitaryUnits: this.gameEngine.units?.filter(
+            (u: any) => u.civilizationId === civilizationId && (u.attack || 0) > 0
+          ).length ?? 0,
+          isAtWar: civ.warWith?.size > 0,
+          knownEnemyCities: 0,
+        };
+
+        const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
+        if (techChoice) {
+          this.gameEngine.setResearch(civilizationId, techChoice.techId);
+          console.log(`[TurnManager] AI ${civ.name} selected research: ${techChoice.techId}`);
+        }
+      } catch (err) {
+        console.warn('[TurnManager] Failed to select AI research in handleResearch', err);
+      }
+    }
+
     this.emit('RESEARCH_PHASE', { civilizationId });
   }
 
@@ -647,8 +680,9 @@ export class TurnManager {
           : (TECHNOLOGIES?.[civ.currentResearch]?.cost || 0);
         
         if (civ.researchProgress >= techCost && techCost > 0) {
+          const completedTechId = civ.currentResearch.id || civ.currentResearch;
           if (Array.isArray(civ.technologies)) {
-            civ.technologies.push(civ.currentResearch.id || civ.currentResearch);
+            civ.technologies.push(completedTechId);
           }
           civ.researchProgress = 0;
           civ.currentResearch = null;
@@ -657,7 +691,39 @@ export class TurnManager {
             this.gameEngine.updateTechnologyAvailability();
           }
           
-          console.log(`[TurnManager] Civilization ${civ.name} completed research`);
+          console.log(`[TurnManager] Civilization ${civ.name} completed research: ${completedTechId}`);
+
+          // AI auto-selects next research via AIResearch module
+          if (!civ.isHuman && typeof this.gameEngine.setResearch === 'function') {
+            try {
+              const { AIResearch } = require('./AIResearch');
+              const { createDefaultAIState } = require('./AITypes');
+              const storage = this.gameEngine.getPlayerStorage?.(civ.id);
+              const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
+              const strategy = aiState.strategyProfile ?? 'balanced_growth';
+              
+              const gameState = {
+                currentYear: this.gameEngine.currentYear ?? -4000,
+                roundNumber: this.roundNumber,
+                numCities: this.gameEngine.cities?.filter((c: any) => c.civilizationId === civ.id).length ?? 0,
+                totalPopulation: this.gameEngine.cities?.filter((c: any) => c.civilizationId === civ.id)
+                  .reduce((s: number, c: any) => s + (c.population || 1), 0) ?? 0,
+                numMilitaryUnits: this.gameEngine.units?.filter(
+                  (u: any) => u.civilizationId === civ.id && (u.attack || 0) > 0
+                ).length ?? 0,
+                isAtWar: civ.warWith?.size > 0,
+                knownEnemyCities: 0,
+              };
+
+              const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
+              if (techChoice) {
+                this.gameEngine.setResearch(civ.id, techChoice.techId);
+                console.log(`[TurnManager] AI ${civ.name} auto-selected next research: ${techChoice.techId} (reason: ${techChoice.reason})`);
+              }
+            } catch (err) {
+              console.warn('[TurnManager] Failed to auto-select AI research', err);
+            }
+          }
         }
       }
     } catch (e) {

@@ -1,9 +1,11 @@
 /**
  * AutoProduction - Automatically manages production queues for cities
- * Used by AI and can be enabled for player cities via city modal
+ * Uses tech-gated unit selection and integrates AIBuildingStrategy for
+ * intelligent building/wonder production decisions.
  */
 
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
+import { BUILDING_PROPERTIES, WONDER_PROPERTIES, BUILDING_PREREQUISITES } from '@/data/BuildingConstants';
 import {
   assessCityThreat,
   calculateDangerThreshold,
@@ -11,6 +13,8 @@ import {
   computeCityGarrisonStrength,
   type CityThreatAssessment
 } from './AIStrategy';
+import { canBuildUnit, type StrategyProfile, type AIState, createDefaultAIState } from './AITypes';
+import { AIBuildingStrategy } from './AIBuildingStrategy';
 import type { City } from '../../../types/game';
 
 export class AutoProduction {
@@ -70,12 +74,20 @@ export class AutoProduction {
    */
   private determineProductionItem(city: any, threatAssessment?: CityThreatAssessment | null): any | null {
     // Priority order:
-    // 1. Basic military unit if city has no defenders
+    // 1. Urgent defender if city has none
     // 2. Emergency reinforcements for threatened cities
-    // 3. Offensive campaign reinforcements
-    // 4. Essential buildings (granary, barracks)
-    // 5. Worker/Settler if needed
-    // 6. Military units as default
+    // 3. High-priority building (from AIBuildingStrategy)
+    // 4. Offensive campaign reinforcements
+    // 5. Standard building or settler
+    // 6. Wonder (if safe)
+    // 7. Default military unit
+
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    const storage = typeof this.gameEngine.getPlayerStorage === 'function'
+      ? this.gameEngine.getPlayerStorage(city.civilizationId)
+      : undefined;
+    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+    const strategy: StrategyProfile = aiState.strategyProfile ?? 'balanced_growth';
 
     // Check for city defenders
     const unitsInCity = this.gameEngine.units.filter(
@@ -98,47 +110,91 @@ export class AutoProduction {
       return this.buildDefenderProduction(city, threatAssessment);
     }
 
+    // 3. Evaluate buildings via AIBuildingStrategy
+    const gameState = this.buildGameState(city.civilizationId);
+    gameState.isUnderThreat = !!threatAssessment?.needsDefense;
+    const buildingPlans = civ
+      ? AIBuildingStrategy.evaluateBuildings(city, civ, strategy, gameState)
+      : [];
+    const buildingPlan = buildingPlans.length > 0 ? buildingPlans[0] : null;
+
+    const civCities = this.gameEngine.cities.filter((c: any) => c.civilizationId === city.civilizationId);
+    const numMilitary = this.gameEngine.units.filter(
+      (u: any) => u.civilizationId === city.civilizationId && this.isOffensiveUnitType(u.type)
+    ).length;
+
+    // Check if building is high-priority enough to build over a unit
+    if (buildingPlan && AIBuildingStrategy.shouldBuildOverUnit(
+      buildingPlan, hasDefender, !!threatAssessment?.needsDefense, numMilitary, civCities.length
+    )) {
+      const bProps = BUILDING_PROPS[buildingPlan.buildingType] || BUILDING_PROPERTIES[buildingPlan.buildingType];
+      if (bProps) {
+        console.log(`[AutoProduction] Building strategy chose: ${buildingPlan.buildingType} (priority: ${buildingPlan.priority}, reason: ${buildingPlan.reason})`);
+        return {
+          type: 'building',
+          itemType: buildingPlan.buildingType,
+          name: bProps.name,
+          cost: bProps.cost
+        };
+      }
+    }
+
+    // 4. Support offensive plan
     if (this.shouldSupportOffensivePlan(city)) {
       console.log('[AutoProduction] Supporting offensive plan with new attacker');
       return this.buildOffensiveProduction(city);
     }
 
-    // 4. Check for essential buildings
-    const hasGranary = city.buildings?.some((b: any) => b === 'granary' || b.type === 'granary');
-    if (!hasGranary && BUILDING_PROPS.granary) {
-      console.log('[AutoProduction] City needs granary');
-      return {
-        type: 'building',
-        itemType: 'granary',
-        name: BUILDING_PROPS.granary.name,
-        cost: BUILDING_PROPS.granary.cost
-      };
-    }
-
-    const hasBarracks = city.buildings?.some((b: any) => b === 'barracks' || b.type === 'barracks');
-    if (!hasBarracks && BUILDING_PROPS.barracks) {
-      console.log('[AutoProduction] City needs barracks');
-      return {
-        type: 'building',
-        itemType: 'barracks',
-        name: BUILDING_PROPS.barracks.name,
-        cost: BUILDING_PROPS.barracks.cost
-      };
-    }
-
     // 5. Build settlers if civilization has few cities
-    const civCities = this.gameEngine.cities.filter((c: any) => c.civilizationId === city.civilizationId);
-    if (civCities.length < 3 && city.population >= 2) {
-      console.log('[AutoProduction] Civilization needs more cities');
-      return {
-        type: 'unit',
-        itemType: 'settler',
-        name: UNIT_PROPS.settlers.name,
-        cost: UNIT_PROPS.settlers.cost
-      };
+    if (civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
+      const settlerCount = this.gameEngine.units.filter(
+        (u: any) => u.civilizationId === city.civilizationId && u.type === 'settler'
+      ).length;
+      
+      if (settlerCount === 0) {
+        console.log('[AutoProduction] Civilization needs more cities, building settler');
+        return {
+          type: 'unit',
+          itemType: 'settler',
+          name: UNIT_PROPS.settler?.name || 'Settler',
+          cost: UNIT_PROPS.settler?.cost || 40
+        };
+      }
     }
 
-    // 6. Build military units (default to warrior)
+    // 5b. Build the building even if not "high-priority"
+    if (buildingPlan) {
+      const bProps = BUILDING_PROPS[buildingPlan.buildingType] || BUILDING_PROPERTIES[buildingPlan.buildingType];
+      if (bProps) {
+        console.log(`[AutoProduction] Building: ${buildingPlan.buildingType} (reason: ${buildingPlan.reason})`);
+        return {
+          type: 'building',
+          itemType: buildingPlan.buildingType,
+          name: bProps.name,
+          cost: bProps.cost
+        };
+      }
+    }
+
+    // 6. Wonder (only if not threatened and strategy favors it)
+    if (!threatAssessment?.needsDefense && civ) {
+      const wonderPlans = AIBuildingStrategy.evaluateWonders(city, civ, strategy, gameState);
+      const wonderPlan = wonderPlans.length > 0 ? wonderPlans[0] : null;
+      if (wonderPlan) {
+        const wProps = WONDER_PROPERTIES[wonderPlan.buildingType];
+        if (wProps) {
+          console.log(`[AutoProduction] Wonder strategy chose: ${wonderPlan.buildingType} (priority: ${wonderPlan.priority})`);
+          return {
+            type: 'building',
+            itemType: wonderPlan.buildingType,
+            name: wProps.name,
+            cost: wProps.cost
+          };
+        }
+      }
+    }
+
+    // 7. Build military units (default)
     console.log('[AutoProduction] Building default military unit');
     return this.buildDefenderProduction(city, threatAssessment);
   }
@@ -181,7 +237,8 @@ export class AutoProduction {
   }
 
   private buildDefenderProduction(city: City, threatAssessment?: CityThreatAssessment | null) {
-    const unitType = this.selectDefenderType(this.gameEngine.currentYear ?? -4000);
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    const unitType = this.selectDefenderTypeForCiv(civ);
     const unitProps = UNIT_PROPS[unitType];
     const production = {
       type: 'unit',
@@ -197,15 +254,24 @@ export class AutoProduction {
     return production;
   }
 
+  /** Tech-gated defender selection using the given civ's technologies */
+  private selectDefenderTypeForCiv(civ: any): string {
+    const defenderPreference = ['riflemen', 'musketeer', 'phalanx', 'archer', 'warrior'];
+    for (const unitType of defenderPreference) {
+      if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
+        return unitType;
+      }
+    }
+    return 'warrior';
+  }
+
   private selectDefenderType(currentYear: number): string {
-    const modern = ['riflemen', 'musketeer', 'phalanx', 'warrior'];
-    const medieval = ['musketeer', 'phalanx', 'warrior'];
-    const ancient = ['phalanx', 'warrior'];
+    const civ = this.findCivForYear(currentYear);
+    // Prefer high-defense units, ordered by strength
+    const defenderPreference = ['riflemen', 'musketeer', 'phalanx', 'archer', 'warrior'];
 
-    const preference = currentYear >= 1750 ? modern : currentYear >= 500 ? medieval : ancient;
-
-    for (const unitType of preference) {
-      if (UNIT_PROPS[unitType]) {
+    for (const unitType of defenderPreference) {
+      if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
         return unitType;
       }
     }
@@ -239,7 +305,8 @@ export class AutoProduction {
   }
 
   private buildOffensiveProduction(city: City) {
-    const unitType = this.selectOffensiveUnitType(this.gameEngine.currentYear ?? -4000);
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    const unitType = this.selectOffensiveUnitTypeForCiv(civ);
     const unitProps = UNIT_PROPS[unitType];
     return {
       type: 'unit',
@@ -249,20 +316,90 @@ export class AutoProduction {
     };
   }
 
+  /** Tech-gated offensive unit selection */
+  private selectOffensiveUnitTypeForCiv(civ: any): string {
+    const offensivePreference = ['tank', 'cavalry', 'knights', 'chariot', 'legion', 'archer', 'warrior'];
+    for (const unitType of offensivePreference) {
+      if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
+        return unitType;
+      }
+    }
+    return 'warrior';
+  }
+
   private selectOffensiveUnitType(currentYear: number): string {
-    const modern = ['cavalry', 'knights', 'archer', 'warrior'];
-    const medieval = ['knights', 'archer', 'warrior'];
-    const ancient = ['archer', 'warrior'];
+    const civ = this.findCivForYear(currentYear);
+    // Prefer high-attack units, ordered by strength
+    const offensivePreference = ['tank', 'cavalry', 'knights', 'chariot', 'legion', 'archer', 'warrior'];
 
-    const preference = currentYear >= 1500 ? modern : currentYear >= 500 ? medieval : ancient;
-
-    for (const unitType of preference) {
-      if (UNIT_PROPS[unitType]) {
+    for (const unitType of offensivePreference) {
+      if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
         return unitType;
       }
     }
 
     return 'warrior';
+  }
+
+  /** Helper: find the civ object for tech checks within year-based methods */
+  private findCivForYear(currentYear: number): any {
+    // Try to find the civ from cities currently being processed
+    // This is called from buildDefenderProduction/buildOffensiveProduction which always operate on a city
+    // We use a simple fallback: check all AI civs and return the first one
+    const aiCivs = this.gameEngine.civilizations?.filter((c: any) => !c.isHuman);
+    return aiCivs?.[0] ?? null;
+  }
+
+  /** Build a game state summary for AIBuildingStrategy */
+  private buildGameState(civilizationId: number): {
+    currentYear: number;
+    roundNumber: number;
+    numCities: number;
+    totalPopulation: number;
+    numMilitaryUnits: number;
+    isAtWar: boolean;
+    knownEnemyCities: number;
+    isBorderCity: boolean;
+    isUnderThreat: boolean;
+    builtWonders: string[];
+  } {
+    const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) || [];
+    const civ = this.gameEngine.civilizations?.[civilizationId];
+    const storage = typeof this.gameEngine.getPlayerStorage === 'function'
+      ? this.gameEngine.getPlayerStorage(civilizationId)
+      : undefined;
+
+    let knownEnemyCities = 0;
+    if (storage?.enemyLocations) {
+      for (const enemies of storage.enemyLocations.values()) {
+        knownEnemyCities += enemies.filter((e: any) => e.type === 'city').length;
+      }
+    }
+
+    // Collect globally built wonders
+    const builtWonders: string[] = [];
+    for (const c of (this.gameEngine.cities || [])) {
+      for (const b of (c.buildings || [])) {
+        if (WONDER_PROPERTIES[b]) {
+          builtWonders.push(b);
+        }
+      }
+    }
+
+    return {
+      currentYear: this.gameEngine.currentYear ?? -4000,
+      roundNumber: this.gameEngine.roundManager?.getRoundNumber?.() ?? 0,
+      numCities: cities.length,
+      totalPopulation: cities.reduce((sum: number, c: any) => sum + (c.population || 1), 0),
+      numMilitaryUnits: this.gameEngine.units?.filter(
+        (u: any) => u.civilizationId === civilizationId && (UNIT_PROPS[u.type]?.attack || 0) > 0
+      ).length ?? 0,
+      isAtWar: civ?.warWith?.size > 0,
+      knownEnemyCities,
+      isBorderCity: false, // default, overridden per-city in determineProductionItem
+      isUnderThreat: false,
+      builtWonders,
+    };
   }
 
   /**

@@ -33,6 +33,16 @@ const createMockEngine = () => {
   const engine: any = {
     cities: [city],
     units,
+    civilizations: [
+      null,
+      {
+        id: 1,
+        name: 'TestCiv',
+        technologies: new Set(['warrior_code']),
+        personality: { aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5 },
+        warWith: new Set(),
+      }
+    ],
     productionManager,
     getPlayerStorage: () => storage,
     squareGrid: {
