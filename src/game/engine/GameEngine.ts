@@ -1355,6 +1355,13 @@ export default class GameEngine {
     // Check if there's another unit at target (combat or stacking rules)
     const targetUnit = this.getUnitAt(targetCol, targetRow);
     if (targetUnit && targetUnit.civilizationId !== unit.civilizationId) {
+      // Only allow combat if at war (or no diplomacy manager yet)
+      if (this.diplomacyManager) {
+        const dipStatus = this.diplomacyManager.getStatus(unit.civilizationId, targetUnit.civilizationId);
+        if (dipStatus !== 'war') {
+          return { success: false, reason: 'not_at_war' };
+        }
+      }
       // Combat logic here
       const combatResult = this.combatUnit(unit, targetUnit);
       // combatUnit returns boolean success currently; normalize
@@ -1435,6 +1442,25 @@ export default class GameEngine {
             aggressorId: attacker.civilizationId,
             targetId: defender.civilizationId,
           });
+        }
+      }
+
+      // Alliance cascade: allies of the defender also declare war on the attacker
+      const defenderAllies = this.diplomacyManager.getAllies(defender.civilizationId);
+      for (const allyId of defenderAllies) {
+        if (allyId === attacker.civilizationId) continue;
+        if (!this.diplomacyManager.isAtWar(allyId, attacker.civilizationId)) {
+          this.diplomacyManager.declareWar(allyId, attacker.civilizationId);
+          const allyCiv = this.civilizations[allyId];
+          if (this.onStateChange) {
+            this.onStateChange('WAR_DECLARED', {
+              aggressorId: allyId,
+              targetId: attacker.civilizationId,
+            });
+            this.onStateChange('DIPLOMACY_EVENT', {
+              message: `${allyCiv?.name ?? 'An ally'} honors their alliance and declares war!`,
+            });
+          }
         }
       }
     }

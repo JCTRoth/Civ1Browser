@@ -1,0 +1,543 @@
+/* ═══════════════════════════════════════════════════
+   Diplomacy Modal — Civ I retro style with portraits
+   ═══════════════════════════════════════════════════ */
+
+.diplomacy-modal .modal-content {
+  background: #1a1a2e;
+  border: 2px solid #8b7355;
+  border-radius: 0;
+  font-family: monospace;
+}
+
+.diplomacy-modal .modal-dialog {
+  max-width: 820px;
+}
+
+.diplomacy-header {
+  background: linear-gradient(180deg, #2d2b55 0%, #1a1a2e 100%);
+  border-bottom: 2px solid #8b7355;
+  color: #e0c080;
+  padding: 8px 16px;
+}
+
+.diplomacy-header .modal-title {
+  font-size: 16px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.diplomacy-header .btn-close {
+  filter: invert(1);
+}
+
+.diplomacy-body {
+  background: #1a1a2e;
+  color: #d0d0d0;
+  padding: 0;
+  min-height: 400px;
+}
+
+/* ─── Layout: left list + right negotiation ────── */
+
+.diplomacy-layout {
+  display: flex;
+  min-height: 400px;
+}
+
+.diplomacy-civ-list {
+  width: 220px;
+  min-width: 220px;
+  border-right: 2px solid #8b7355;
+  background: #12122a;
+  padding: 0;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+.diplomacy-negotiation {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+/* ─── Section labels ────────────────────────────── */
+
+.diplomacy-section-label {
+  font-size: 10px;
+  color: #8b7355;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 8px 12px 4px;
+  border-bottom: 1px solid #333;
+  margin-bottom: 4px;
+}
+
+/* ─── Civilization list rows ────────────────────── */
+
+.diplomacy-civ-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid #222;
+  background: transparent;
+  color: #d0d0d0;
+  font-family: monospace;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.diplomacy-civ-row:hover {
+  background: #252545;
+}
+
+.diplomacy-civ-row.selected {
+  background: #2d2b55;
+  border-left: 3px solid #e0c080;
+}
+
+.diplomacy-civ-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.diplomacy-civ-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diplomacy-status-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+/* ─── Leader header ─────────────────────────────── */
+
+.diplomacy-audience {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid #333;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  transition: box-shadow 0.3s;
+}
+
+/* Portrait slot — Civ I style frame */
+.diplomacy-portrait-slot {
+  width: 120px;
+  min-width: 120px;
+  height: 156px;
+  border: 3px solid #8b7355;
+  background: #0d0d1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+.diplomacy-portrait-slot::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 1px solid #5a4a3a;
+  pointer-events: none;
+}
+
+.leader-portrait-svg {
+  display: block;
+}
+
+.diplomacy-portrait-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #1a1a3e 0%, #0d0d1a 100%);
+}
+
+.diplomacy-portrait-icon {
+  font-size: 48px;
+}
+
+/* Leader info beside portrait */
+.diplomacy-leader-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.diplomacy-leader-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #e0c080;
+  margin-bottom: 2px;
+}
+
+.diplomacy-leader-title {
+  font-size: 11px;
+  color: #8b7355;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.diplomacy-attitude-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 10px;
+  border: 1px solid;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Status panel (compact) */
+.diplomacy-status-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 100px;
+  align-items: flex-end;
+}
+
+.diplomacy-status-chip {
+  font-size: 13px;
+}
+
+.diplomacy-stat {
+  font-size: 11px;
+  display: flex;
+  gap: 6px;
+}
+
+.diplomacy-stat-label {
+  color: #666;
+}
+
+/* ─── Status values ──────────────────────────────── */
+
+.diplomacy-label {
+  color: #888;
+  margin-right: 6px;
+}
+
+.diplomacy-status-value {
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.diplomacy-status-value.status-war {
+  color: #f44336;
+}
+
+.diplomacy-status-value.status-peace {
+  color: #4caf50;
+}
+
+.diplomacy-status-value.status-ceasefire {
+  color: #ff9800;
+}
+
+.diplomacy-status-value.status-alliance {
+  color: #42a5f5;
+}
+
+/* ─── Military strength visual bar ──────────────── */
+
+.diplomacy-strength-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.diplomacy-strength-bar-visual {
+  display: flex;
+  width: 100px;
+  height: 8px;
+  border: 1px solid #555;
+  overflow: hidden;
+}
+
+.diplomacy-strength-fill-player {
+  background: #4caf50;
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.diplomacy-strength-fill-enemy {
+  background: #f44336;
+  height: 100%;
+  transition: width 0.3s;
+}
+
+.diplomacy-strength-nums {
+  font-size: 10px;
+  color: #666;
+}
+
+.diplomacy-warning {
+  background: #3e1a1a;
+  border: 1px solid #6b2c2c;
+  color: #f44336;
+  font-size: 12px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+}
+
+/* ─── Negotiation buttons ───────────────────────── */
+
+.diplomacy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0 16px;
+}
+
+.diplomacy-btn {
+  font-family: monospace;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: 1px solid #555;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  background: #252545;
+  color: #d0d0d0;
+}
+
+.diplomacy-btn:hover {
+  border-color: #e0c080;
+}
+
+.diplomacy-btn.btn-war {
+  border-color: #c62828;
+  color: #ef5350;
+}
+
+.diplomacy-btn.btn-war:hover {
+  background: #3e1a1a;
+  border-color: #ef5350;
+}
+
+.diplomacy-btn.btn-peace {
+  border-color: #2e7d32;
+  color: #66bb6a;
+}
+
+.diplomacy-btn.btn-peace:hover {
+  background: #1a3e1a;
+  border-color: #66bb6a;
+}
+
+.diplomacy-btn.btn-ceasefire {
+  border-color: #e65100;
+  color: #ffa726;
+}
+
+.diplomacy-btn.btn-ceasefire:hover {
+  background: #3e2a10;
+  border-color: #ffa726;
+}
+
+.diplomacy-btn.btn-alliance {
+  border-color: #1565c0;
+  color: #42a5f5;
+}
+
+.diplomacy-btn.btn-alliance:hover {
+  background: #1a2a3e;
+  border-color: #42a5f5;
+}
+
+.diplomacy-btn.btn-tribute {
+  border-color: #8b7355;
+  color: #e0c080;
+}
+
+.diplomacy-btn.btn-tribute:hover {
+  background: #2e2a1a;
+  border-color: #e0c080;
+}
+
+/* ─── Event log ─────────────────────────────────── */
+
+.diplomacy-log {
+  max-height: 140px;
+  overflow-y: auto;
+  background: #0d0d1a;
+  border: 1px solid #333;
+  padding: 6px;
+}
+
+.diplomacy-log-entry {
+  font-size: 11px;
+  padding: 3px 6px;
+  color: #aaa;
+  border-bottom: 1px solid #1a1a2e;
+}
+
+.diplomacy-log-entry:first-child {
+  color: #e0c080;
+}
+
+/* ─── Placeholder ───────────────────────────────── */
+
+.diplomacy-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: #555;
+  font-size: 14px;
+  font-style: italic;
+}
+
+.diplomacy-placeholder-scene {
+  text-align: center;
+}
+
+.diplomacy-placeholder-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+
+/* ─── Treaty count badge in civ list ────────────── */
+
+.diplomacy-treaty-count {
+  display: inline-block;
+  font-size: 9px;
+  color: #e0c080;
+  background: #3a3020;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ─── Active treaties display ───────────────────── */
+
+.diplomacy-treaties-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.diplomacy-treaty-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.diplomacy-treaty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #252545;
+  border: 1px solid #5a5a8a;
+  color: #c0c0e0;
+}
+
+.diplomacy-treaty-cancel {
+  background: none;
+  border: none;
+  color: #f44336;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  font-family: monospace;
+}
+
+.diplomacy-treaty-cancel:hover {
+  color: #ff6666;
+}
+
+/* ─── Advanced treaties toggle ──────────────────── */
+
+.diplomacy-toggle-treaties {
+  background: none;
+  border: none;
+  color: #8b7355;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.diplomacy-toggle-treaties:hover {
+  color: #e0c080;
+}
+
+.diplomacy-treaty-actions {
+  border-left: 2px solid #5a5a8a;
+  padding-left: 8px;
+  margin-left: 4px;
+}
+
+.diplomacy-btn.btn-treaty {
+  border-color: #5a5a8a;
+  color: #c0c0e0;
+}
+
+.diplomacy-btn.btn-treaty:hover {
+  background: #2a2a4a;
+  border-color: #8b7355;
+}
+
+/* ─── Counter-proposal banner ───────────────────── */
+
+.diplomacy-counter-proposal {
+  background: #1a2a3e;
+  border: 1px solid #42a5f5;
+  padding: 10px 14px;
+  margin: 8px 0;
+}
+
+.diplomacy-counter-title {
+  font-size: 12px;
+  color: #42a5f5;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.diplomacy-counter-text {
+  font-size: 13px;
+  color: #d0d0d0;
+  margin-bottom: 8px;
+}
+
+.diplomacy-counter-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* ─── Warning badge ─────────────────────────────── */

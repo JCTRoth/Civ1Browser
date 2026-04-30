@@ -321,15 +321,20 @@ export class AIManager {
         return { col: groupTarget.col, row: groupTarget.row };
       }
 
-      // ── Wide-area enemy scan (5-tile radius) ──
+      // ── Wide-area enemy scan (5-tile radius, respects diplomacy) ──
       const distFn = (c1: number, r1: number, c2: number, r2: number) =>
         this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
+      const dm = this.gameEngine.diplomacyManager;
       const nearbyEnemies = scanAreaForEnemies(
         unit.col, unit.row, unit.civilizationId, 5,
         () => this.gameEngine.units,
         () => this.gameEngine.cities,
         distFn
-      );
+      ).filter(e => {
+        // Only target civs we are at war with
+        const targetCivId = this.getOwnerCivId(e);
+        return targetCivId !== undefined && (!dm || dm.isAtWar(unit.civilizationId, targetCivId));
+      });
 
       if (nearbyEnemies.length > 0) {
         const closest = nearbyEnemies[0];
@@ -1158,9 +1163,12 @@ export class AIManager {
 
     const radius = 4;
     let enemyStrength = 0;
+    const dm = this.gameEngine.diplomacyManager;
 
     for (const other of this.gameEngine.units) {
       if (other.civilizationId === unit.civilizationId) continue;
+      // Only count units from civs we're at war with
+      if (dm && !dm.isAtWar(unit.civilizationId, other.civilizationId)) continue;
       const dist = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, other.col, other.row);
       if (dist <= radius) {
         const raw = Math.max(1, other.attack || 0) + (other.defense || 0) * 0.5;
@@ -1171,6 +1179,14 @@ export class AIManager {
     }
 
     return enemyStrength;
+  }
+
+  /** Resolve the owning civId from a scan result (unit or city) */
+  private getOwnerCivId(scanResult: { type: 'unit' | 'city'; id: string }): number | undefined {
+    if (scanResult.type === 'unit') {
+      return this.gameEngine.units?.find((u: any) => u.id === scanResult.id)?.civilizationId;
+    }
+    return this.gameEngine.cities?.find((c: any) => c.id === scanResult.id)?.civilizationId;
   }
 
   /** Get known enemy targets from player storage for army group formation */

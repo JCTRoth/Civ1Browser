@@ -143,6 +143,7 @@ export interface Civilization {
     gold: number;
   };
   leader?: string;
+  leaderName?: string;
   cityNames?: string[];
   nextCityNameIndex?: number;
   currentResearch?: any;
@@ -151,6 +152,7 @@ export interface Civilization {
   score?: number;
   isHuman?: boolean;
   isAI?: boolean;
+  icon?: string;
 }
 
 export interface UIState {

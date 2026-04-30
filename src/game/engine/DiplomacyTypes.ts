@@ -19,6 +19,9 @@ export type Attitude = 'friendly' | 'neutral' | 'annoyed' | 'hostile';
 // Per-pair relation record
 // ---------------------------------------------------------------------------
 
+/** Active treaty types beyond basic diplomatic status */
+export type TreatyType = 'open_borders' | 'trade_agreement' | 'mutual_defense' | 'non_aggression' | 'embargo_target';
+
 export interface DiplomaticRelation {
   /** The two civilization IDs involved (sorted ascending for canonical key) */
   civA: number;
@@ -32,6 +35,14 @@ export interface DiplomaticRelation {
   treatiesBrokenByA: number;
   /** Number of treaties broken by civB toward civA */
   treatiesBrokenByB: number;
+  /** Active treaties beyond the basic status */
+  activeTreaties: TreatyType[];
+  /** Turn each treaty was established */
+  treatySince: Record<string, number>;
+  /** Gold-per-turn from trade agreement (positive = A receives, negative = B receives) */
+  tradeGoldPerTurn: number;
+  /** Embargo target civ id (if either side has an embargo agreement) */
+  embargoTargetCivId?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +56,13 @@ export type DiplomatAction =
   | 'demand_tribute'
   | 'bribe_unit'
   | 'bribe_city'
-  | 'gather_intelligence';
+  | 'gather_intelligence'
+  | 'offer_open_borders'
+  | 'propose_trade_agreement'
+  | 'offer_tech_exchange'
+  | 'propose_mutual_defense'
+  | 'propose_embargo'
+  | 'propose_non_aggression';
 
 export interface DiplomacyProposal {
   fromCivId: number;
@@ -53,6 +70,12 @@ export interface DiplomacyProposal {
   action: DiplomatAction;
   /** Gold offered / demanded */
   goldAmount?: number;
+  /** Technology id offered in exchange */
+  techOffered?: string;
+  /** Technology id requested in exchange */
+  techRequested?: string;
+  /** Target civ for embargo */
+  embargoTargetId?: number;
 }
 
 export interface DiplomacyResponse {
@@ -60,6 +83,8 @@ export interface DiplomacyResponse {
   reason?: string;
   /** Gold transferred (positive = to proposer, negative = from proposer) */
   goldTransferred?: number;
+  /** Counter-proposal (AI may suggest alternative terms) */
+  counterProposal?: DiplomacyProposal;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +109,10 @@ export interface IntelligenceReport {
 export interface DiplomacyEvent {
   type: 'war_declared' | 'peace_made' | 'ceasefire_signed' | 'alliance_formed'
       | 'alliance_broken' | 'tribute_demanded' | 'tribute_paid' | 'unit_bribed'
-      | 'intelligence_gathered' | 'treaty_rejected';
+      | 'intelligence_gathered' | 'treaty_rejected'
+      | 'open_borders_signed' | 'trade_agreement_signed' | 'mutual_defense_signed'
+      | 'non_aggression_signed' | 'embargo_declared' | 'treaty_cancelled'
+      | 'tech_exchanged' | 'counter_proposal';
   fromCivId: number;
   toCivId: number;
   details?: string;

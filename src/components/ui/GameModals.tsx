@@ -10,6 +10,9 @@ import { DomUtils } from '@/utils/DomUtils';
 import { enrichMapForExport } from '@/utils/MapExportUtils';
 import { getTerrainInfo } from '@/data/TerrainData';
 import '../../styles/gameModals.css';
+import '../../styles/diplomacyModal.css';
+import LeaderPortrait from './LeaderPortrait';
+import { LEADER_PORTRAITS, MOOD_COLORS } from '@/data/LeaderPortraits';
 
 const GameModals = ({ gameEngine }) => {
   // console.log('[GameModals] Component rendering, gameEngine present:', !!gameEngine);
@@ -249,93 +252,478 @@ const GameModals = ({ gameEngine }) => {
     </Modal>
   );
 
-  // Diplomacy Modal
+  // Diplomacy Modal — Civ I–style negotiation interface with leader portraits
+  const [selectedDiploCiv, setSelectedDiploCiv] = useState<number | null>(null);
+  const [diplomacyLog, setDiplomacyLog] = useState<string[]>([]);
+  const [showTreatyPanel, setShowTreatyPanel] = useState(false);
+  const [counterProposal, setCounterProposal] = useState<any>(null);
+
+  const addDiploLog = (msg: string): void => {
+    setDiplomacyLog(prev => [msg, ...prev].slice(0, 20));
+  };
+
   const renderDiplomacy = () => {
     const dm = gameEngine?.diplomacyManager;
     const playerId = currentPlayer?.id ?? 0;
     const otherCivs = civilizations.filter((c: any) => c.id !== playerId && c.isAlive !== false);
 
-    const statusBadge = (status: string) => {
-      const colors: Record<string, string> = { war: 'danger', peace: 'success', ceasefire: 'warning', alliance: 'primary' };
-      return <span className={`badge bg-${colors[status] || 'secondary'} ms-2`}>{status.toUpperCase()}</span>;
+    const STATUS_ICONS: Record<string, string> = {
+      peace: '🕊️',
+      war: '⚔️',
+      ceasefire: '🏳️',
+      alliance: '🤝',
     };
 
-    const attitudeBadge = (attitude: string) => {
-      const colors: Record<string, string> = { friendly: 'success', neutral: 'secondary', annoyed: 'warning', hostile: 'danger' };
-      return <span className={`badge bg-${colors[attitude] || 'secondary'} ms-1`}>{attitude}</span>;
+    const ATTITUDE_LABELS: Record<string, { label: string; color: string }> = {
+      friendly: { label: 'Friendly', color: '#4caf50' },
+      neutral: { label: 'Neutral', color: '#9e9e9e' },
+      annoyed: { label: 'Annoyed', color: '#ff9800' },
+      hostile: { label: 'Hostile', color: '#f44336' },
     };
 
-    const handleDeclareWar = (targetId: number) => {
+    const TREATY_LABELS: Record<string, { icon: string; label: string }> = {
+      open_borders: { icon: '🚪', label: 'Open Borders' },
+      trade_agreement: { icon: '📦', label: 'Trade Agreement' },
+      mutual_defense: { icon: '🛡️', label: 'Mutual Defense' },
+      non_aggression: { icon: '🤚', label: 'Non-Aggression' },
+      embargo_target: { icon: '🚫', label: 'Embargo' },
+    };
+
+    const handleDiplomacyAction = (targetId: number, action: string, extra?: Record<string, any>) => {
       if (!dm) return;
-      dm.declareWar(playerId, targetId);
-      gameEngine?.onStateChange?.('WAR_DECLARED', { aggressorId: playerId, targetId });
-      actions.addNotification?.({ type: 'warning', message: `War declared!` });
+      let result: any;
+      switch (action) {
+        case 'declare_war':
+          dm.declareWar(playerId, targetId);
+          gameEngine?.onStateChange?.('WAR_DECLARED', { aggressorId: playerId, targetId });
+          addDiploLog(`You declared war on ${civilizations[targetId]?.name}!`);
+          break;
+        case 'propose_peace':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'propose_peace' });
+          if (result.counterProposal) {
+            setCounterProposal(result.counterProposal);
+            addDiploLog(`${civilizations[targetId]?.name} rejected peace but made a counter-offer.`);
+          } else {
+            addDiploLog(result.accepted
+              ? `${civilizations[targetId]?.name} accepted your peace proposal.`
+              : `${civilizations[targetId]?.name} rejected peace: "${result.reason}"`);
+          }
+          break;
+        case 'propose_ceasefire':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'propose_ceasefire' });
+          if (result.counterProposal) {
+            setCounterProposal(result.counterProposal);
+            addDiploLog(`${civilizations[targetId]?.name} counter-proposes instead.`);
+          } else {
+            addDiploLog(result.accepted
+              ? `Ceasefire agreed with ${civilizations[targetId]?.name}.`
+              : `${civilizations[targetId]?.name} rejected ceasefire: "${result.reason}"`);
+          }
+          break;
+        case 'propose_alliance':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'propose_alliance' });
+          if (result.counterProposal) {
+            setCounterProposal(result.counterProposal);
+            addDiploLog(`${civilizations[targetId]?.name} declines alliance but offers an alternative.`);
+          } else {
+            addDiploLog(result.accepted
+              ? `Alliance formed with ${civilizations[targetId]?.name}!`
+              : `${civilizations[targetId]?.name} rejected alliance: "${result.reason}"`);
+          }
+          break;
+        case 'demand_tribute': {
+          const demand = 50;
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'demand_tribute', goldAmount: demand });
+          if (result.counterProposal) {
+            setCounterProposal(result.counterProposal);
+            addDiploLog(`${civilizations[targetId]?.name} refuses tribute but offers a deal.`);
+          } else {
+            addDiploLog(result.accepted
+              ? `${civilizations[targetId]?.name} paid ${result.goldTransferred ?? demand} gold in tribute.`
+              : `${civilizations[targetId]?.name} refused your demand: "${result.reason}"`);
+          }
+          break;
+        }
+        case 'offer_open_borders':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'offer_open_borders' });
+          addDiploLog(result.accepted
+            ? `Open borders established with ${civilizations[targetId]?.name}.`
+            : `${civilizations[targetId]?.name} refused open borders.`);
+          break;
+        case 'propose_trade_agreement':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'propose_trade_agreement', goldAmount: 2 });
+          addDiploLog(result.accepted
+            ? `Trade agreement signed with ${civilizations[targetId]?.name}! (+2 gold/turn)`
+            : `${civilizations[targetId]?.name} refused trade.`);
+          break;
+        case 'propose_mutual_defense':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'propose_mutual_defense' });
+          addDiploLog(result.accepted
+            ? `Mutual defense pact with ${civilizations[targetId]?.name}!`
+            : `${civilizations[targetId]?.name} refused the defense pact.`);
+          break;
+        case 'propose_non_aggression':
+          result = dm.processProposal({ fromCivId: playerId, toCivId: targetId, action: 'propose_non_aggression' });
+          addDiploLog(result.accepted
+            ? `Non-aggression pact signed with ${civilizations[targetId]?.name}.`
+            : `${civilizations[targetId]?.name} refused the pact.`);
+          break;
+        case 'cancel_treaty': {
+          const treaty = extra?.treaty;
+          if (treaty) {
+            dm.cancelTreaty(playerId, targetId, treaty);
+            addDiploLog(`You cancelled ${TREATY_LABELS[treaty]?.label || treaty} with ${civilizations[targetId]?.name}.`);
+          }
+          break;
+        }
+        case 'accept_counter': {
+          if (counterProposal) {
+            const cpResult = dm.processProposal(counterProposal);
+            const cpAction = counterProposal.action.replace(/_/g, ' ');
+            addDiploLog(cpResult.accepted
+              ? `You accepted their counter-proposal: ${cpAction}.`
+              : `Counter-proposal could not be executed.`);
+            setCounterProposal(null);
+          }
+          break;
+        }
+        case 'reject_counter':
+          addDiploLog('You rejected their counter-proposal.');
+          setCounterProposal(null);
+          break;
+      }
+      // Force re-render by syncing state
+      if (gameEngine?.units) actions.updateUnits?.([...gameEngine.units]);
+      if (gameEngine?.civilizations) actions.updateCivilizations?.([...gameEngine.civilizations]);
     };
 
-    const handleMakePeace = (targetId: number) => {
-      if (!dm) return;
-      dm.makePeace(playerId, targetId);
-      gameEngine?.onStateChange?.('PEACE_MADE', { civA: playerId, civB: targetId });
-      actions.addNotification?.({ type: 'success', message: `Peace established!` });
-    };
+    const selectedCivData = selectedDiploCiv !== null ? civilizations[selectedDiploCiv] : null;
+    const selectedStatus = selectedDiploCiv !== null ? (dm?.getStatus(playerId, selectedDiploCiv) ?? 'peace') : 'peace';
+    const selectedAttitude = selectedDiploCiv !== null ? (dm?.getAttitude(playerId, selectedDiploCiv) ?? 'neutral') : 'neutral';
+    const selectedRelation = selectedDiploCiv !== null ? dm?.getRelation(playerId, selectedDiploCiv) : null;
+
+    // Leader portrait lookup
+    const leaderName = selectedCivData?.leader || selectedCivData?.leaderName || '';
+    const portraitConfig = LEADER_PORTRAITS[leaderName] || null;
+    const moodColors = MOOD_COLORS[selectedAttitude] || MOOD_COLORS.neutral;
+    const activeTreaties: string[] = selectedDiploCiv !== null ? (dm?.getActiveTreaties?.(playerId, selectedDiploCiv) ?? []) : [];
 
     return (
       <Modal 
         show={uiState.activeDialog === 'diplomacy'} 
-        onHide={handleCloseDialog} 
+        onHide={() => { handleCloseDialog(); setSelectedDiploCiv(null); setDiplomacyLog([]); setShowTreatyPanel(false); setCounterProposal(null); }} 
         centered
-        size="lg"
+        size="xl"
+        dialogClassName="diplomacy-modal"
       >
-        <Modal.Header closeButton className="bg-dark text-white">
+        <Modal.Header closeButton className="diplomacy-header">
           <Modal.Title>
-            <i className="bi bi-people"></i> Diplomacy
+            ⚖️ Diplomatic Relations
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="bg-dark text-white">
+        <Modal.Body className="diplomacy-body">
           {otherCivs.length === 0 ? (
-            <p className="text-muted">No other civilizations discovered yet.</p>
+            <p className="text-muted text-center py-4">No other civilizations discovered yet.</p>
           ) : (
-            <ListGroup variant="flush">
-              {otherCivs.map((civ: any) => {
-                const status = dm?.getStatus(playerId, civ.id) ?? 'peace';
-                const attitude = dm?.getAttitude(playerId, civ.id) ?? 'neutral';
-                const relation = dm?.getRelation(playerId, civ.id);
-                return (
-                  <ListGroup.Item key={civ.id} className="bg-dark text-white border-secondary">
-                    <div className="d-flex justify-content-between align-items-center mb-2">
-                      <div>
-                        <strong style={{ color: civ.color || '#fff' }}>{civ.name}</strong>
-                        {statusBadge(status)}
-                        {attitudeBadge(attitude)}
-                        {civ.leader && <span className="text-muted ms-2">({civ.leader})</span>}
+            <div className="diplomacy-layout">
+              {/* Left: Civilization list */}
+              <div className="diplomacy-civ-list">
+                <div className="diplomacy-section-label">CIVILIZATIONS</div>
+                {otherCivs.map((civ: any) => {
+                  const status = dm?.getStatus(playerId, civ.id) ?? 'peace';
+                  const treaties = dm?.getActiveTreaties?.(playerId, civ.id) ?? [];
+                  const isSelected = selectedDiploCiv === civ.id;
+                  return (
+                    <button
+                      key={civ.id}
+                      className={`diplomacy-civ-row ${isSelected ? 'selected' : ''}`}
+                      onClick={() => { setSelectedDiploCiv(civ.id); setShowTreatyPanel(false); setCounterProposal(null); }}
+                    >
+                      <span className="diplomacy-civ-icon" style={{ color: civ.color || '#fff' }}>
+                        {civ.icon || '👤'}
+                      </span>
+                      <span className="diplomacy-civ-name">
+                        {civ.name}
+                        {treaties.length > 0 && <span className="diplomacy-treaty-count">+{treaties.length}</span>}
+                      </span>
+                      <span className="diplomacy-status-icon">{STATUS_ICONS[status] || '❓'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right: Negotiation panel with portrait */}
+              <div className="diplomacy-negotiation" style={{ background: moodColors.bg, borderLeft: `2px solid ${moodColors.border}` }}>
+                {selectedCivData ? (
+                  <>
+                    {/* Portrait & leader info section */}
+                    <div className="diplomacy-audience" style={{ boxShadow: `inset 0 0 40px ${moodColors.glow}` }}>
+                      {/* Leader portrait slot */}
+                      <div className="diplomacy-portrait-slot" style={{ borderColor: moodColors.border }}>
+                        {portraitConfig ? (
+                          <LeaderPortrait config={portraitConfig} mood={selectedAttitude} size={110} />
+                        ) : (
+                          <div className="diplomacy-portrait-placeholder" style={{ color: selectedCivData.color || '#fff' }}>
+                            <span className="diplomacy-portrait-icon">{selectedCivData.icon || '👤'}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Leader name & title */}
+                      <div className="diplomacy-leader-info">
+                        <div className="diplomacy-leader-name">{leaderName || 'Unknown Leader'}</div>
+                        <div className="diplomacy-leader-title">
+                          {portraitConfig?.title || `Leader of the ${selectedCivData.name}`}
+                        </div>
+                        <div className="diplomacy-attitude-badge" style={{
+                          color: ATTITUDE_LABELS[selectedAttitude]?.color || '#9e9e9e',
+                          borderColor: ATTITUDE_LABELS[selectedAttitude]?.color || '#9e9e9e',
+                        }}>
+                          {ATTITUDE_LABELS[selectedAttitude]?.label || 'Unknown'}
+                        </div>
+                      </div>
+
+                      {/* Status panel */}
+                      <div className="diplomacy-status-panel">
+                        <div className="diplomacy-status-chip">
+                          <span className={`diplomacy-status-value status-${selectedStatus}`}>
+                            {STATUS_ICONS[selectedStatus]} {selectedStatus.toUpperCase()}
+                          </span>
+                        </div>
+                        {selectedRelation && (
+                          <>
+                            <div className="diplomacy-stat">
+                              <span className="diplomacy-stat-label">Reputation</span>
+                              <span style={{ color: selectedRelation.reputationModifier < 0 ? '#f44336' : selectedRelation.reputationModifier > 0 ? '#4caf50' : '#9e9e9e' }}>
+                                {selectedRelation.reputationModifier > 0 ? '+' : ''}{selectedRelation.reputationModifier}
+                              </span>
+                            </div>
+                            <div className="diplomacy-stat">
+                              <span className="diplomacy-stat-label">Since turn</span>
+                              <span style={{ color: '#aaa' }}>{selectedRelation.since}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
-                    {relation && (
-                      <div className="small text-muted mb-2">
-                        Reputation: {relation.reputationModifier > 0 ? '+' : ''}{relation.reputationModifier}
-                        {relation.treatiesBrokenByA > 0 || relation.treatiesBrokenByB > 0 ? (
-                          <span className="ms-2 text-danger">
-                            Treaties broken: {(relation.treatiesBrokenByA || 0) + (relation.treatiesBrokenByB || 0)}
-                          </span>
-                        ) : null}
+
+                    {/* Military strength comparison */}
+                    {(() => {
+                      const playerStr = dm?.estimateMilitaryStrength?.(playerId) ?? 0;
+                      const theirStr = dm?.estimateMilitaryStrength?.(selectedDiploCiv!) ?? 0;
+                      const total = Math.max(playerStr + theirStr, 1);
+                      const playerPct = (playerStr / total) * 100;
+                      const ratio = theirStr > 0 ? playerStr / theirStr : playerStr > 0 ? 99 : 1;
+                      const strengthLabel = ratio > 2 ? 'Supreme' : ratio > 1.3 ? 'Superior' : ratio > 0.8 ? 'Comparable' : ratio > 0.5 ? 'Weaker' : 'Inferior';
+                      const strengthColor = ratio > 1.3 ? '#4caf50' : ratio > 0.8 ? '#9e9e9e' : '#f44336';
+                      return (
+                        <div className="diplomacy-strength-section">
+                          <span className="diplomacy-label">Military Strength:</span>
+                          <span style={{ color: strengthColor, fontWeight: 'bold' }}>{strengthLabel}</span>
+                          <div className="diplomacy-strength-bar-visual">
+                            <div className="diplomacy-strength-fill-player" style={{ width: `${playerPct}%` }} />
+                            <div className="diplomacy-strength-fill-enemy" style={{ width: `${100 - playerPct}%` }} />
+                          </div>
+                          <span className="diplomacy-strength-nums">You: {Math.round(playerStr)} | Them: {Math.round(theirStr)}</span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Active treaties display */}
+                    {activeTreaties.length > 0 && (
+                      <div className="diplomacy-treaties-row">
+                        <span className="diplomacy-label">Active Treaties:</span>
+                        <div className="diplomacy-treaty-badges">
+                          {activeTreaties.map((t: string) => (
+                            <span key={t} className="diplomacy-treaty-badge">
+                              {TREATY_LABELS[t]?.icon || '📜'} {TREATY_LABELS[t]?.label || t}
+                              <button
+                                className="diplomacy-treaty-cancel"
+                                onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'cancel_treaty', { treaty: t })}
+                                title="Cancel treaty"
+                              >×</button>
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
-                    <div className="d-flex gap-2">
-                      {status === 'war' && (
-                        <Button size="sm" variant="outline-success" onClick={() => handleMakePeace(civ.id)}>
-                          🕊️ Offer Peace
-                        </Button>
+
+                    {/* Treaty broken warning */}
+                    {selectedRelation && (selectedRelation.treatiesBrokenByA > 0 || selectedRelation.treatiesBrokenByB > 0) && (
+                      <div className="diplomacy-warning">
+                        ⚠️ Treaties broken: {(selectedRelation.treatiesBrokenByA || 0) + (selectedRelation.treatiesBrokenByB || 0)}
+                      </div>
+                    )}
+
+                    {/* Counter-proposal banner */}
+                    {counterProposal && (
+                      <div className="diplomacy-counter-proposal">
+                        <div className="diplomacy-counter-title">📜 Counter-Proposal</div>
+                        <div className="diplomacy-counter-text">
+                          {civilizations[selectedDiploCiv!]?.name} suggests: <strong>{counterProposal.action.replace(/_/g, ' ')}</strong>
+                          {counterProposal.goldAmount ? ` (${counterProposal.goldAmount} gold)` : ''}
+                        </div>
+                        <div className="diplomacy-counter-buttons">
+                          <button className="diplomacy-btn btn-peace" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'accept_counter')}>
+                            ✓ Accept
+                          </button>
+                          <button className="diplomacy-btn btn-war" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'reject_counter')}>
+                            ✗ Reject
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Negotiation buttons */}
+                    <div className="diplomacy-section-label">NEGOTIATIONS</div>
+                    <div className="diplomacy-actions">
+                      {selectedStatus === 'war' && (
+                        <>
+                          <button className="diplomacy-btn btn-ceasefire" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_ceasefire')}>
+                            🏳️ Propose Ceasefire
+                          </button>
+                          <button className="diplomacy-btn btn-peace" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_peace')}>
+                            🕊️ Offer Peace
+                          </button>
+                        </>
                       )}
-                      {status !== 'war' && (
-                        <Button size="sm" variant="outline-danger" onClick={() => handleDeclareWar(civ.id)}>
-                          ⚔️ Declare War
-                        </Button>
+                      {selectedStatus === 'ceasefire' && (
+                        <>
+                          <button className="diplomacy-btn btn-peace" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_peace')}>
+                            🕊️ Offer Peace Treaty
+                          </button>
+                          <button className="diplomacy-btn btn-war" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'declare_war')}>
+                            ⚔️ Declare War
+                          </button>
+                        </>
+                      )}
+                      {selectedStatus === 'peace' && (
+                        <>
+                          <button className="diplomacy-btn btn-alliance" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_alliance')}>
+                            🤝 Propose Alliance
+                          </button>
+                          <button className="diplomacy-btn btn-tribute" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'demand_tribute')}>
+                            💰 Demand Tribute
+                          </button>
+                          <button className="diplomacy-btn btn-war" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'declare_war')}>
+                            ⚔️ Declare War
+                          </button>
+                        </>
+                      )}
+                      {selectedStatus === 'alliance' && (
+                        <>
+                          <button className="diplomacy-btn btn-tribute" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'demand_tribute')}>
+                            💰 Demand Tribute
+                          </button>
+                          <button className="diplomacy-btn btn-war" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'declare_war')}>
+                            ⚔️ Break Alliance &amp; Declare War
+                          </button>
+                        </>
                       )}
                     </div>
-                  </ListGroup.Item>
-                );
-              })}
-            </ListGroup>
+
+                    {/* Advanced treaties toggle */}
+                    {selectedStatus !== 'war' && (
+                      <>
+                        <button
+                          className="diplomacy-toggle-treaties"
+                          onClick={() => setShowTreatyPanel(!showTreatyPanel)}
+                        >
+                          {showTreatyPanel ? '▾' : '▸'} Advanced Treaties
+                        </button>
+                        {showTreatyPanel && (
+                          <div className="diplomacy-actions diplomacy-treaty-actions">
+                            {!activeTreaties.includes('open_borders') && (
+                              <button className="diplomacy-btn btn-treaty" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'offer_open_borders')}>
+                                🚪 Open Borders
+                              </button>
+                            )}
+                            {!activeTreaties.includes('trade_agreement') && (
+                              <button className="diplomacy-btn btn-treaty" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_trade_agreement')}>
+                                📦 Trade Agreement
+                              </button>
+                            )}
+                            {!activeTreaties.includes('mutual_defense') && (
+                              <button className="diplomacy-btn btn-treaty" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_mutual_defense')}>
+                                🛡️ Mutual Defense Pact
+                              </button>
+                            )}
+                            {!activeTreaties.includes('non_aggression') && (
+                              <button className="diplomacy-btn btn-treaty" onClick={() => handleDiplomacyAction(selectedDiploCiv!, 'propose_non_aggression')}>
+                                🤚 Non-Aggression Pact
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Diplomacy event log (session) */}
+                    {diplomacyLog.length > 0 && (
+                      <>
+                        <div className="diplomacy-section-label">RECENT EVENTS</div>
+                        <div className="diplomacy-log">
+                          {diplomacyLog.map((msg, i) => (
+                            <div key={i} className="diplomacy-log-entry">{msg}</div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* Global diplomacy history from DiplomacyManager */}
+                    {(() => {
+                      const events = dm?.getEventLog?.() ?? [];
+                      const relevant = events.filter(
+                        (e: any) => e.fromCivId === selectedDiploCiv || e.toCivId === selectedDiploCiv
+                          || e.fromCivId === playerId || e.toCivId === playerId
+                      ).slice(0, 8);
+                      if (relevant.length === 0) return null;
+                      return (
+                        <>
+                          <div className="diplomacy-section-label">HISTORY</div>
+                          <div className="diplomacy-log">
+                            {relevant.map((e: any, i: number) => {
+                              const from = civilizations[e.fromCivId]?.name ?? `Civ ${e.fromCivId}`;
+                              const to = civilizations[e.toCivId]?.name ?? `Civ ${e.toCivId}`;
+                              const labels: Record<string, string> = {
+                                war_declared: `⚔️ ${from} declared war on ${to}`,
+                                peace_made: `🕊️ Peace between ${from} and ${to}`,
+                                ceasefire_signed: `🏳️ Ceasefire between ${from} and ${to}`,
+                                alliance_formed: `🤝 Alliance between ${from} and ${to}`,
+                                tribute_paid: `💰 ${from} paid tribute to ${to}${e.goldAmount ? ` (${e.goldAmount}g)` : ''}`,
+                                treaty_rejected: `❌ ${to} rejected ${from}'s proposal`,
+                                unit_bribed: `🎭 ${from} bribed a unit`,
+                                intelligence_gathered: `🔍 ${from} spied on ${to}`,
+                                open_borders_signed: `🚪 Open borders: ${from} ↔ ${to}`,
+                                trade_agreement_signed: `📦 Trade deal: ${from} ↔ ${to}`,
+                                mutual_defense_signed: `🛡️ Defense pact: ${from} ↔ ${to}`,
+                                non_aggression_signed: `🤚 Non-aggression: ${from} ↔ ${to}`,
+                                embargo_declared: `🚫 Embargo declared by ${from} & ${to}`,
+                                treaty_cancelled: `📜 Treaty cancelled by ${from}`,
+                                tech_exchanged: `🔬 Tech exchange: ${from} ↔ ${to}`,
+                                counter_proposal: `📜 Counter-proposal from ${from}`,
+                              };
+                              return (
+                                <div key={i} className="diplomacy-log-entry">
+                                  {labels[e.type] ?? `${e.type}: ${e.details ?? ''}`}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : (
+                  <div className="diplomacy-placeholder">
+                    <div className="diplomacy-placeholder-scene">
+                      <div className="diplomacy-placeholder-icon">⚖️</div>
+                      <div>Select a civilization to begin negotiations.</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
         </Modal.Body>
       </Modal>

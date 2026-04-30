@@ -19,6 +19,7 @@ import type {
   DiplomacyEvent,
   IntelligenceReport,
   DiplomatAction,
+  TreatyType,
 } from './DiplomacyTypes';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,9 @@ export class DiplomacyManager {
           reputationModifier: 0,
           treatiesBrokenByA: 0,
           treatiesBrokenByB: 0,
+          activeTreaties: [],
+          treatySince: {},
+          tradeGoldPerTurn: 0,
         });
       }
     }
@@ -174,11 +178,31 @@ export class DiplomacyManager {
     else if (rel.status === 'war') score -= 30;
     else if (rel.status === 'ceasefire') score -= 10;
 
+    // Active treaty bonuses
+    if (rel.activeTreaties?.includes('trade_agreement')) score += 5;
+    if (rel.activeTreaties?.includes('open_borders')) score += 3;
+    if (rel.activeTreaties?.includes('mutual_defense')) score += 8;
+    if (rel.activeTreaties?.includes('non_aggression')) score += 4;
+
     // Military strength comparison
     const ownStrength = this.estimateMilitaryStrength(fromCivId);
     const theirStrength = this.estimateMilitaryStrength(towardCivId);
     if (theirStrength > ownStrength * 1.5) score -= 10; // fear
     if (ownStrength > theirStrength * 2) score += 5; // contempt → more aggressive but not hostile
+
+    // Border friction: nearby cities create tension
+    const ownCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === fromCivId) ?? [];
+    const theirCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === towardCivId) ?? [];
+    let minCityDist = Infinity;
+    for (const oc of ownCities) {
+      for (const tc of theirCities) {
+        const d = this.gameEngine.squareGrid?.squareDistance?.(oc.col, oc.row, tc.col, tc.row) ?? Infinity;
+        if (d < minCityDist) minCityDist = d;
+      }
+    }
+    if (minCityDist <= 4) score -= 8;        // very close borders → friction
+    else if (minCityDist <= 7) score -= 3;   // moderate proximity
+    // distant civs get no penalty
 
     if (score >= 15) return 'friendly';
     if (score >= -5) return 'neutral';
@@ -282,6 +306,90 @@ export class DiplomacyManager {
     this.emitEvent('ALLIANCE_FORMED', { civA, civB });
   }
 
+  // ─── Treaty management (beyond Civ 1) ──────────────────────────────
+
+  /** Check if a specific treaty is active between two civs */
+  hasTreaty(civA: number, civB: number, treaty: TreatyType): boolean {
+    const rel = this.getRelation(civA, civB);
+    return rel?.activeTreaties?.includes(treaty) ?? false;
+  }
+
+  /** Get all active treaties between two civs */
+  getActiveTreaties(civA: number, civB: number): TreatyType[] {
+    return this.getRelation(civA, civB)?.activeTreaties ?? [];
+  }
+
+  /** Sign a treaty between two civs */
+  signTreaty(civA: number, civB: number, treaty: TreatyType, extra?: Record<string, any>): void {
+    const rel = this.getRelation(civA, civB);
+    if (!rel) return;
+
+    // Can't sign treaties while at war (except non-aggression after ceasefire)
+    if (rel.status === 'war' && treaty !== 'non_aggression') return;
+
+    // Don't duplicate
+    if (rel.activeTreaties.includes(treaty)) return;
+
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+    rel.activeTreaties.push(treaty);
+    rel.treatySince[treaty] = roundNumber;
+
+    if (treaty === 'trade_agreement') {
+      // Trade generates 2 gold/turn for both sides
+      rel.tradeGoldPerTurn = extra?.goldPerTurn ?? 2;
+    }
+    if (treaty === 'embargo_target' && extra?.targetCivId !== undefined) {
+      rel.embargoTargetCivId = extra.targetCivId;
+    }
+
+    const eventType = {
+      open_borders: 'open_borders_signed',
+      trade_agreement: 'trade_agreement_signed',
+      mutual_defense: 'mutual_defense_signed',
+      non_aggression: 'non_aggression_signed',
+      embargo_target: 'embargo_declared',
+    }[treaty] as DiplomacyEvent['type'];
+
+    this.logEvent({
+      type: eventType,
+      fromCivId: civA,
+      toCivId: civB,
+      details: treaty === 'embargo_target' ? `Embargo on Civ ${extra?.targetCivId}` : undefined,
+    });
+
+    console.log(`[DIPLOMACY] Treaty signed: ${treaty} between Civ ${civA} and Civ ${civB}`);
+  }
+
+  /** Cancel a treaty between two civs */
+  cancelTreaty(civId: number, otherId: number, treaty: TreatyType): void {
+    const rel = this.getRelation(civId, otherId);
+    if (!rel) return;
+
+    const idx = rel.activeTreaties.indexOf(treaty);
+    if (idx < 0) return;
+
+    rel.activeTreaties.splice(idx, 1);
+    delete rel.treatySince[treaty];
+
+    if (treaty === 'trade_agreement') rel.tradeGoldPerTurn = 0;
+    if (treaty === 'embargo_target') rel.embargoTargetCivId = undefined;
+
+    // Small reputation hit for cancelling treaties
+    this.applyReputationPenalty(civId, otherId, -5);
+
+    this.logEvent({
+      type: 'treaty_cancelled',
+      fromCivId: civId,
+      toCivId: otherId,
+      details: `Cancelled ${treaty}`,
+    });
+  }
+
+  /** Check if open borders allow passage */
+  hasOpenBorders(civA: number, civB: number): boolean {
+    return this.hasTreaty(civA, civB, 'open_borders');
+  }
+
   // ─── Proposals (human or AI initiated) ─────────────────────────────
 
   /** Process a diplomatic proposal. Returns whether accepted. */
@@ -295,13 +403,15 @@ export class DiplomacyManager {
     console.log(`[DIPLOMACY] Proposal: ${action} from Civ ${fromCivId} to Civ ${toCivId}, willingness=${willingness.toFixed(0)}%, roll=${roll.toFixed(0)}, accepted=${accepted}`);
 
     if (!accepted) {
+      // AI may make a counter-proposal
+      const counter = this.generateCounterProposal(fromCivId, toCivId, action, attitude);
       this.logEvent({
         type: 'treaty_rejected',
         fromCivId,
         toCivId,
-        details: `${action} rejected`,
+        details: `${action} rejected${counter ? ' (counter-proposal offered)' : ''}`,
       });
-      return { accepted: false, reason: this.getRejectReason(attitude) };
+      return { accepted: false, reason: this.getRejectReason(attitude), counterProposal: counter ?? undefined };
     }
 
     // Execute the accepted action
@@ -339,6 +449,51 @@ export class DiplomacyManager {
 
       case 'gather_intelligence':
         return { accepted: true };
+
+      case 'offer_open_borders':
+        this.signTreaty(fromCivId, toCivId, 'open_borders');
+        return { accepted: true };
+
+      case 'propose_trade_agreement':
+        this.signTreaty(fromCivId, toCivId, 'trade_agreement', { goldPerTurn: goldAmount ?? 2 });
+        return { accepted: true };
+
+      case 'propose_mutual_defense':
+        this.signTreaty(fromCivId, toCivId, 'mutual_defense');
+        return { accepted: true };
+
+      case 'propose_non_aggression':
+        this.signTreaty(fromCivId, toCivId, 'non_aggression');
+        return { accepted: true };
+
+      case 'propose_embargo': {
+        const target = proposal.embargoTargetId;
+        if (target === undefined) return { accepted: false, reason: 'No embargo target specified' };
+        this.signTreaty(fromCivId, toCivId, 'embargo_target', { targetCivId: target });
+        return { accepted: true };
+      }
+
+      case 'offer_tech_exchange': {
+        const { techOffered, techRequested } = proposal;
+        if (!techOffered || !techRequested) return { accepted: false, reason: 'Must specify both technologies' };
+        const fromCiv = this.gameEngine.civilizations?.[fromCivId];
+        const toCiv = this.gameEngine.civilizations?.[toCivId];
+        // Verify both sides have what they claim
+        const fromHas = fromCiv?.technologies?.has?.(techOffered) ?? false;
+        const toHas = toCiv?.technologies?.has?.(techRequested) ?? false;
+        if (!fromHas) return { accepted: false, reason: 'You do not have the offered technology' };
+        if (!toHas) return { accepted: false, reason: 'They do not have the requested technology' };
+        // Exchange: add techs to both sides
+        if (fromCiv?.technologies?.add) fromCiv.technologies.add(techRequested);
+        if (toCiv?.technologies?.add) toCiv.technologies.add(techOffered);
+        this.logEvent({
+          type: 'tech_exchanged',
+          fromCivId,
+          toCivId,
+          details: `${techOffered} ↔ ${techRequested}`,
+        });
+        return { accepted: true };
+      }
 
       default:
         return { accepted: false, reason: 'Unknown action' };
@@ -424,6 +579,42 @@ export class DiplomacyManager {
       } else if (rel.reputationModifier > 0) {
         rel.reputationModifier = Math.max(0, rel.reputationModifier - REPUTATION_RECOVERY_PER_TURN);
       }
+
+      // Process trade agreement gold transfers
+      if (rel.activeTreaties.includes('trade_agreement') && rel.tradeGoldPerTurn > 0) {
+        const civA = this.gameEngine.civilizations?.[rel.civA];
+        const civB = this.gameEngine.civilizations?.[rel.civB];
+        if (civA?.resources) civA.resources.gold += rel.tradeGoldPerTurn;
+        if (civB?.resources) civB.resources.gold += rel.tradeGoldPerTurn;
+      }
+
+      // Mutual defense: if ally is at war, join the war
+      if (rel.activeTreaties.includes('mutual_defense') && rel.status !== 'war') {
+        const aEnemies = this.getEnemies(rel.civA);
+        const bEnemies = this.getEnemies(rel.civB);
+        // If A is at war with someone, B should join
+        for (const enemy of aEnemies) {
+          if (!this.isAtWar(rel.civB, enemy) && enemy !== rel.civB) {
+            this.declareWar(rel.civB, enemy);
+          }
+        }
+        for (const enemy of bEnemies) {
+          if (!this.isAtWar(rel.civA, enemy) && enemy !== rel.civA) {
+            this.declareWar(rel.civA, enemy);
+          }
+        }
+      }
+
+      // War invalidates open borders and trade
+      if (rel.status === 'war') {
+        const toRemove = rel.activeTreaties.filter(t => t !== 'embargo_target');
+        for (const t of toRemove) {
+          const idx = rel.activeTreaties.indexOf(t);
+          if (idx >= 0) rel.activeTreaties.splice(idx, 1);
+          delete rel.treatySince[t];
+        }
+        rel.tradeGoldPerTurn = 0;
+      }
     }
   }
 
@@ -437,6 +628,7 @@ export class DiplomacyManager {
 
     const personality = civ.personality || { aggression: 5, diplomacy: 5, military: 5 };
     const ownStrength = this.estimateMilitaryStrength(civId);
+    const civName = civ.name ?? `Civilization ${civId}`;
 
     for (const rel of this.getRelationsForCiv(civId)) {
       const otherId = rel.otherCivId;
@@ -446,34 +638,68 @@ export class DiplomacyManager {
       const attitude = this.getAttitude(civId, otherId);
       const theirStrength = this.estimateMilitaryStrength(otherId);
       const turnsSince = roundNumber - rel.since;
+      const isPlayerTarget = otherCiv.isHuman === true;
 
       if (rel.status === 'war') {
         // Consider peace if losing or war has gone on long enough
         if (theirStrength > ownStrength * 1.3 && turnsSince > 5) {
           console.log(`[AI-DIPLO] Civ ${civId} proposing ceasefire to Civ ${otherId} (outmatched)`);
-          this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_ceasefire' });
+          const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_ceasefire' });
+          if (isPlayerTarget) {
+            this.emitEvent('DIPLOMACY_EVENT', {
+              message: result.accepted
+                ? `${civName} proposes a ceasefire, and you accept.`
+                : `${civName} offers a ceasefire, but negotiations fail.`,
+            });
+          }
         } else if (turnsSince > 15 && attitude !== 'hostile') {
           console.log(`[AI-DIPLO] Civ ${civId} proposing peace to Civ ${otherId} (long war)`);
-          this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_peace' });
+          const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_peace' });
+          if (isPlayerTarget) {
+            this.emitEvent('DIPLOMACY_EVENT', {
+              message: result.accepted
+                ? `${civName} sues for peace, and you agree.`
+                : `${civName} desires peace, but you refuse.`,
+            });
+          }
         }
       } else if (rel.status === 'peace' || rel.status === 'ceasefire') {
         // Consider declaring war if aggressive and strong enough
         if (personality.aggression >= 7 && ownStrength > theirStrength * 1.5 && attitude === 'hostile') {
           console.log(`[AI-DIPLO] Civ ${civId} declaring war on Civ ${otherId} (aggressive & strong)`);
           this.declareWar(civId, otherId);
+          if (isPlayerTarget) {
+            this.emitEvent('DIPLOMACY_EVENT', {
+              message: `${civName} has declared WAR on you!`,
+            });
+          }
         }
         // Consider demanding tribute if much stronger
         else if (personality.aggression >= 6 && ownStrength > theirStrength * 2 && turnsSince > 10) {
-          const demand = Math.floor(ownStrength * 5);
+          const demand = Math.max(25, Math.floor((ownStrength / Math.max(theirStrength, 1)) * 20));
           console.log(`[AI-DIPLO] Civ ${civId} demanding ${demand} gold tribute from Civ ${otherId}`);
-          this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'demand_tribute', goldAmount: demand });
+          const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'demand_tribute', goldAmount: demand });
+          if (isPlayerTarget) {
+            this.emitEvent('DIPLOMACY_EVENT', {
+              message: result.accepted
+                ? `${civName} demands tribute! You pay ${result.goldTransferred ?? demand} gold.`
+                : `${civName} demands tribute, but you refuse!`,
+            });
+          }
         }
         // Consider alliance if friendly and similar strength
         else if (rel.status === 'peace' && attitude === 'friendly' && personality.diplomacy >= 6) {
           const strengthRatio = Math.min(ownStrength, theirStrength) / Math.max(ownStrength, theirStrength, 1);
           if (strengthRatio > 0.5) {
             console.log(`[AI-DIPLO] Civ ${civId} proposing alliance to Civ ${otherId}`);
-            this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_alliance' });
+            const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_alliance' });
+            if (isPlayerTarget) {
+              this.emitEvent('DIPLOMACY_EVENT', {
+                message: result.accepted
+                  ? `${civName} proposes an alliance — you accept!`
+                  : `${civName} offers an alliance, but you decline.`,
+              });
+            }
           }
         }
       }
@@ -481,6 +707,51 @@ export class DiplomacyManager {
   }
 
   // ─── Internal helpers ──────────────────────────────────────────────
+
+  /** Generate a counter-proposal when the AI rejects an offer */
+  private generateCounterProposal(
+    fromCivId: number,
+    toCivId: number,
+    originalAction: DiplomatAction,
+    attitude: Attitude,
+  ): DiplomacyProposal | null {
+    // Only counter sometimes — hostile civs rarely counter
+    const counterChance = attitude === 'friendly' ? 60 : attitude === 'neutral' ? 40 : attitude === 'annoyed' ? 20 : 5;
+    if (Math.random() * 100 >= counterChance) return null;
+
+    switch (originalAction) {
+      case 'propose_alliance':
+        // Counter with a lesser treaty
+        if (attitude !== 'hostile') {
+          return { fromCivId: toCivId, toCivId: fromCivId, action: 'propose_non_aggression' };
+        }
+        return null;
+
+      case 'propose_peace':
+        // Demand tribute as condition for peace
+        if (attitude === 'annoyed' || attitude === 'hostile') {
+          const strength = this.estimateMilitaryStrength(toCivId);
+          const goldDemand = Math.max(20, Math.floor(strength * 5));
+          return { fromCivId: toCivId, toCivId: fromCivId, action: 'demand_tribute', goldAmount: goldDemand };
+        }
+        // Counter with ceasefire instead
+        return { fromCivId: toCivId, toCivId: fromCivId, action: 'propose_ceasefire' };
+
+      case 'demand_tribute':
+        // Counter with trade agreement instead
+        if (attitude !== 'hostile') {
+          return { fromCivId: toCivId, toCivId: fromCivId, action: 'propose_trade_agreement', goldAmount: 2 };
+        }
+        return null;
+
+      case 'offer_open_borders':
+        // Want trade agreement too
+        return { fromCivId: toCivId, toCivId: fromCivId, action: 'propose_trade_agreement', goldAmount: 2 };
+
+      default:
+        return null;
+    }
+  }
 
   private calculateWillingness(
     decidingCivId: number,
@@ -516,6 +787,24 @@ export class DiplomacyManager {
         const proposerStr = this.estimateMilitaryStrength(proposerCivId);
         if (proposerStr > ownStr * 1.5) willingness += 25;
         break;
+      case 'offer_open_borders':
+        willingness += 5; // Generally harmless
+        break;
+      case 'propose_trade_agreement':
+        willingness += 10; // Mutually beneficial
+        break;
+      case 'propose_mutual_defense':
+        willingness -= 15; // Big commitment
+        break;
+      case 'propose_non_aggression':
+        willingness += 15; // Easy to accept
+        break;
+      case 'propose_embargo':
+        willingness -= 10; // Depends on relationship with target
+        break;
+      case 'offer_tech_exchange':
+        willingness += 5; // Fair trade
+        break;
     }
 
     // Reputation modifier
@@ -528,7 +817,7 @@ export class DiplomacyManager {
     return Math.max(0, Math.min(100, willingness));
   }
 
-  private estimateMilitaryStrength(civId: number): number {
+  estimateMilitaryStrength(civId: number): number {
     const units = this.gameEngine.units?.filter(
       (u: any) => u.civilizationId === civId && (u.attack || 0) > 0
     ) ?? [];

@@ -1332,10 +1332,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
           if (result?.success) {
             if (result.type === 'intelligence') {
-              if (actions?.addNotification) actions.addNotification({
-                type: 'info',
-                message: `Intelligence: ${result.report?.cities ?? 0} cities, ${result.report?.militaryStrength ?? 0} military strength`
-              });
+              const r = result.report;
+              if (actions?.addNotification) {
+                actions.addNotification({
+                  type: 'info',
+                  message: `📜 Intel on ${r?.civName ?? 'Unknown'}: ${r?.numCities ?? '?'} cities, ${r?.numMilitaryUnits ?? '?'} military units, ${r?.gold ?? '?'} gold, researching ${r?.currentResearch ?? 'nothing'}, govt: ${r?.government ?? '?'}, attitude: ${r?.attitude ?? '?'}`
+                });
+              }
             } else if (result.type === 'proposal') {
               const accepted = result.response?.accepted;
               if (actions?.addNotification) actions.addNotification({
