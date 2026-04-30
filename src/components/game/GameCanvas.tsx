@@ -1306,6 +1306,58 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         }
         break;
 
+      // ===== DIPLOMAT ACTIONS =====
+      case 'diplomat_propose_peace':
+      case 'diplomat_propose_alliance':
+      case 'diplomat_demand_tribute':
+      case 'diplomat_bribe':
+      case 'diplomat_gather_intel': {
+        if (unit && gameEngine?.getDiplomatActions && gameEngine?.executeDiplomatAction) {
+          const diplomatInfo = gameEngine.getDiplomatActions(unit.id);
+          if (!diplomatInfo) {
+            if (actions?.addNotification) actions.addNotification({
+              type: 'warning',
+              message: 'No adjacent foreign unit or city for diplomacy'
+            });
+            break;
+          }
+          const actionMap: Record<string, string> = {
+            diplomat_propose_peace: 'propose_peace',
+            diplomat_propose_alliance: 'propose_alliance',
+            diplomat_demand_tribute: 'demand_tribute',
+            diplomat_bribe: 'bribe_unit',
+            diplomat_gather_intel: 'gather_intelligence',
+          };
+          const result = gameEngine.executeDiplomatAction(unit.id, actionMap[action], diplomatInfo.targetCivId);
+          if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
+          if (result?.success) {
+            if (result.type === 'intelligence') {
+              if (actions?.addNotification) actions.addNotification({
+                type: 'info',
+                message: `Intelligence: ${result.report?.cities ?? 0} cities, ${result.report?.militaryStrength ?? 0} military strength`
+              });
+            } else if (result.type === 'proposal') {
+              const accepted = result.response?.accepted;
+              if (actions?.addNotification) actions.addNotification({
+                type: accepted ? 'success' : 'warning',
+                message: accepted ? `Proposal accepted!` : `Proposal rejected: ${result.response?.reason || 'unknown'}`
+              });
+            } else if (result.type === 'bribe') {
+              if (actions?.addNotification) actions.addNotification({
+                type: result.response?.success ? 'success' : 'warning',
+                message: result.response?.success ? 'Unit bribed!' : `Bribe failed: ${result.response?.reason || 'not enough gold'}`
+              });
+            }
+          } else {
+            if (actions?.addNotification) actions.addNotification({
+              type: 'warning',
+              message: result?.reason || 'Diplomat action failed'
+            });
+          }
+        }
+        break;
+      }
+
       // ===== GENERAL ACTIONS =====
       case 'centerView':
         console.log(`[ContextMenu] Centering view on (${contextMenu.hex.col}, ${contextMenu.hex.row})`);

@@ -110,6 +110,11 @@ export class AIManager {
       }
     }
 
+    // ─── Phase 2b: AI Diplomacy ──────────────────────────────────────
+    if (this.gameEngine.diplomacyManager) {
+      this.gameEngine.diplomacyManager.processAIDiplomacy(civilizationId);
+    }
+
     // ─── Phase 3: Update offensive plan & army groups ──────────────────
     this.updateOffensivePlan(civilizationId, storage, roundNumber);
 

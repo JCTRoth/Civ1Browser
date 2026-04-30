@@ -14,6 +14,7 @@ import { ScoutMemory } from './ScoutMemory';
 import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
+import { DiplomacyManager } from './DiplomacyManager';
 import type { GameActions, Unit, City, Civilization } from '../../../types/game';
 
 interface GameSettings {
@@ -86,6 +87,7 @@ export default class GameEngine {
   scoutMemory: ScoutMemory; // Phase 3.1: Scout persistence across turns
   aiManager: AIManager;
   unitTurnQueue: UnitTurnQueue; // Unit turn queue for managing unit order
+  diplomacyManager: DiplomacyManager; // Civ I–style diplomacy system
 
   // Getter for turnManager (alias for roundManager)
   get turnManager() {
@@ -127,6 +129,7 @@ export default class GameEngine {
     this.scoutMemory = new ScoutMemory(); // Phase 3.1: Initialize scout memory
     this.aiManager = new AIManager(this);
     this.unitTurnQueue = new UnitTurnQueue(this); // Initialize unit turn queue
+    this.diplomacyManager = new DiplomacyManager(this);
     this.devMode = false;
     this.victoryManager = new VictoryManager(this);
     this.isGameOver = false;
@@ -587,6 +590,9 @@ export default class GameEngine {
     this.scoutMemory.clear();
     this.scoutMemory.setCurrentRound(0);
     
+    // Reset diplomacy
+    this.diplomacyManager.reset();
+    
     // Set dev mode from settings
     this.devMode = (settings as any).devMode || false;
     console.log(`[GameEngine] Developer mode: ${this.devMode ? 'ENABLED' : 'DISABLED'}`);
@@ -626,6 +632,10 @@ export default class GameEngine {
       this.storeActions.updateCivilizations(this.civilizations);
       this.storeActions.updateTechnologies(this.technologies);
     }
+
+    // Initialize diplomacy between all civilizations
+    this.diplomacyManager.initialize(this.civilizations.map((c: any) => c.id));
+    console.log('[GameEngine] Diplomacy initialized for', this.civilizations.length, 'civilizations');
 
     // Initialize fog of war visibility
     this.updateVisibility();
@@ -1415,6 +1425,20 @@ export default class GameEngine {
    * Combat between units
    */
   combatUnit(attacker: Unit, defender: Unit) {
+    // Auto-declare war if not already at war
+    if (this.diplomacyManager && attacker.civilizationId !== defender.civilizationId) {
+      const status = this.diplomacyManager.getStatus(attacker.civilizationId, defender.civilizationId);
+      if (status !== 'war') {
+        this.diplomacyManager.declareWar(attacker.civilizationId, defender.civilizationId);
+        if (this.onStateChange) {
+          this.onStateChange('WAR_DECLARED', {
+            aggressorId: attacker.civilizationId,
+            targetId: defender.civilizationId,
+          });
+        }
+      }
+    }
+
     const attackerStrength = attacker.attack * (attacker.health / 100);
     const defenderStrength = defender.defense * (defender.health / 100);
     
@@ -2002,6 +2026,104 @@ export default class GameEngine {
     }
 
     return true;
+  }
+
+  // ─── Diplomat unit actions ──────────────────────────────────────────
+
+  /**
+   * Initiate diplomacy with an adjacent enemy city or unit using a diplomat.
+   * Returns the available actions for the UI to present.
+   */
+  getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null {
+    const diplomat = this.units.find(u => u.id === diplomatId);
+    if (!diplomat || diplomat.type !== 'diplomat') return null;
+    if ((diplomat.movesRemaining || 0) <= 0) return null;
+
+    // Find adjacent enemy unit or city
+    const neighbors = this.squareGrid!.getNeighbors(diplomat.col, diplomat.row);
+    for (const n of neighbors) {
+      // Check for enemy city
+      const city = this.getCityAt(n.col, n.row);
+      if (city && city.civilizationId !== diplomat.civilizationId) {
+        const status = this.diplomacyManager.getStatus(diplomat.civilizationId, city.civilizationId);
+        const actions: string[] = ['gather_intelligence'];
+        if (status === 'war') {
+          actions.push('propose_ceasefire', 'propose_peace', 'demand_tribute');
+        } else if (status === 'ceasefire') {
+          actions.push('propose_peace');
+        } else if (status === 'peace') {
+          actions.push('propose_alliance', 'demand_tribute');
+        }
+        return { targetCivId: city.civilizationId, actions };
+      }
+
+      // Check for enemy unit
+      const unit = this.getUnitAt(n.col, n.row);
+      if (unit && unit.civilizationId !== diplomat.civilizationId) {
+        const status = this.diplomacyManager.getStatus(diplomat.civilizationId, unit.civilizationId);
+        const actions: string[] = ['gather_intelligence', 'bribe_unit'];
+        if (status === 'war') {
+          actions.push('propose_ceasefire', 'propose_peace');
+        } else if (status === 'ceasefire') {
+          actions.push('propose_peace');
+        } else if (status === 'peace') {
+          actions.push('propose_alliance');
+        }
+        return { targetCivId: unit.civilizationId, actions };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Execute a diplomat action. Consumes the diplomat's move.
+   */
+  executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any {
+    const diplomat = this.units.find(u => u.id === diplomatId);
+    if (!diplomat || diplomat.type !== 'diplomat') return { success: false, reason: 'Not a diplomat' };
+    if ((diplomat.movesRemaining || 0) <= 0) return { success: false, reason: 'No moves remaining' };
+
+    let result: any;
+
+    switch (action) {
+      case 'gather_intelligence':
+        result = this.diplomacyManager.gatherIntelligence(diplomat.civilizationId, targetCivId);
+        diplomat.movesRemaining = 0;
+        return { success: true, type: 'intelligence', report: result };
+
+      case 'propose_peace':
+      case 'propose_ceasefire':
+      case 'propose_alliance':
+      case 'demand_tribute':
+        result = this.diplomacyManager.processProposal({
+          fromCivId: diplomat.civilizationId,
+          toCivId: targetCivId,
+          action: action as any,
+          goldAmount: action === 'demand_tribute' ? 50 : undefined,
+        });
+        diplomat.movesRemaining = 0;
+        return { success: true, type: 'proposal', response: result };
+
+      case 'bribe_unit': {
+        // Find the adjacent enemy unit to bribe
+        const neighbors = this.squareGrid!.getNeighbors(diplomat.col, diplomat.row);
+        for (const n of neighbors) {
+          const targetUnit = this.getUnitAt(n.col, n.row);
+          if (targetUnit && targetUnit.civilizationId === targetCivId) {
+            result = this.diplomacyManager.bribeUnit(diplomat.civilizationId, targetUnit.id);
+            diplomat.movesRemaining = 0;
+            // Diplomat is consumed after bribery attempt
+            this.units = this.units.filter(u => u.id !== diplomatId);
+            return { success: true, type: 'bribe', response: result };
+          }
+        }
+        return { success: false, reason: 'No adjacent unit to bribe' };
+      }
+
+      default:
+        return { success: false, reason: 'Unknown action' };
+    }
   }
 
   /**

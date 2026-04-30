@@ -447,6 +447,11 @@ export class TurnManager {
           currentYear: this.gameEngine.currentYear
         });
       }
+
+      // Process diplomacy turn (reputation recovery, ceasefire timers)
+      if (this.gameEngine.diplomacyManager) {
+        this.gameEngine.diplomacyManager.processTurn(this.roundNumber);
+      }
     }
     
     // Sync active player to store on every turn change

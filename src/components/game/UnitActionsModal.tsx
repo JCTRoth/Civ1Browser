@@ -104,6 +104,56 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
             </>
           )}
 
+          {contextMenu.unit.type === 'diplomat' && (
+            <>
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('diplomat_propose_peace')}
+              >
+                🕊️ Propose Peace
+              </button>
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('diplomat_propose_alliance')}
+              >
+                🤝 Propose Alliance
+              </button>
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('diplomat_demand_tribute')}
+              >
+                💰 Demand Tribute
+              </button>
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('diplomat_bribe')}
+              >
+                🎭 Bribe Unit
+              </button>
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('diplomat_gather_intel')}
+              >
+                🔍 Gather Intelligence
+              </button>
+            </>
+          )}
+
           {/* ORDERS separator */}
           <hr style={{ margin: '4px 0', borderColor: '#555' }} />
 

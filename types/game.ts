@@ -284,6 +284,9 @@ export interface GameEngine {
   unitFortify(unitId: string): void;
   skipUnit(unitId: string): void;
   buildImprovement(unitId: string, improvement: string): boolean;
+  getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
+  executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any;
+  diplomacyManager: any;
   getAllUnits(): Unit[];
   getAllCities(): City[];
   calculateUnitPath(unitId: string, targetCol: number, targetRow: number): boolean;

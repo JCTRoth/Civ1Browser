@@ -26,6 +26,8 @@ const GameModals = ({ gameEngine }) => {
   const map = useGameStore(state => state.map);
   const gameStats = useGameStore(state => state.gameStats);
 
+  const civilizations = useGameStore(state => state.civilizations);
+
   const selectedCity = cities.find(c => c.id === selectedCityId);
 
   // Check if the selected city belongs to the current player
@@ -248,31 +250,97 @@ const GameModals = ({ gameEngine }) => {
   );
 
   // Diplomacy Modal
-  const renderDiplomacy = () => (
-    <Modal 
-      show={uiState.activeDialog === 'diplomacy'} 
-      onHide={handleCloseDialog} 
-      centered
-      size="lg"
-    >
-      <Modal.Header closeButton className="bg-dark text-white">
-        <Modal.Title>
-          <i className="bi bi-people"></i> Diplomacy
-        </Modal.Title>
-      </Modal.Header>
-      <Modal.Body className="bg-dark text-white">
-        <p>Diplomacy system coming soon...</p>
-        <p>Features will include:</p>
-        <ul>
-          <li>Trade agreements</li>
-          <li>Peace treaties</li>
-          <li>Military alliances</li>
-          <li>Technology exchanges</li>
-          <li>Territorial negotiations</li>
-        </ul>
-      </Modal.Body>
-    </Modal>
-  );
+  const renderDiplomacy = () => {
+    const dm = gameEngine?.diplomacyManager;
+    const playerId = currentPlayer?.id ?? 0;
+    const otherCivs = civilizations.filter((c: any) => c.id !== playerId && c.isAlive !== false);
+
+    const statusBadge = (status: string) => {
+      const colors: Record<string, string> = { war: 'danger', peace: 'success', ceasefire: 'warning', alliance: 'primary' };
+      return <span className={`badge bg-${colors[status] || 'secondary'} ms-2`}>{status.toUpperCase()}</span>;
+    };
+
+    const attitudeBadge = (attitude: string) => {
+      const colors: Record<string, string> = { friendly: 'success', neutral: 'secondary', annoyed: 'warning', hostile: 'danger' };
+      return <span className={`badge bg-${colors[attitude] || 'secondary'} ms-1`}>{attitude}</span>;
+    };
+
+    const handleDeclareWar = (targetId: number) => {
+      if (!dm) return;
+      dm.declareWar(playerId, targetId);
+      gameEngine?.onStateChange?.('WAR_DECLARED', { aggressorId: playerId, targetId });
+      actions.addNotification?.({ type: 'warning', message: `War declared!` });
+    };
+
+    const handleMakePeace = (targetId: number) => {
+      if (!dm) return;
+      dm.makePeace(playerId, targetId);
+      gameEngine?.onStateChange?.('PEACE_MADE', { civA: playerId, civB: targetId });
+      actions.addNotification?.({ type: 'success', message: `Peace established!` });
+    };
+
+    return (
+      <Modal 
+        show={uiState.activeDialog === 'diplomacy'} 
+        onHide={handleCloseDialog} 
+        centered
+        size="lg"
+      >
+        <Modal.Header closeButton className="bg-dark text-white">
+          <Modal.Title>
+            <i className="bi bi-people"></i> Diplomacy
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="bg-dark text-white">
+          {otherCivs.length === 0 ? (
+            <p className="text-muted">No other civilizations discovered yet.</p>
+          ) : (
+            <ListGroup variant="flush">
+              {otherCivs.map((civ: any) => {
+                const status = dm?.getStatus(playerId, civ.id) ?? 'peace';
+                const attitude = dm?.getAttitude(playerId, civ.id) ?? 'neutral';
+                const relation = dm?.getRelation(playerId, civ.id);
+                return (
+                  <ListGroup.Item key={civ.id} className="bg-dark text-white border-secondary">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <div>
+                        <strong style={{ color: civ.color || '#fff' }}>{civ.name}</strong>
+                        {statusBadge(status)}
+                        {attitudeBadge(attitude)}
+                        {civ.leader && <span className="text-muted ms-2">({civ.leader})</span>}
+                      </div>
+                    </div>
+                    {relation && (
+                      <div className="small text-muted mb-2">
+                        Reputation: {relation.reputationModifier > 0 ? '+' : ''}{relation.reputationModifier}
+                        {relation.treatiesBrokenByA > 0 || relation.treatiesBrokenByB > 0 ? (
+                          <span className="ms-2 text-danger">
+                            Treaties broken: {(relation.treatiesBrokenByA || 0) + (relation.treatiesBrokenByB || 0)}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                    <div className="d-flex gap-2">
+                      {status === 'war' && (
+                        <Button size="sm" variant="outline-success" onClick={() => handleMakePeace(civ.id)}>
+                          🕊️ Offer Peace
+                        </Button>
+                      )}
+                      {status !== 'war' && (
+                        <Button size="sm" variant="outline-danger" onClick={() => handleDeclareWar(civ.id)}>
+                          ⚔️ Declare War
+                        </Button>
+                      )}
+                    </div>
+                  </ListGroup.Item>
+                );
+              })}
+            </ListGroup>
+          )}
+        </Modal.Body>
+      </Modal>
+    );
+  };
 
   // Help Modal
   const renderHelp = () => (

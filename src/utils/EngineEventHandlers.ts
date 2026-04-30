@@ -90,6 +90,15 @@ export class EngineEventRouter {
       case 'SELECT_QUEUE_UNIT':
         this.onSelectQueueUnit(eventData);
         break;
+      case 'WAR_DECLARED':
+        this.onWarDeclared(eventData);
+        break;
+      case 'PEACE_MADE':
+        this.onPeaceMade(eventData);
+        break;
+      case 'DIPLOMACY_EVENT':
+        this.onDiplomacyEvent(eventData);
+        break;
       default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
@@ -437,5 +446,38 @@ export class EngineEventRouter {
     });
 
     this.actions.updateCamera(newCamera);
+  }
+
+  private onWarDeclared(eventData: any) {
+    const civs = this.gameEngine.civilizations || [];
+    const aggressor = civs.find((c: any) => c.id === eventData?.aggressorId);
+    const target = civs.find((c: any) => c.id === eventData?.targetId);
+    const msg = `${aggressor?.name ?? 'Unknown'} declared war on ${target?.name ?? 'Unknown'}!`;
+    console.log('[EngineEventRouter] WAR_DECLARED:', msg);
+    this.actions.addNotification?.({ type: 'warning', message: msg });
+    this.syncState();
+  }
+
+  private onPeaceMade(eventData: any) {
+    const civs = this.gameEngine.civilizations || [];
+    const civA = civs.find((c: any) => c.id === eventData?.civA);
+    const civB = civs.find((c: any) => c.id === eventData?.civB);
+    const msg = `Peace between ${civA?.name ?? 'Unknown'} and ${civB?.name ?? 'Unknown'}!`;
+    console.log('[EngineEventRouter] PEACE_MADE:', msg);
+    this.actions.addNotification?.({ type: 'success', message: msg });
+    this.syncState();
+  }
+
+  private onDiplomacyEvent(eventData: any) {
+    if (eventData?.message) {
+      this.actions.addNotification?.({ type: 'info', message: eventData.message });
+    }
+  }
+
+  private syncState() {
+    const ge = this.gameEngine as any;
+    if (ge.units) this.actions.updateUnits([...ge.units]);
+    if (ge.civilizations) this.actions.updateCivilizations([...ge.civilizations]);
+    if (ge.cities) this.actions.updateCities([...ge.cities]);
   }
 }
