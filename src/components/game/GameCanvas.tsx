@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useGameStore } from '@/stores/GameStore';
+import { useShallow } from 'zustand/react/shallow';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { MapRenderer, TerrainRenderGrid, TerrainTileRenderInfo, UnitPathStep } from '@/game/rendering/MapRenderer';
 import type { City, GameEngine, GameState, MapState, Unit } from '../../../types/game';
@@ -29,7 +30,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const mapRendererRef = useRef<MapRenderer>(new MapRenderer());
-  const gameState = useGameStore(state => state.gameState);
+  const gameState = useGameStore(useShallow(state => state.gameState));
   const mapData = useGameStore(state => state.map);
   const camera = useGameStore(state => state.camera);
   const actions = useGameStore(state => state.actions);

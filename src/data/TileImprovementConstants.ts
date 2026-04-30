@@ -27,6 +27,11 @@ export const IMPROVEMENT_TYPES = {
     MINES: 'mines',
     FORTRESS: 'fortress',
     POLLUTION: 'pollution',
+    // Advanced Improvements
+    FARMLAND: 'farmland',
+    PORT: 'port',
+    AIRPORT: 'airport',
+    SUPERHIGHWAYS: 'superhighways',
 } as const;
 
 export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = {
@@ -124,10 +129,78 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
             offsetX: 10,
             offsetY: -10
         }
-    }
+    },
+    [IMPROVEMENT_TYPES.FARMLAND]: {
+        name: 'Farmland',
+        turns: 4,
+        effects: {
+            food: 2,
+        },
+        terrainRestrictions: ['grassland', 'plains', 'desert'],
+        requiredTech: 'refrigeration',
+        display: {
+            label: 'Fm',
+            color: '#00cc55ff',
+            font: 'bold 12px monospace',
+            offsetX: 10,
+            offsetY: -10
+        }
+    },
+    [IMPROVEMENT_TYPES.PORT]: {
+        name: 'Port',
+        turns: 3,
+        effects: {
+            food: 1,
+            trade: 1,
+        },
+        terrainRestrictions: ['coast'],
+        requiredTech: 'navigation',
+        display: {
+            label: 'Po',
+            color: '#4488ffff',
+            font: 'bold 12px monospace',
+            offsetX: 10,
+            offsetY: -10
+        }
+    },
+    [IMPROVEMENT_TYPES.AIRPORT]: {
+        name: 'Airport',
+        turns: 4,
+        effects: {
+            trade: 1,
+        },
+        terrainRestrictions: ['grassland', 'plains', 'desert', 'tundra'],
+        requiredTech: 'flight',
+        display: {
+            label: 'Ap',
+            color: '#cc88ffff',
+            font: 'bold 12px monospace',
+            offsetX: 10,
+            offsetY: -10
+        }
+    },
+    [IMPROVEMENT_TYPES.SUPERHIGHWAYS]: {
+        name: 'Superhighways',
+        turns: 3,
+        effects: {
+            trade: 1.5,
+            movement: 0,
+        },
+        requiredTech: 'automobile',
+        display: {
+            glyph: 'SH',
+            color: '#ff4400ff',
+            font: 'bold 14px monospace',
+            offsetX: 0,
+            offsetY: 12,
+            skipLabel: true
+        }
+    },
 };
 
 
 export const IMPROVEMENT_REQUIREMENTS = {
     [IMPROVEMENT_TYPES.RAILROAD]: IMPROVEMENT_TYPES.ROAD,
+    [IMPROVEMENT_TYPES.FARMLAND]: IMPROVEMENT_TYPES.IRRIGATION,
+    [IMPROVEMENT_TYPES.SUPERHIGHWAYS]: IMPROVEMENT_TYPES.ROAD,
 } as const;

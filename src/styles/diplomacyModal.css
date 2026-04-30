@@ -541,3 +541,89 @@
 }
 
 /* ─── Warning badge ─────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════
+   Diplomacy Report — read-only Foreign Advisor view
+   ═══════════════════════════════════════════════════ */
+
+.diplomacy-report-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diplomacy-report-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 4px solid #555;
+  transition: background 0.15s;
+}
+
+.diplomacy-report-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.diplomacy-report-portrait {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diplomacy-report-icon {
+  font-size: 2rem;
+}
+
+.diplomacy-report-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.diplomacy-report-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #e0c080;
+}
+
+.diplomacy-report-leader {
+  font-weight: 400;
+  color: #9e9e9e;
+  font-size: 0.85rem;
+}
+
+.diplomacy-report-status-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 3px;
+  font-size: 0.85rem;
+}
+
+.diplomacy-report-status {
+  font-weight: 600;
+}
+
+.diplomacy-report-status.status-war { color: #f44336; }
+.diplomacy-report-status.status-peace { color: #4caf50; }
+.diplomacy-report-status.status-ceasefire { color: #ff9800; }
+.diplomacy-report-status.status-alliance { color: #2196f3; }
+
+.diplomacy-report-attitude {
+  font-style: italic;
+}
+
+.diplomacy-report-rep {
+  font-size: 0.8rem;
+}
+
+.diplomacy-report-treaties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}

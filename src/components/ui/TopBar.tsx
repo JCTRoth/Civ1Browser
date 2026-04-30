@@ -43,8 +43,8 @@ const TopBar: React.FC<TopBarProps> = ({ gameEngine, onEndTurnRequest }) => {
   };
 
   const handleShowDiplomacy = () => {
-    console.log('[CLICK] Show Diplomacy button');
-    actions.showDialog('diplomacy');
+    console.log('[CLICK] Show Diplomacy Report button');
+    actions.showDialog('diplomacy-report');
   };
 
   const handleToggleSidePanel = () => {

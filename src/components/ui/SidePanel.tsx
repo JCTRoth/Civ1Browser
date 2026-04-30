@@ -21,7 +21,6 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
   const actions = useGameStore((s) => s.actions);
   const selectedHex = useGameStore((s) => s.gameState.selectedHex);
   const map = useGameStore((s) => s.map);
-  const gameState = useGameStore((s) => s.gameState);
   const settings = useGameStore((s) => s.settings);
 
   const selectedCity = cities.find(c => c.id === selectedCityId);

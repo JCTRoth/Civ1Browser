@@ -129,9 +129,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       uiState: { 
         ...state.uiState, 
         showUnitPanel: !!unitId, 
-        showCityPanel: false,
-        goToMode: !!unitId,  // Enable GoTo mode when unit is selected, disable when deselected
-        goToUnit: unitId || ''
+        showCityPanel: false
       }
     })),
 
@@ -195,7 +193,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       // Prevent multiple calls in quick succession
       const now = Date.now();
       if (state._lastFocusCall && now - state._lastFocusCall < 100) {
-        console.log('[Store] focusOnNextUnit: Throttled call, ignoring');
         return state;
       }
 
@@ -234,13 +231,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           y: safeCameraY,
           zoom: zoom
         };
-
-        console.log('[Store] focusOnNextUnit: Focusing camera on unit', {
-          unitId: candidate.id,
-          col: candidate.col,
-          row: candidate.row,
-          camera: newCamera
-        });
 
         // Only update the camera position if either the same player retained control or developer mode is enabled
         const shouldMoveCamera = devMode || lastActive === null || lastActive === activeId;
@@ -286,13 +276,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
             zoom: zoom
           };
 
-          console.log('[Store] focusOnNextUnit: No units available, focusing camera on capital city', {
-            cityId: capitalCity.id,
-            col: capitalCity.col,
-            row: capitalCity.row,
-            camera: newCamera
-          });
-
           const lastActive = (state as any)._lastActivePlayer;
           const devMode = !!state.settings?.devMode;
           const shouldMoveCamera = devMode || lastActive === null || lastActive === activeId;
@@ -335,15 +318,27 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       uiState: { ...state.uiState, activeDialog: null }
     })),
 
-    addNotification: (notification) => set(state => ({
-      uiState: {
-        ...state.uiState,
-        notifications: [
-          ...state.uiState.notifications,
-          { id: Date.now(), ...notification }
-        ]
-      }
-    })),
+    addNotification: (notification) => {
+      const id = Date.now();
+      set(state => ({
+        uiState: {
+          ...state.uiState,
+          notifications: [
+            ...state.uiState.notifications,
+            { id, ...notification }
+          ]
+        }
+      }));
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => {
+        set(state => ({
+          uiState: {
+            ...state.uiState,
+            notifications: state.uiState.notifications.filter(n => n.id !== id)
+          }
+        }));
+      }, 5000);
+    },
 
     removeNotification: (id) => set(state => ({
       uiState: {
@@ -382,7 +377,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       }
 
       // Minimal logging for map initialization
-      console.log('[Store] updateMap: Final map state', { width: newMap.width, height: newMap.height, tilesLength: newMap.tiles?.length || 0 });
+      console.log('[Store] updateMap: Map updated', { width: newMap.width, height: newMap.height });
 
       return {
         map: newMap
@@ -395,13 +390,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       const disableFog = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DISABLE_FOG === 'true') || settings.devMode;
 
       if (!map.tiles || map.tiles.length === 0) {
-        console.log('[Store] updateVisibility: No tiles to update visibility for');
         return state;
       }
 
       if (disableFog) {
         // If developer mode enabled or fog disabled via env var, mark everything visible
-        console.log('[Store] updateVisibility: Developer mode enabled - revealing all tiles');
         const totalTiles = map.tiles.length;
         return {
           ...state,
@@ -413,8 +406,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           }
         };
       }
-
-      console.log('[Store] updateVisibility: Starting visibility update', { unitsCount: units.length, citiesCount: cities.length, mapSize: `${map.width}x${map.height}` });
 
       // Create new visibility arrays
       const newVisibility = new Array(map.tiles.length).fill(false);
@@ -444,7 +435,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
               gameTypeDef = Object.values(UNIT_TYPES).find((t: any) => t && String(t.id).toLowerCase() === singularType) || null;
             }
           } catch (e) {
-            console.warn('[Store] Error looking up unit type:', e);
             gameTypeDef = null;
           }
         }
@@ -452,22 +442,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         const sightRange = (typeof (unit as any).sightRange === 'number') 
           ? (unit as any).sightRange 
           : (gameTypeDef?.sightRange ?? 1); // Default to 1 if not found
-        
-        console.log('[Store] Unit visibility check:', {
-          unitType: unit.type,
-          unitTypeId,
-          foundDef: !!gameTypeDef,
-          sightRange,
-          position: `${unit.col},${unit.row}`
-        });
 
         if (sightRange > 0) {
-          console.log('[Store] updateVisibility: Processing unit with sight', {
-            unitType: unit.type,
-            sightRange,
-            position: `${unit.col},${unit.row}`,
-            civilizationId: unit.civilizationId
-          });
           setVisibilityAreaInternal(newVisibility, newRevealed, unit.col, unit.row, sightRange, map.width, map.height);
         }
       }
@@ -476,20 +452,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       for (const city of cities) {
         if (city.civilizationId === state.gameState.activePlayer) {
           const cityViewRadius = 2; // Cities can see 2 tiles away
-          console.log('[Store] updateVisibility: Processing player city', {
-            cityName: city.name,
-            position: `${city.col},${city.row}`,
-            viewRadius: cityViewRadius
-          });
           setVisibilityAreaInternal(newVisibility, newRevealed, city.col, city.row, cityViewRadius, map.width, map.height);
         }
       }
-
-      console.log('[Store] updateVisibility: Final visibility state', {
-        visibilityTrueCount: newVisibility.filter(v => v).length,
-        revealedTrueCount: newRevealed.filter(r => r).length,
-        totalTiles: map.tiles.length
-      });
 
       return {
         ...state,
@@ -504,13 +469,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     revealArea: (centerCol, centerRow, radius) => set(state => {
       const disableFog = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DISABLE_FOG === 'true') || state.settings.devMode;
       if (disableFog) {
-        console.log('[Store] revealArea: Developer mode enabled - all tiles already visible');
         return state;
       }
 
       const { map } = state;
       if (!map.tiles || map.tiles.length === 0) {
-        console.log('[Store] revealArea: No tiles to reveal');
         return state;
       }
 
@@ -532,12 +495,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           }
         }
       }
-
-      console.log('[Store] revealArea: Revealed area', {
-        centerCol, centerRow, radius,
-        visibilityTrueCount: newVisibility.filter(v => v).length,
-        revealedTrueCount: newRevealed.filter(r => r).length
-      });
 
       return {
         ...state,
@@ -666,18 +623,25 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     return civilizations[gameState.activePlayer] || null;
   },
 
+  // Cached player resources to avoid new object references on every access
+  _cachedPlayerResources: { food: 0, production: 0, trade: 0, science: 0, gold: 0 },
+
   get playerResources() {
     const currentPlayer = get().currentPlayer;
-    if (!currentPlayer) {
-      return { food: 0, production: 0, trade: 0, science: 0, gold: 0 };
+    const res = currentPlayer?.resources;
+    const food = res?.food || 0;
+    const production = res?.production || 0;
+    const trade = res?.trade || 0;
+    const science = res?.science || 0;
+    const gold = res?.gold || 0;
+    
+    const cached = (get() as any)._cachedPlayerResources;
+    if (cached.food === food && cached.production === production && cached.trade === trade && cached.science === science && cached.gold === gold) {
+      return cached;
     }
-    return {
-      food: currentPlayer.resources?.food || 0,
-      production: currentPlayer.resources?.production || 0,
-      trade: currentPlayer.resources?.trade || 0,
-      science: currentPlayer.resources?.science || 0,
-      gold: currentPlayer.resources?.gold || 0
-    };
+    const newRes = { food, production, trade, science, gold };
+    (get() as any)._cachedPlayerResources = newRes;
+    return newRes;
   },
 
   get selectedUnit() {
@@ -720,15 +684,23 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     return viewportTiles;
   },
 
+  // Cached game stats
+  _cachedGameStats: { turn: 0, totalCities: 0, totalUnits: 0, aliveCivilizations: 0, gameStarted: false },
+
   get gameStats() {
     const { gameState, civilizations, cities, units } = get();
+    const turn = gameState.currentTurn;
+    const totalCities = cities.length;
+    const totalUnits = units.length;
+    const aliveCivilizations = civilizations.filter(civ => civ.isAlive).length;
+    const gameStarted = gameState.isGameStarted;
 
-    return {
-      turn: gameState.currentTurn,
-      totalCities: cities.length,
-      totalUnits: units.length,
-      aliveCivilizations: civilizations.filter(civ => civ.isAlive).length,
-      gameStarted: gameState.isGameStarted
-    };
+    const cached = (get() as any)._cachedGameStats;
+    if (cached.turn === turn && cached.totalCities === totalCities && cached.totalUnits === totalUnits && cached.aliveCivilizations === aliveCivilizations && cached.gameStarted === gameStarted) {
+      return cached;
+    }
+    const newStats = { turn, totalCities, totalUnits, aliveCivilizations, gameStarted };
+    (get() as any)._cachedGameStats = newStats;
+    return newStats;
   }
 }));

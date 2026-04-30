@@ -297,7 +297,7 @@ function App() {
       const shouldPreventDefault = [
         'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
         'Enter', ' ', 
-        't', 'Escape', 'F1', 'F2', 'F3', 'F4', 'F11', 'h'
+        't', 'Escape', 'F1', 'F2', 'F3', 'F4', 'F11'
       ].includes(key) ||
       (ctrlKey && ['1','2','3','4','5','6','7','8','9','s','l','z'].includes(key)) ||
       (key === '+' || key === '-');
@@ -368,8 +368,8 @@ function App() {
             break;
           case ' ':
             // Cycle through units in a tile
-            if (gameEngine && gameEngine.cycleUnitsInTile) {
-              gameEngine.cycleUnitsInTile();
+            if (gameEngine && gameState.selectedUnit) {
+              gameEngine.cycleUnitsInTile(gameState.selectedUnit);
             }
             break;
           
@@ -395,31 +395,36 @@ function App() {
           case 'r':
           case 'R':
             // Rush production in a city
-            if (gameEngine && gameEngine.rushCityProduction) {
-              gameEngine.rushCityProduction();
+            {
+              const selCity = gameState.selectedCity;
+              if (selCity && gameEngine) {
+                gameEngine.rushCityProduction(selCity);
+              }
             }
             break;
           case 'c':
           case 'C':
-            // Center map on selected city
-            if (gameEngine && gameEngine.centerOnCity) {
-              gameEngine.centerOnCity();
+            // Center map on selected unit
+            {
+              const selUnitId = gameState.selectedUnit;
+              if (selUnitId && gameEngine) {
+                const selUnit = gameEngine.units.find(u => u.id === selUnitId);
+                if (selUnit) {
+                  const tileSize = 32 * (camera.zoom || 1);
+                  setCamera({
+                    x: selUnit.col * tileSize - window.innerWidth / 2,
+                    y: selUnit.row * tileSize - window.innerHeight / 2,
+                  });
+                }
+              }
             }
             break;
           case 'd':
           case 'D':
-            // Disband selected unit
-            if (gameEngine && gameEngine.disbandUnit) {
-              gameEngine.disbandUnit();
-            }
+            // Open diplomacy report
+            actions.showDialog('diplomacy-report');
             break;
-          case 'a':
-          case 'A':
-            // Automate worker
-            if (gameEngine && gameEngine.automateWorker) {
-              gameEngine.automateWorker();
-            }
-            break;
+          // 'a' key not bound
           case 'w':
           case 'W':
             // Wait (unit stays in place)
@@ -459,9 +464,12 @@ function App() {
           */
           case 'p':
           case 'P':
-            // Clean pollution
-            if (gameEngine && gameEngine.cleanPollution) {
-              gameEngine.cleanPollution();
+            // Clean pollution with selected unit
+            {
+              const pUnitId = gameState.selectedUnit;
+              if (pUnitId && gameEngine) {
+                gameEngine.cleanPollution(pUnitId);
+              }
             }
             break;
           case 't':
@@ -481,28 +489,20 @@ function App() {
             // Add more modal closures as needed
             break;
           case 'F1':
-            // Open Civilopedia
-            if (gameEngine && gameEngine.openCivilopedia) {
-              gameEngine.openCivilopedia();
-            }
+            // Open help
+            actions.showDialog('help');
             break;
           case 'F2':
-            // Open city report
-            if (gameEngine && gameEngine.openCityReport) {
-              gameEngine.openCityReport();
-            }
+            // Open tech tree
+            actions.showDialog('tech');
             break;
           case 'F3':
-            // Open unit report
-            if (gameEngine && gameEngine.openUnitReport) {
-              gameEngine.openUnitReport();
-            }
+            // Open settings
+            setShowSettings(true);
             break;
           case 'F4':
             // Open diplomacy report
-            if (gameEngine && gameEngine.openDiplomacyReport) {
-              gameEngine.openDiplomacyReport();
-            }
+            actions.showDialog('diplomacy-report');
             break;
           case 'F11':
             // Toggle fullscreen
@@ -512,13 +512,7 @@ function App() {
               document.documentElement.requestFullscreen();
             }
             break;
-          case 'h':
-          case 'H':
-            // Highlight happy/unhappy cities
-            if (gameEngine && gameEngine.highlightCities) {
-              gameEngine.highlightCities();
-            }
-            break;
+          // 'h' key not bound
         }
       }
 
@@ -628,7 +622,7 @@ function App() {
       >
         {/* Menu items */}
         <div className="d-flex flex-grow-1 h-100 justify-content-center align-items-center">
-          {['GAME', 'ORDERS', 'ADVISORS', 'WORLD', 'INFO'].map((item) => (
+          {['GAME', 'ORDERS', 'WORLD', 'INFO'].map((item) => (
             <button
               key={item}
               ref={(el) => menuRefs.current[item] = el}
@@ -774,7 +768,15 @@ function App() {
                   (e.target as HTMLElement).style.background = 'transparent';
                   (e.target as HTMLElement).style.paddingLeft = '16px';
                 }}
-                onClick={() => console.log('App: Save Game clicked')}
+                onClick={() => {
+                  if (gameEngine) {
+                    const ok = gameEngine.saveGame();
+                    if (ok) {
+                      window.dispatchEvent(new CustomEvent('gameNotification', { detail: { type: 'success', message: 'Game saved!' } }));
+                    }
+                  }
+                  setActiveMenu(null);
+                }}
               >
                 💾 Save Game
               </button>
@@ -795,7 +797,17 @@ function App() {
                   (e.target as HTMLElement).style.background = 'transparent';
                   (e.target as HTMLElement).style.paddingLeft = '16px';
                 }}
-                onClick={() => console.log('App: Load Game clicked')}
+                onClick={async () => {
+                  if (gameEngine) {
+                    const ok = await gameEngine.loadGame();
+                    if (ok) {
+                      window.dispatchEvent(new CustomEvent('gameNotification', { detail: { type: 'success', message: 'Game loaded!' } }));
+                    } else {
+                      window.dispatchEvent(new CustomEvent('gameNotification', { detail: { type: 'warning', message: 'No save game found' } }));
+                    }
+                  }
+                  setActiveMenu(null);
+                }}
               >
                 📁 Load Game
               </button>
@@ -840,7 +852,16 @@ function App() {
                   (e.target as HTMLElement).style.background = 'transparent';
                   (e.target as HTMLElement).style.paddingLeft = '16px';
                 }}
-                onClick={() => console.log('App: Quit clicked')}
+                onClick={() => {
+                  const confirmed = window.confirm('Are you sure you want to quit to the main menu?');
+                  if (confirmed && gameEngine) {
+                    gameEngine.shutdownToMenu();
+                    actions.resetGameState();
+                    setActiveMenu(null);
+                    setGameEngine(null);
+                    setShowGameSetup(true);
+                  }
+                }}
               >
                 🚪 Quit
               </button>
@@ -854,31 +875,8 @@ function App() {
                   fontSize: `${settings.menuFontSize * 1.1}px`,
                   padding: '12px 16px',
                   fontWeight: '600',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  console.log('App: Tech Tree clicked');
-                  actions.showDialog('tech');
-                  setActiveMenu(null);
-                }}
-              >
-                🌳 Tech Tree
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)'
                 }}
                 onMouseEnter={(e) => {
                   (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #63b3ed 0%, #4299e1 100%)';
@@ -896,11 +894,34 @@ function App() {
               >
                 🗺️ Download Map
               </button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
+                  (e.target as HTMLElement).style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.background = 'transparent';
+                  (e.target as HTMLElement).style.paddingLeft = '16px';
+                }}
+                onClick={() => {
+                  actions.showDialog('help');
+                  setActiveMenu(null);
+                }}
+              >
+                ❓ Help
+              </button>
             </div>
           )}
           {activeMenu === 'ORDERS' && (
             <div>
-              {['🏰 Build City', '🛣️ Build Road', '🌾 Irrigate', '🗿 Mine', '🏹 Fortify', '🚆 Railroad', '🌾 Farmland', '⚓ Port', '✈️ Airport', '🛣️ Superhighways', '☠️ Pollution', '🏰 Fortress'].map((item, idx, arr) => (
+              {['🏰 Build City', '🛣️ Build Road', '🌾 Irrigate', '🗿 Mine', '🏹 Fortify', '🚆 Railroad', '🌾 Farmland', '⚓ Port', '✈️ Airport', '🛣️ Superhighways', '☠️ Clean Pollution', '🏰 Fortress'].map((item, idx, arr) => (
                 <button 
                   key={item}
                   className="btn btn-dark text-start w-100 border-0"
@@ -921,6 +942,7 @@ function App() {
                   }}
                   onClick={() => {
                     console.log(`Civ1App: ORDERS - ${item} clicked`);
+                    setActiveMenu(null);
 
                     // Map labels to improvement keys
                     const improvementMap: Record<string, string> = {
@@ -932,77 +954,31 @@ function App() {
                       '⚓ Port': 'port',
                       '✈️ Airport': 'airport',
                       '🛣️ Superhighways': 'superhighways',
-                      '☠️ Pollution': 'pollution',
                       '🏰 Fortress': 'fortress'
                     };
 
+                    const selectedUnitId = gameState.selectedUnit;
+                    if (!selectedUnitId || !gameEngine) {
+                      console.log('App: No unit selected');
+                      return;
+                    }
+                    const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
+                    if (!selectedUnit) {
+                      console.log('App: Selected unit not found');
+                      return;
+                    }
+
                     // Handle different ORDERS menu actions
                     if (item === '🏰 Build City') {
-                      const selectedUnitId = gameState.selectedUnit;
-                      if (selectedUnitId && gameEngine) {
-                        const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
-                        if (selectedUnit && selectedUnit.type === 'settler') {
-                          console.log(`Civ1App: Founding city with settler ${selectedUnit.id}`);
-                          gameEngine.foundCityWithSettler(selectedUnit.id);
-                        } else {
-                          console.log('App: No settler selected for city founding');
-                        }
-                      } else {
-                        console.log('App: No unit selected for city founding');
-                      }
-                    } else if (improvementMap[item]) {
-                      const selectedUnitId = gameState.selectedUnit;
-                      if (selectedUnitId && gameEngine) {
-                        const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
-                        if (selectedUnit) {
-                          const imp = improvementMap[item];
-                          console.log(`Civ1App: Building ${imp} with unit ${selectedUnit.id}`);
-                          gameEngine.buildImprovement(selectedUnit.id, imp);
-                        } else {
-                          console.log('App: No unit found for building improvement');
-                        }
-                      } else {
-                        console.log('App: No unit selected for building improvement');
-                      }
-                    } else if (item === '🌾 Irrigate') {
-                      const selectedUnitId = gameState.selectedUnit;
-                      if (selectedUnitId && gameEngine) {
-                        const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
-                        if (selectedUnit) {
-                          console.log(`Civ1App: Irrigating with unit ${selectedUnit.id}`);
-                          gameEngine.buildImprovement(selectedUnit.id, 'irrigation');
-                        } else {
-                          console.log('App: No unit found for irrigation');
-                        }
-                      } else {
-                        console.log('App: No unit selected for irrigation');
-                      }
-                    } else if (item === '🗿 Mine') {
-                      const selectedUnitId = gameState.selectedUnit;
-                      if (selectedUnitId && gameEngine) {
-                        const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
-                        if (selectedUnit) {
-                          console.log(`Civ1App: Mining with unit ${selectedUnit.id}`);
-                          gameEngine.buildImprovement(selectedUnit.id, 'mines');
-                        } else {
-                          console.log('App: No unit found for mining');
-                        }
-                      } else {
-                        console.log('App: No unit selected for mining');
+                      if (selectedUnit.type === 'settler') {
+                        gameEngine.foundCityWithSettler(selectedUnit.id);
                       }
                     } else if (item === '🏹 Fortify') {
-                      const selectedUnitId = gameState.selectedUnit;
-                      if (selectedUnitId && gameEngine) {
-                        const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
-                        if (selectedUnit) {
-                          console.log(`Civ1App: Fortifying unit ${selectedUnit.id}`);
-                          gameEngine.unitFortify(selectedUnit.id);
-                        } else {
-                          console.log('App: No unit found for fortification');
-                        }
-                      } else {
-                        console.log('App: No unit selected for fortification');
-                      }
+                      gameEngine.unitFortify(selectedUnit.id);
+                    } else if (item === '☠️ Clean Pollution') {
+                      gameEngine.cleanPollution(selectedUnit.id);
+                    } else if (improvementMap[item]) {
+                      gameEngine.buildImprovement(selectedUnit.id, improvementMap[item]);
                     }
                   }}
                 >
@@ -1011,32 +987,55 @@ function App() {
               ))}
             </div>
           )}
-          {activeMenu === 'ADVISORS' && (
+          {activeMenu === 'WORLD' && (
             <div>
-              {['👑 Foreign Minister', '💰 Trade Advisor', '🧪 Science Advisor', '⚔️ Military Advisor'].map((item, idx, arr) => (
-                <button 
-                  key={item}
-                  className="btn btn-dark text-start w-100 border-0"
-                  style={{
-                    fontSize: `${settings.menuFontSize * 1.1}px`,
-                    padding: '12px 16px',
-                    fontWeight: '600',
-                    transition: 'all 0.2s ease',
-                    borderBottom: idx < arr.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none'
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #9f7aea 0%, #805ad5 100%)';
-                    (e.target as HTMLElement).style.paddingLeft = '24px';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.background = 'transparent';
-                    (e.target as HTMLElement).style.paddingLeft = '16px';
-                  }}
-                  onClick={() => console.log(`Civ1App: ADVISORS - ${item} clicked`)}
-                >
-                  {item}
-                </button>
-              ))}
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.1)'
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #d69e2e 0%, #b7791f 100%)';
+                  (e.target as HTMLElement).style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.background = 'transparent';
+                  (e.target as HTMLElement).style.paddingLeft = '16px';
+                }}
+                onClick={() => {
+                  actions.showDialog('diplomacy-report');
+                  setActiveMenu(null);
+                }}
+              >
+                ⚖️ Diplomacy
+              </button>
+              <button 
+                className="btn btn-dark text-start w-100 border-0"
+                style={{
+                  fontSize: `${settings.menuFontSize * 1.1}px`,
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
+                  (e.target as HTMLElement).style.paddingLeft = '24px';
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.background = 'transparent';
+                  (e.target as HTMLElement).style.paddingLeft = '16px';
+                }}
+                onClick={() => {
+                  actions.showDialog('tech');
+                  setActiveMenu(null);
+                }}
+              >
+                🌳 Tech Tree
+              </button>
             </div>
           )}
         </div>

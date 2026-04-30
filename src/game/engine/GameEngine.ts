@@ -1,7 +1,7 @@
 import { SquareGrid } from '../HexGrid';
 import { Constants, TERRAIN_PROPS, UNIT_PROPS } from '@/utils/Constants';
 import { CIVILIZATIONS, TECHNOLOGIES } from '@/data/GameData';
-import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES } from '@/data/TileImprovementConstants';
+import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, IMPROVEMENT_REQUIREMENTS } from '@/data/TileImprovementConstants';
 import { ProductionManager } from './ProductionManager';
 import { AutoProduction } from './AutoProduction';
 import { AIUtility } from './AIUtility';
@@ -2199,8 +2199,25 @@ export default class GameEngine {
       improvement: tile.improvement
     });
 
-    // Check if improvement already exists
-    if (tile.improvement) {
+    // Check terrain restrictions
+    if (improvementProps?.terrainRestrictions) {
+      const terrain = tile.terrain || tile.type;
+      if (!improvementProps.terrainRestrictions.includes(terrain)) {
+        console.warn(`[GameEngine] Build: Terrain ${terrain} not valid for ${improvementType} (requires: ${improvementProps.terrainRestrictions.join(', ')})`);
+        return false;
+      }
+    }
+
+    // Check if this improvement requires a prerequisite improvement (upgrade path)
+    const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[improvementType];
+    if (requiredBase) {
+      if (tile.improvement !== requiredBase) {
+        console.warn(`[GameEngine] Build: ${improvementType} requires existing ${requiredBase}, tile has: ${tile.improvement}`);
+        return false;
+      }
+      // Upgrade: replace the existing improvement
+    } else if (tile.improvement) {
+      // No upgrade path and tile already has an improvement
       console.log(`[GameEngine] Build: Tile already has improvement: ${tile.improvement}`);
       return false;
     }
@@ -2221,6 +2238,45 @@ export default class GameEngine {
     // Check if turn should end
     this.checkAndEndTurnIfNoMoves();
 
+    return true;
+  }
+
+  /**
+   * Clean pollution from the tile the unit is standing on
+   */
+  cleanPollution(unitId: string): boolean {
+    const unit = this.units.find(u => u.id === unitId);
+    if (!unit) {
+      console.warn(`[GameEngine] cleanPollution: Unit ${unitId} not found`);
+      return false;
+    }
+
+    const canPerform = UnitActionManager.canPerformAction(unit, 'clean_pollution', 2);
+    if (!canPerform) {
+      return false;
+    }
+
+    const tile = this.getTileAt(unit.col, unit.row);
+    if (!tile) {
+      return false;
+    }
+
+    if (tile.improvement !== 'pollution') {
+      console.warn(`[GameEngine] cleanPollution: No pollution at (${unit.col},${unit.row})`);
+      return false;
+    }
+
+    tile.improvement = null;
+    unit.movesRemaining = (unit.movesRemaining || 0) - 2;
+    this.updateUnitTurnsDoneFlag(unit);
+
+    console.log(`[GameEngine] Unit ${unit.id} cleaned pollution at (${unit.col},${unit.row})`);
+
+    if (this.onStateChange) {
+      this.onStateChange('POLLUTION_CLEANED', { unit, tile });
+    }
+
+    this.checkAndEndTurnIfNoMoves();
     return true;
   }
 
@@ -2270,5 +2326,254 @@ export default class GameEngine {
     this.checkAndEndTurnIfNoMoves();
 
     return true;
+  }
+
+  /**
+   * Disband (permanently remove) a unit from the game
+   */
+  disbandUnit(unitId: string): boolean {
+    const unit = this.units.find(u => u.id === unitId);
+    if (!unit) {
+      console.warn(`[GameEngine] disbandUnit: Unit ${unitId} not found`);
+      return false;
+    }
+
+    // Only allow disbanding own units
+    if (unit.civilizationId !== this.activePlayer) {
+      console.warn(`[GameEngine] disbandUnit: Cannot disband enemy unit`);
+      return false;
+    }
+
+    console.log(`[GameEngine] Disbanding unit ${unit.type} (${unitId}) at (${unit.col},${unit.row})`);
+
+    // Remove from unit turn queue
+    if (this.unitTurnQueue) {
+      this.unitTurnQueue.unitDone(unit.civilizationId, unitId);
+    }
+
+    // Remove from units array
+    this.units = this.units.filter(u => u.id !== unitId);
+
+    // Handle scout death for AI zone reassignment
+    if (unit.type === 'scout') {
+      this.onScoutDeath(unit);
+    }
+
+    if (this.onStateChange) {
+      this.onStateChange('UNIT_DISBANDED', { unit });
+    }
+
+    this.checkAndEndTurnIfNoMoves();
+    return true;
+  }
+
+  /**
+   * Rush production in a city by spending gold
+   */
+  rushCityProduction(cityId: string): boolean {
+    const civ = this.civilizations[this.activePlayer];
+    if (!civ?.isHuman) return false;
+
+    const city = this.cities.find(c => c.id === cityId);
+    if (!city || city.civilizationId !== this.activePlayer) {
+      console.warn('[GameEngine] rushCityProduction: City not found or not owned');
+      return false;
+    }
+
+    if (!city.currentProduction) {
+      console.warn('[GameEngine] rushCityProduction: No production in progress');
+      return false;
+    }
+
+    const totalCost = city.currentProduction.cost || 0;
+    const stored = city.productionStored || city.productionProgress || 0;
+    const remaining = Math.max(0, totalCost - stored);
+    // Gold cost = 2x the remaining production shields
+    const goldCost = remaining * 2;
+
+    if (goldCost <= 0) {
+      console.log('[GameEngine] rushCityProduction: Production already complete');
+      return false;
+    }
+
+    const civResources = civ.resources || { gold: 0 };
+    if ((civResources.gold || 0) < goldCost) {
+      console.warn(`[GameEngine] rushCityProduction: Not enough gold (need ${goldCost}, have ${civResources.gold})`);
+      return false;
+    }
+
+    // Deduct gold
+    civResources.gold = (civResources.gold || 0) - goldCost;
+
+    // Complete production
+    city.productionStored = totalCost;
+    if (city.productionProgress !== undefined) {
+      city.productionProgress = totalCost;
+    }
+
+    console.log(`[GameEngine] Rushed production in ${city.name}: spent ${goldCost} gold`);
+
+    if (this.onStateChange) {
+      this.onStateChange('PRODUCTION_RUSHED', { city, goldCost });
+    }
+
+    return true;
+  }
+
+  /**
+   * Cycle through units stacked on the same tile as the given unit
+   */
+  cycleUnitsInTile(unitId: string): string | null {
+    const selectedUnit = this.units.find(u => u.id === unitId);
+    if (!selectedUnit) return null;
+
+    // Find all own units on the same tile
+    const stackedUnits = this.units.filter(
+      u => u.col === selectedUnit.col && u.row === selectedUnit.row
+        && u.civilizationId === selectedUnit.civilizationId
+    );
+
+    if (stackedUnits.length <= 1) return null;
+
+    // Find current index and pick next
+    const currentIdx = stackedUnits.findIndex(u => u.id === unitId);
+    const nextIdx = (currentIdx + 1) % stackedUnits.length;
+    const nextUnit = stackedUnits[nextIdx];
+
+    this.selectAndFocusUnit(nextUnit);
+    console.log(`[GameEngine] Cycled to unit ${nextUnit.type} (${nextUnit.id})`);
+    return nextUnit.id;
+  }
+
+  /**
+   * Select a city by its index (0-based) among the current player's cities
+   */
+  selectCityByIndex(index: number): boolean {
+    const playerCities = this.cities.filter(c => c.civilizationId === this.activePlayer);
+    if (index < 0 || index >= playerCities.length) {
+      return false;
+    }
+
+    const city = playerCities[index];
+    if (this.storeActions) {
+      this.storeActions.selectCity(city.id);
+      this.storeActions.showDialog('city-details');
+    }
+    console.log(`[GameEngine] Selected city ${city.name} (index ${index})`);
+    return true;
+  }
+
+  /**
+   * Save game state to localStorage
+   */
+  saveGame(): boolean {
+    try {
+      const saveData = {
+        version: 1,
+        timestamp: Date.now(),
+        gameSettings: this.gameSettings,
+        currentTurn: this.currentTurn,
+        currentYear: this.currentYear,
+        activePlayer: this.activePlayer,
+        map: this.map,
+        units: this.units.map(u => ({ ...u })),
+        cities: this.cities.map(c => ({ ...c })),
+        civilizations: this.civilizations.map(c => ({ ...c })),
+        technologies: this.technologies,
+      };
+
+      const json = JSON.stringify(saveData);
+      localStorage.setItem('civ1_savegame', json);
+      console.log(`[GameEngine] Game saved (${(json.length / 1024).toFixed(1)} KB)`);
+
+      if (this.onStateChange) {
+        this.onStateChange('GAME_SAVED', { turn: this.currentTurn });
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[GameEngine] Save failed:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Load game state from localStorage
+   */
+  async loadGame(): Promise<boolean> {
+    try {
+      const json = localStorage.getItem('civ1_savegame');
+      if (!json) {
+        console.warn('[GameEngine] No save game found');
+        return false;
+      }
+
+      const saveData = JSON.parse(json);
+      if (!saveData || saveData.version !== 1) {
+        console.warn('[GameEngine] Invalid or incompatible save data');
+        return false;
+      }
+
+      // Restore state
+      this.gameSettings = saveData.gameSettings;
+      this.currentTurn = saveData.currentTurn;
+      this.currentYear = saveData.currentYear;
+      this.activePlayer = saveData.activePlayer;
+      this.map = saveData.map;
+      this.units = saveData.units;
+      this.cities = saveData.cities;
+      this.civilizations = saveData.civilizations;
+      this.technologies = saveData.technologies;
+      this.isInitialized = true;
+      this.isGameOver = false;
+
+      // Recreate grid
+      if (this.map) {
+        this.squareGrid = new SquareGrid(this.map.width, this.map.height);
+      }
+
+      // Re-init subsystems
+      this.playerStorage.clear();
+      this.scoutMemory.clear();
+      this.diplomacyManager.reset();
+      this.victoryManager.reset();
+      this.victoryManager.syncStoreActions(this.storeActions);
+
+      // Rebuild unit turn queue
+      if (this.unitTurnQueue) {
+        this.unitTurnQueue.initializeQueue(this.activePlayer);
+        for (const unit of this.units) {
+          if (unit.civilizationId === this.activePlayer) {
+            this.unitTurnQueue.addUnit(unit.civilizationId, unit.id);
+          }
+        }
+      }
+
+      // Sync to store
+      if (this.storeActions) {
+        this.storeActions.updateMap(this.map);
+        this.storeActions.updateUnits([...this.units]);
+        this.storeActions.updateCities([...this.cities]);
+        this.storeActions.updateCivilizations([...this.civilizations]);
+        this.storeActions.updateGameState({
+          currentTurn: this.currentTurn,
+          currentYear: this.currentYear,
+          isLoading: false,
+          gamePhase: 'playing',
+          mapGenerated: true,
+        });
+      }
+
+      console.log(`[GameEngine] Game loaded — Turn ${this.currentTurn}, Year ${this.currentYear}`);
+
+      if (this.onStateChange) {
+        this.onStateChange('GAME_LOADED', { turn: this.currentTurn });
+      }
+
+      return true;
+    } catch (e) {
+      console.error('[GameEngine] Load failed:', e);
+      return false;
+    }
   }
 }

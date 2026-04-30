@@ -18,11 +18,11 @@ const GameModals = ({ gameEngine }) => {
   // console.log('[GameModals] Component rendering, gameEngine present:', !!gameEngine);
   const uiState = useGameStore(state => state.uiState);
   const actions = useGameStore(state => state.actions);
-  const gameState = useGameStore(state => state.gameState);
+  const isGameStarted = useGameStore(state => state.gameState.isGameStarted);
+  const selectedHex = useGameStore(state => state.gameState.selectedHex);
   const selectedCityId: string | null = useGameStore(state => state.gameState.selectedCity);
   const cities = useGameStore(state => state.cities);
   const technologies = useGameStore(state => state.technologies);
-  useGameStore(state => state.playerResources);
   const currentPlayer = useGameStore(state => state.civilizations[state.gameState.activePlayer] || null);
 
   const units = useGameStore(state => state.units);
@@ -199,7 +199,7 @@ const GameModals = ({ gameEngine }) => {
             <i className="bi bi-download"></i> Save Game
           </Button>
           
-          {gameState.isGameStarted && (
+          {isGameStarted && (
             <Button variant="success" size="lg" onClick={handleDownloadMap}>
               <i className="bi bi-map"></i> Download Map
             </Button>
@@ -730,6 +730,145 @@ const GameModals = ({ gameEngine }) => {
     );
   };
 
+  // Diplomacy Report — read-only overview of current diplomatic state (Civ I Foreign Advisor style)
+  const renderDiplomacyReport = (): React.ReactNode => {
+    const dm = gameEngine?.diplomacyManager;
+    const playerId = currentPlayer?.id ?? 0;
+    const otherCivs = civilizations.filter((c: any) => c.id !== playerId && c.isAlive !== false);
+
+    const STATUS_ICONS: Record<string, string> = {
+      peace: '🕊️',
+      war: '⚔️',
+      ceasefire: '🏳️',
+      alliance: '🤝',
+    };
+
+    const ATTITUDE_LABELS: Record<string, { label: string; color: string }> = {
+      friendly: { label: 'Friendly', color: '#4caf50' },
+      neutral: { label: 'Neutral', color: '#9e9e9e' },
+      annoyed: { label: 'Annoyed', color: '#ff9800' },
+      hostile: { label: 'Hostile', color: '#f44336' },
+    };
+
+    const TREATY_LABELS: Record<string, { icon: string; label: string }> = {
+      open_borders: { icon: '🚪', label: 'Open Borders' },
+      trade_agreement: { icon: '📦', label: 'Trade Agreement' },
+      mutual_defense: { icon: '🛡️', label: 'Mutual Defense' },
+      non_aggression: { icon: '🤚', label: 'Non-Aggression' },
+      embargo_target: { icon: '🚫', label: 'Embargo' },
+    };
+
+    return (
+      <Modal
+        show={uiState.activeDialog === 'diplomacy-report'}
+        onHide={handleCloseDialog}
+        centered
+        size="lg"
+        dialogClassName="diplomacy-modal"
+      >
+        <Modal.Header closeButton className="diplomacy-header">
+          <Modal.Title>📋 Foreign Advisor</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="diplomacy-body">
+          {otherCivs.length === 0 ? (
+            <p className="text-muted text-center py-4">No other civilizations discovered yet.</p>
+          ) : (
+            <div className="diplomacy-report-list">
+              {otherCivs.map((civ: any) => {
+                const status = dm?.getStatus(playerId, civ.id) ?? 'peace';
+                const attitude = dm?.getAttitude(playerId, civ.id) ?? 'neutral';
+                const relation = dm?.getRelation?.(playerId, civ.id);
+                const treaties: string[] = dm?.getActiveTreaties?.(playerId, civ.id) ?? [];
+                const attLabel = ATTITUDE_LABELS[attitude] || ATTITUDE_LABELS.neutral;
+                const leaderName = civ.leader || civ.leaderName || '';
+                const portraitConfig = LEADER_PORTRAITS[leaderName] || null;
+
+                return (
+                  <div key={civ.id} className="diplomacy-report-row" style={{ borderLeftColor: civ.color || '#555' }}>
+                    <div className="diplomacy-report-portrait">
+                      {portraitConfig ? (
+                        <LeaderPortrait config={portraitConfig} mood={attitude} size={60} />
+                      ) : (
+                        <span className="diplomacy-report-icon" style={{ color: civ.color || '#fff' }}>
+                          {civ.icon || '👤'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="diplomacy-report-info">
+                      <div className="diplomacy-report-name">
+                        {civ.name}
+                        {leaderName && <span className="diplomacy-report-leader"> — {leaderName}</span>}
+                      </div>
+                      <div className="diplomacy-report-status-row">
+                        <span className={`diplomacy-report-status status-${status}`}>
+                          {STATUS_ICONS[status]} {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </span>
+                        <span className="diplomacy-report-attitude" style={{ color: attLabel.color }}>
+                          {attLabel.label}
+                        </span>
+                        {relation && (
+                          <span className="diplomacy-report-rep" style={{ color: relation.reputationModifier < 0 ? '#f44336' : relation.reputationModifier > 0 ? '#4caf50' : '#9e9e9e' }}>
+                            Rep: {relation.reputationModifier > 0 ? '+' : ''}{relation.reputationModifier}
+                          </span>
+                        )}
+                      </div>
+                      {treaties.length > 0 && (
+                        <div className="diplomacy-report-treaties">
+                          {treaties.map((t: string) => (
+                            <span key={t} className="diplomacy-treaty-badge">
+                              {TREATY_LABELS[t]?.icon || '📜'} {TREATY_LABELS[t]?.label || t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Global diplomacy history */}
+              {(() => {
+                const events = dm?.getEventLog?.() ?? [];
+                const recent = events.slice(0, 12);
+                if (recent.length === 0) return null;
+                return (
+                  <>
+                    <div className="diplomacy-section-label" style={{ marginTop: '16px' }}>RECENT HISTORY</div>
+                    <div className="diplomacy-log">
+                      {recent.map((e: any, i: number) => {
+                        const from = civilizations[e.fromCivId]?.name ?? `Civ ${e.fromCivId}`;
+                        const to = civilizations[e.toCivId]?.name ?? `Civ ${e.toCivId}`;
+                        const labels: Record<string, string> = {
+                          war_declared: `⚔️ ${from} declared war on ${to}`,
+                          peace_made: `🕊️ Peace between ${from} and ${to}`,
+                          ceasefire_signed: `🏳️ Ceasefire between ${from} and ${to}`,
+                          alliance_formed: `🤝 Alliance between ${from} and ${to}`,
+                          tribute_paid: `💰 ${from} paid tribute to ${to}${e.goldAmount ? ` (${e.goldAmount}g)` : ''}`,
+                          treaty_rejected: `❌ ${to} rejected ${from}'s proposal`,
+                          open_borders_signed: `🚪 Open borders: ${from} ↔ ${to}`,
+                          trade_agreement_signed: `📦 Trade deal: ${from} ↔ ${to}`,
+                          mutual_defense_signed: `🛡️ Defense pact: ${from} ↔ ${to}`,
+                          non_aggression_signed: `🤚 Non-aggression: ${from} ↔ ${to}`,
+                          embargo_declared: `🚫 Embargo declared by ${from} & ${to}`,
+                          treaty_cancelled: `📜 Treaty cancelled by ${from}`,
+                        };
+                        return (
+                          <div key={i} className="diplomacy-log-entry">
+                            {labels[e.type] ?? `${e.type}: ${e.details ?? ''}`}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </Modal.Body>
+      </Modal>
+    );
+  };
+
   // Help Modal
   const renderHelp = () => (
     <Modal 
@@ -749,10 +888,10 @@ const GameModals = ({ gameEngine }) => {
             <h6>Mouse Controls:</h6>
             <ListGroup variant="flush" className="mb-3">
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Left Click:</strong> Select units, cities, or hexes
+                <strong>Left Click:</strong> Select units, cities, or tiles
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Right Click:</strong> Context menu (coming soon)
+                <strong>Right Click:</strong> Unit context menu
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
                 <strong>Drag:</strong> Pan the camera around the map
@@ -762,29 +901,140 @@ const GameModals = ({ gameEngine }) => {
               </ListGroup.Item>
             </ListGroup>
 
-            <h6>Keyboard Shortcuts:</h6>
+            <h6>Unit Actions (when unit selected):</h6>
+            <ListGroup variant="flush" className="mb-3">
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>S:</strong> Skip unit's turn
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>F:</strong> Fortify unit
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>W:</strong> Wait (move unit to end of queue)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>G:</strong> Go To (click destination)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>B:</strong> Build road
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>I:</strong> Irrigate
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>M:</strong> Build mine
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>P:</strong> Clean pollution
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Space:</strong> Cycle units on same tile
+              </ListGroup.Item>
+            </ListGroup>
+
+            <h6>Global Shortcuts:</h6>
+            <ListGroup variant="flush" className="mb-3">
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Enter:</strong> End turn
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>D:</strong> Diplomacy report
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>R:</strong> Rush city production (when city selected)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>C:</strong> Center map on selected unit
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>T:</strong> Open settings
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Escape:</strong> Close dialogs / deselect
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>+/−:</strong> Zoom in / out
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Arrow Keys:</strong> Move unit / Shift+Arrow: Scroll map
+              </ListGroup.Item>
+            </ListGroup>
+
+            <h6>Function Keys:</h6>
+            <ListGroup variant="flush" className="mb-3">
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>F1:</strong> Help
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>F2:</strong> Tech Tree
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>F3:</strong> Settings
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>F4:</strong> Diplomacy report
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>F11:</strong> Toggle fullscreen
+              </ListGroup.Item>
+            </ListGroup>
+
+            <h6>Ctrl Shortcuts:</h6>
             <ListGroup variant="flush">
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Space/Enter:</strong> End turn
+                <strong>Ctrl+S:</strong> Save game
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>H:</strong> Show this help dialog
+                <strong>Ctrl+L:</strong> Load game
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>T:</strong> Open technology tree
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>D:</strong> Open diplomacy
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>M:</strong> Toggle minimap
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Escape:</strong> Close dialogs
+                <strong>Ctrl+1–9:</strong> Select city by number
               </ListGroup.Item>
             </ListGroup>
           </Tab>
           
+          <Tab eventKey="orders" title="Orders Menu">
+            <h6>Tile Improvements (via ORDERS menu):</h6>
+            <ListGroup variant="flush">
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Build City:</strong> Settler founds a new city
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Build Road:</strong> +0.5 trade, faster movement (1 turn)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Irrigate:</strong> +1 food on grassland/plains/desert (2 turns)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Mine:</strong> +1 production on mountains/hills (8 turns)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Fortify:</strong> Defensive bonus for military units
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Railroad:</strong> Upgrades road — +0.5 food/prod/trade (requires Railroad tech)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Farmland:</strong> Upgrades irrigation — +2 food (requires Refrigeration tech)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Port:</strong> +1 food/trade on coast (requires Navigation tech)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Airport:</strong> +1 trade on land (requires Flight tech)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Superhighways:</strong> Upgrades road — +1.5 trade (requires Automobile tech)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Clean Pollution:</strong> Removes pollution from tile (2 turns)
+              </ListGroup.Item>
+              <ListGroup.Item className="bg-dark text-white border-secondary">
+                <strong>Fortress:</strong> +80% defense bonus (6 turns)
+              </ListGroup.Item>
+            </ListGroup>
+          </Tab>
+
           <Tab eventKey="gameplay" title="Gameplay">
             <h6>Getting Started:</h6>
             <ol>
@@ -804,35 +1054,36 @@ const GameModals = ({ gameEngine }) => {
               <li><strong>Science:</strong> Researches new technologies</li>
               <li><strong>Gold:</strong> Maintains units and buildings</li>
             </ul>
+
+            <h6>Diplomacy:</h6>
+            <ul>
+              <li>Press <strong>D</strong> or <strong>F4</strong> to view diplomatic relations</li>
+              <li>Diplomatic talks are initiated through in-game events (contact with foreign units)</li>
+              <li>States: Peace, Ceasefire, Alliance, War</li>
+              <li>Treaties: Open Borders, Trade Agreement, Mutual Defense, Non-Aggression</li>
+              <li>Breaking treaties damages your reputation with all civilizations</li>
+            </ul>
           </Tab>
           
           <Tab eventKey="about" title="About">
             <h5>Civilization Browser</h5>
-            <p>A browser-based recreation of the classic Civilization game.</p>
+            <p>A browser-based recreation inspired by the classic Civilization (1991).</p>
             
-            <h6>Built With:</h6>
-            <ul>
-              <li>React.js with hooks and modern patterns</li>
-              <li>Jotai for state management</li>
-              <li>Bootstrap for UI components</li>
-              <li>HTML5 Canvas for game rendering</li>
-              <li>Vite for fast development and building</li>
-            </ul>
-
             <h6>Features:</h6>
             <ul>
-              <li>Hexagonal grid map system</li>
+              <li>Square grid map with fog of war</li>
               <li>Turn-based gameplay with AI opponents</li>
-              <li>City building and management</li>
-              <li>Unit movement and combat</li>
+              <li>City building, management, and production</li>
+              <li>Unit movement, combat, and fortification</li>
               <li>Technology research tree</li>
-              <li>Resource management</li>
-              <li>Responsive design for desktop and mobile</li>
+              <li>Diplomacy system with treaties and negotiations</li>
+              <li>Tile improvements (roads, irrigation, mines, and more)</li>
+              <li>Save and load game support</li>
             </ul>
 
             <p className="mt-3">
               <small className="text-muted">
-                This is a fan-made recreation for educational purposes.
+                Fan-made recreation for educational purposes.
                 Original Civilization © MicroProse/Firaxis Games
               </small>
             </p>
@@ -1298,9 +1549,10 @@ const GameModals = ({ gameEngine }) => {
       {renderGameMenu()}
       {renderTechTree()}
       {renderDiplomacy()}
+      {renderDiplomacyReport()}
       {renderHelp()}
       <CityModal show={uiState.activeDialog === 'city-details'} onHide={handleCloseDialog} selectedCity={selectedCity} gameEngine={gameEngine} actions={actions} currentPlayer={currentPlayer} isPlayerCity={isPlayerCity} />
-      <HexDetailModal show={uiState.activeDialog === 'hex-details'} onHide={handleCloseDialog} selectedHex={gameState.selectedHex} map={map} units={units} cities={cities} />
+      <HexDetailModal show={uiState.activeDialog === 'hex-details'} onHide={handleCloseDialog} selectedHex={selectedHex} map={map} units={units} cities={cities} />
       {renderCityProduction()}
       {renderCityPurchase()}
     </>
