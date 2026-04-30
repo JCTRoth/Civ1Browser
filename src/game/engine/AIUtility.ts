@@ -452,3 +452,182 @@ export interface MoveOption {
   distance: number; // Chebyshev distance from source
 }
 
+/**
+ * Threat alert broadcast when a unit detects nearby enemies.
+ * Used to rally nearby allied combat units.
+ */
+export interface ThreatAlert {
+  col: number;
+  row: number;
+  enemyStrength: number;
+  /** Round the alert was issued */
+  round: number;
+}
+
+/**
+ * Scan a wider radius (up to `radius` tiles) for enemies.
+ * Returns all enemy units/cities found, sorted by distance.
+ */
+export function scanAreaForEnemies(
+  centerCol: number,
+  centerRow: number,
+  civilizationId: number,
+  radius: number,
+  getUnits: () => Array<{ id: string; col: number; row: number; civilizationId: number; attack?: number; defense?: number; type: string }>,
+  getCities: () => Array<{ id: string; col: number; row: number; civilizationId: number }>,
+  distanceFn: (c1: number, r1: number, c2: number, r2: number) => number
+): Array<{ col: number; row: number; type: 'unit' | 'city'; distance: number; strength: number; id: string }> {
+  const results: Array<{ col: number; row: number; type: 'unit' | 'city'; distance: number; strength: number; id: string }> = [];
+
+  for (const unit of getUnits()) {
+    if (unit.civilizationId === civilizationId) continue;
+    const dist = distanceFn(centerCol, centerRow, unit.col, unit.row);
+    if (dist <= radius) {
+      results.push({
+        col: unit.col,
+        row: unit.row,
+        type: 'unit',
+        distance: dist,
+        strength: Math.max(1, unit.attack || 0) + (unit.defense || 0) * 0.5,
+        id: unit.id,
+      });
+    }
+  }
+
+  for (const city of getCities()) {
+    if (city.civilizationId === civilizationId) continue;
+    const dist = distanceFn(centerCol, centerRow, city.col, city.row);
+    if (dist <= radius) {
+      results.push({
+        col: city.col,
+        row: city.row,
+        type: 'city',
+        distance: dist,
+        strength: 5,
+        id: city.id,
+      });
+    }
+  }
+
+  results.sort((a, b) => a.distance - b.distance);
+  return results;
+}
+
+/**
+ * Evaluate the defensive quality of a tile for positioning.
+ * Higher is better. Hills > Forest > Plains.
+ */
+export function evaluateDefensiveTerrain(tile: { type?: string; fortress?: boolean; river?: boolean } | null): number {
+  if (!tile) return 0;
+  let score = 0;
+  if (tile.type === 'hills') score += 4;
+  else if (tile.type === 'forest') score += 2;
+  else if (tile.type === 'mountains') score += 3;
+  if (tile.fortress) score += 5;
+  if (tile.river) score += 1;
+  return score;
+}
+
+/**
+ * Find the best tile to move toward when intercepting enemies,
+ * preferring defensive terrain between our position and the threat.
+ */
+export function findInterceptPosition(
+  unitCol: number,
+  unitRow: number,
+  threatCol: number,
+  threatRow: number,
+  getNeighbors: (col: number, row: number) => SquareCoordinate[],
+  getTileAt: (col: number, row: number) => any,
+  getUnitAt: (col: number, row: number) => any,
+  distanceFn: (c1: number, r1: number, c2: number, r2: number) => number
+): SquareCoordinate | null {
+  const neighbors = getNeighbors(unitCol, unitRow);
+  let best: SquareCoordinate | null = null;
+  let bestScore = -Infinity;
+
+  for (const n of neighbors) {
+    const tile = getTileAt(n.col, n.row);
+    if (!tile || !tile.passable) continue;
+    const occupant = getUnitAt(n.col, n.row);
+    if (occupant) continue;
+
+    const distToThreat = distanceFn(n.col, n.row, threatCol, threatRow);
+    const currentDist = distanceFn(unitCol, unitRow, threatCol, threatRow);
+
+    // Prefer tiles that move closer to (or stay same distance from) the threat
+    const closingBonus = (currentDist - distToThreat) * 3;
+    const defenseBonus = evaluateDefensiveTerrain(tile);
+
+    const score = closingBonus + defenseBonus;
+    if (score > bestScore) {
+      bestScore = score;
+      best = n;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Find a patrol waypoint between two cities.
+ * Returns a position roughly midway along the border/frontier.
+ */
+export function findPatrolWaypoint(
+  unitCol: number,
+  unitRow: number,
+  cities: Array<{ col: number; row: number; civilizationId: number }>,
+  civilizationId: number,
+  distanceFn: (c1: number, r1: number, c2: number, r2: number) => number
+): { col: number; row: number } | null {
+  const ownCities = cities.filter(c => c.civilizationId === civilizationId);
+  if (ownCities.length < 2) {
+    // Single city: patrol around it at distance 3-4
+    if (ownCities.length === 1) {
+      const city = ownCities[0];
+      const dist = distanceFn(unitCol, unitRow, city.col, city.row);
+      if (dist > 4) {
+        // Move back toward city
+        return { col: city.col, row: city.row };
+      }
+      // Circle around city: pick a point ~3 tiles away in a different direction
+      const angle = Math.atan2(unitRow - city.row, unitCol - city.col) + Math.PI / 3;
+      const patrolCol = Math.round(city.col + Math.cos(angle) * 3);
+      const patrolRow = Math.round(city.row + Math.sin(angle) * 3);
+      return { col: patrolCol, row: patrolRow };
+    }
+    return null;
+  }
+
+  // Find the two cities furthest apart to define frontier
+  let maxDist = 0;
+  let cityA = ownCities[0];
+  let cityB = ownCities[1];
+  for (let i = 0; i < ownCities.length; i++) {
+    for (let j = i + 1; j < ownCities.length; j++) {
+      const d = distanceFn(ownCities[i].col, ownCities[i].row, ownCities[j].col, ownCities[j].row);
+      if (d > maxDist) {
+        maxDist = d;
+        cityA = ownCities[i];
+        cityB = ownCities[j];
+      }
+    }
+  }
+
+  // Patrol waypoint is the midpoint between the two cities
+  const midCol = Math.round((cityA.col + cityB.col) / 2);
+  const midRow = Math.round((cityA.row + cityB.row) / 2);
+
+  // If unit is near the midpoint, send to one of the cities instead
+  const distToMid = distanceFn(unitCol, unitRow, midCol, midRow);
+  if (distToMid <= 2) {
+    const distToA = distanceFn(unitCol, unitRow, cityA.col, cityA.row);
+    const distToB = distanceFn(unitCol, unitRow, cityB.col, cityB.row);
+    return distToA > distToB
+      ? { col: cityA.col, row: cityA.row }
+      : { col: cityB.col, row: cityB.row };
+  }
+
+  return { col: midCol, row: midRow };
+}
+

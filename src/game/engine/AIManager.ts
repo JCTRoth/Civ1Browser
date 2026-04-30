@@ -5,7 +5,7 @@
  * army coordination, building production, and unit targeting.
  */
 
-import { AIUtility } from './AIUtility';
+import { AIUtility, scanAreaForEnemies, evaluateDefensiveTerrain, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
 import { SettlementEvaluator } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
@@ -316,11 +316,69 @@ export class AIManager {
         return { col: groupTarget.col, row: groupTarget.row };
       }
 
-      // Fall back to strategic targeting
+      // ── Wide-area enemy scan (5-tile radius) ──
+      const distFn = (c1: number, r1: number, c2: number, r2: number) =>
+        this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
+      const nearbyEnemies = scanAreaForEnemies(
+        unit.col, unit.row, unit.civilizationId, 5,
+        () => this.gameEngine.units,
+        () => this.gameEngine.cities,
+        distFn
+      );
+
+      if (nearbyEnemies.length > 0) {
+        const closest = nearbyEnemies[0];
+        console.log(`[AI] Area scan found ${nearbyEnemies.length} enemies near ${unit.id}, closest: ${closest.type} at (${closest.col},${closest.row}) dist=${closest.distance}`);
+
+        // Broadcast threat alert so other nearby units rally
+        this.broadcastThreatAlert(unit.civilizationId, closest.col, closest.row, closest.strength, storage);
+
+        // If enemy is adjacent, attack directly
+        if (closest.distance === 1) {
+          return { col: closest.col, row: closest.row };
+        }
+
+        // Move toward enemy using terrain-aware intercept
+        const intercept = findInterceptPosition(
+          unit.col, unit.row, closest.col, closest.row,
+          (c, r) => this.gameEngine.squareGrid!.getNeighbors(c, r),
+          (c, r) => this.gameEngine.getTileAt(c, r),
+          (c, r) => this.gameEngine.getUnitAt(c, r),
+          distFn
+        );
+        if (intercept) {
+          console.log(`[AI] Intercepting enemy via defensive terrain at (${intercept.col},${intercept.row})`);
+          return intercept;
+        }
+
+        // Direct move toward enemy
+        return { col: closest.col, row: closest.row };
+      }
+
+      // ── Respond to threat alerts from allied units ──
+      const alertTarget = this.getActiveAlertTarget(unit, storage);
+      if (alertTarget) {
+        console.log(`[AI] Unit ${unit.id} responding to threat alert at (${alertTarget.col},${alertTarget.row})`);
+        return alertTarget;
+      }
+
+      // ── Defend threatened cities ──
       const strategicTarget = this.selectStrategicTarget(unit as Unit);
       if (strategicTarget) {
         console.log(`[AI] Strategic target chosen for ${unit.type} ${unit.id} -> (${strategicTarget.col}, ${strategicTarget.row})`);
         return strategicTarget;
+      }
+
+      // ── Patrol between cities when idle ──
+      const patrolTarget = findPatrolWaypoint(
+        unit.col, unit.row,
+        this.gameEngine.cities,
+        unit.civilizationId,
+        distFn
+      );
+      if (patrolTarget) {
+        console.log(`[AI] Patrol waypoint for ${unit.id}: (${patrolTarget.col},${patrolTarget.row})`);
+        return patrolTarget;
       }
     }
 
@@ -339,39 +397,6 @@ export class AIManager {
       } catch (error) {
         console.error(`[AI-SETTLER] Error calling SettlementEvaluator:`, error);
       }
-    }
-
-    // Phase 2.2: Special handling for warriors: target known enemy cities
-    if (unit.type === 'warrior') {
-      console.log(`[AI-WARRIOR] Warrior at (${unit.col}, ${unit.row}), checking for enemy targets`);
-
-      const civData = this.gameEngine.getPlayerStorage(unit.civilizationId);
-      if (civData) {
-        // Get nearest enemy city from known locations
-        let nearestEnemy: { col: number; row: number; enemyCivId: number } | null = null;
-        let minDistance = Infinity;
-
-        for (const [enemyCivId, enemies] of civData.enemyLocations) {
-          for (const enemy of enemies) {
-            if (enemy.type === 'city') {
-              const dist = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, enemy.col, enemy.row);
-              if (dist < minDistance) {
-                minDistance = dist;
-                nearestEnemy = { col: enemy.col, row: enemy.row, enemyCivId };
-              }
-            }
-          }
-        }
-
-        if (nearestEnemy) {
-          console.log(`[AI-WARRIOR] Found enemy city at (${nearestEnemy.col}, ${nearestEnemy.row}), distance: ${minDistance.toFixed(1)}`);
-          return { col: nearestEnemy.col, row: nearestEnemy.row };
-        } else {
-          console.log(`[AI-WARRIOR] No known enemy cities, will explore`);
-        }
-      }
-
-      // If no enemy city known, proceed to normal exploration below
     }
 
     // Special handling for scouts: use EnemySearcher to find enemies
@@ -493,7 +518,20 @@ export class AIManager {
       }
     }
 
-    // 1) Nearby unexplored tile
+    // 1) Nearby enemy unit (check before exploration for combat awareness)
+    const enemy = AIUtility.findNearbyEnemy(
+      unit.col,
+      unit.row,
+      unit.civilizationId,
+      (col, row) => this.gameEngine.squareGrid!.getNeighbors(col, row),
+      (col, row) => this.gameEngine.getUnitAt(col, row)
+    );
+    if (enemy) {
+      console.log(`[AI] Chose enemy unit at (${enemy.col},${enemy.row})`);
+      return { col: enemy.col, row: enemy.row };
+    }
+
+    // 2) Nearby unexplored tile
     const unexplored = AIUtility.findNearbyUnexplored(
       unit.col,
       unit.row,
@@ -523,19 +561,6 @@ export class AIManager {
         console.log(`[AI-SCOUT] Chose exploration target at (${scoutExplorationTarget.col},${scoutExplorationTarget.row})`);
         return { col: scoutExplorationTarget.col, row: scoutExplorationTarget.row };
       }
-    }
-
-    // 2) Nearby enemy unit
-    const enemy = AIUtility.findNearbyEnemy(
-      unit.col,
-      unit.row,
-      unit.civilizationId,
-      (col, row) => this.gameEngine.squareGrid!.getNeighbors(col, row),
-      (col, row) => this.gameEngine.getUnitAt(col, row)
-    );
-    if (enemy) {
-      console.log(`[AI] Chose enemy unit at (${enemy.col},${enemy.row})`);
-      return { col: enemy.col, row: enemy.row };
     }
 
     // 3) Choose best neighbor based on terrain cost
@@ -939,11 +964,18 @@ export class AIManager {
           ? this.gameEngine.isVisibleToPlayer(unit.civilizationId, location.col, location.row)
           : false;
 
+        // Count allied combat units near the target to favor convergence
+        const nearbyAllied = this.gameEngine.units.filter(
+          (u: Unit) => u.civilizationId === unit.civilizationId && u.id !== unit.id && this.isCombatUnit(u)
+            && this.gameEngine.squareGrid!.squareDistance(u.col, u.row, location.col, location.row) <= 5
+        ).length;
+
         const { score } = scoreEnemyTarget({
           location,
           distance,
           currentRound: roundNumber,
-          isCurrentlyVisible: isVisible
+          isCurrentlyVisible: isVisible,
+          nearbyAlliedUnits: nearbyAllied,
         });
 
         if (score < 10) {
@@ -1040,10 +1072,20 @@ export class AIManager {
     currentYear: number;
     roundNumber: number;
     numCities: number;
+    numOwnCities: number;
     totalPopulation: number;
     numMilitaryUnits: number;
+    numOwnMilitaryUnits: number;
+    numOwnCivilianUnits: number;
+    averageEnemyStrength: number;
+    ownMilitaryStrength: number;
+    numTechnologies: number;
     isAtWar: boolean;
     knownEnemyCities: number;
+    numEnemyCitiesKnown: number;
+    threatenedCitiesCount: number;
+    hasLibrary: boolean;
+    totalScience: number;
   } {
     const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) || [];
     const civ = this.gameEngine.civilizations?.[civilizationId];
@@ -1056,31 +1098,70 @@ export class AIManager {
       }
     }
 
+    const militaryUnits = this.gameEngine.units?.filter(
+      (u: any) => u.civilizationId === civilizationId && this.isCombatUnit(u as Unit)
+    ) ?? [];
+    const civilianUnits = this.gameEngine.units?.filter(
+      (u: any) => u.civilizationId === civilizationId && !this.isCombatUnit(u as Unit)
+    ) ?? [];
+    const ownStrength = militaryUnits.reduce(
+      (sum: number, u: any) => sum + Math.max(1, u.attack || 0) + (u.defense || 0) * 0.5, 0
+    );
+
+    // Estimate average enemy military strength from known info
+    const enemyUnits = this.gameEngine.units?.filter(
+      (u: any) => u.civilizationId !== civilizationId && this.isCombatUnit(u as Unit)
+    ) ?? [];
+    const enemyCivIds = new Set(enemyUnits.map((u: any) => u.civilizationId));
+    const avgEnemyStrength = enemyCivIds.size > 0
+      ? enemyUnits.reduce((sum: number, u: any) => sum + Math.max(1, u.attack || 0) + (u.defense || 0) * 0.5, 0) / enemyCivIds.size
+      : 0;
+
+    // Count threatened cities
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+    const threatened = this.identifyThreatenedCities(civilizationId, storage, roundNumber);
+
+    // Check for library in any city
+    const hasLibrary = cities.some((c: any) => c.buildings?.includes('library'));
+    const totalScience = cities.reduce((sum: number, c: any) => sum + (c.science || 0), 0);
+
     return {
       currentYear: this.gameEngine.currentYear ?? -4000,
-      roundNumber: this.gameEngine.roundManager?.getRoundNumber?.() ?? 0,
+      roundNumber,
       numCities: cities.length,
+      numOwnCities: cities.length,
       totalPopulation: cities.reduce((sum: number, c: any) => sum + (c.population || 1), 0),
-      numMilitaryUnits: this.gameEngine.units?.filter(
-        (u: any) => u.civilizationId === civilizationId && this.isCombatUnit(u as Unit)
-      ).length ?? 0,
+      numMilitaryUnits: militaryUnits.length,
+      numOwnMilitaryUnits: militaryUnits.length,
+      numOwnCivilianUnits: civilianUnits.length,
+      averageEnemyStrength: avgEnemyStrength,
+      ownMilitaryStrength: ownStrength,
+      numTechnologies: civ?.technologies?.length ?? 0,
       isAtWar: civ?.warWith?.size > 0,
       knownEnemyCities,
+      numEnemyCitiesKnown: knownEnemyCities,
+      threatenedCitiesCount: threatened.length,
+      hasLibrary,
+      totalScience,
     };
   }
 
-  /** Estimate total enemy combat strength in the 2-tile radius around a unit */
+  /** Estimate total enemy combat strength in 4-tile radius around a unit.
+   *  Closer enemies contribute more to the threat estimate. */
   private estimateLocalEnemyStrength(unit: Unit): number {
     if (!this.gameEngine.squareGrid) return 0;
 
-    const radius = 2;
+    const radius = 4;
     let enemyStrength = 0;
 
     for (const other of this.gameEngine.units) {
       if (other.civilizationId === unit.civilizationId) continue;
       const dist = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, other.col, other.row);
       if (dist <= radius) {
-        enemyStrength += Math.max(1, other.attack || 0) + (other.defense || 0) * 0.5;
+        const raw = Math.max(1, other.attack || 0) + (other.defense || 0) * 0.5;
+        // Weight by proximity: adjacent enemies count full, distant ones less
+        const proximityWeight = 1 - (dist - 1) / (radius + 1);
+        enemyStrength += raw * proximityWeight;
       }
     }
 
@@ -1132,5 +1213,64 @@ export class AIManager {
       default:
         return SettlementEvaluator.balancedGrowthWeights();
     }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Threat alert system — rally nearby combat units to detected threats
+  // ──────────────────────────────────────────────────────────────────────
+
+  /** Store a threat alert in player storage so other units can respond */
+  private broadcastThreatAlert(civilizationId: number, col: number, row: number, enemyStrength: number, storage: any): void {
+    if (!storage) return;
+    storage.turnData = storage.turnData || {};
+    if (!storage.turnData.threatAlerts) {
+      storage.turnData.threatAlerts = [];
+    }
+    const alerts: ThreatAlert[] = storage.turnData.threatAlerts;
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+
+    // Don't duplicate alerts at the same location this round
+    const existing = alerts.find((a: ThreatAlert) => a.col === col && a.row === row && a.round === roundNumber);
+    if (existing) {
+      existing.enemyStrength = Math.max(existing.enemyStrength, enemyStrength);
+      return;
+    }
+
+    alerts.push({ col, row, enemyStrength, round: roundNumber });
+
+    // Keep only recent alerts (last 3 rounds)
+    storage.turnData.threatAlerts = alerts.filter((a: ThreatAlert) => roundNumber - a.round <= 3);
+    console.log(`[AI] Threat alert broadcast at (${col},${row}), strength=${enemyStrength.toFixed(1)}`);
+  }
+
+  /** Find the closest active threat alert this unit should respond to */
+  private getActiveAlertTarget(unit: any, storage: any): { col: number; row: number } | null {
+    if (!storage?.turnData?.threatAlerts || !this.gameEngine.squareGrid) return null;
+
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+    const alerts: ThreatAlert[] = storage.turnData.threatAlerts;
+    const ALERT_RESPONSE_RADIUS = 8;
+
+    let bestAlert: ThreatAlert | null = null;
+    let bestScore = -Infinity;
+
+    for (const alert of alerts) {
+      if (roundNumber - alert.round > 2) continue; // Skip stale alerts
+
+      const dist = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, alert.col, alert.row);
+      if (dist > ALERT_RESPONSE_RADIUS || dist === 0) continue;
+
+      // Score = urgency (enemy strength) minus distance cost
+      const score = alert.enemyStrength * 2 - dist;
+      if (score > bestScore) {
+        bestScore = score;
+        bestAlert = alert;
+      }
+    }
+
+    if (bestAlert) {
+      return { col: bestAlert.col, row: bestAlert.row };
+    }
+    return null;
   }
 }

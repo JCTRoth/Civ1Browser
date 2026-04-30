@@ -26,6 +26,8 @@ export interface EnemyTargetScoreInput {
   strategicValue?: number;
   distanceWeight?: number;
   staleAfter?: number;
+  /** Number of own combat units within 5 tiles of the target */
+  nearbyAlliedUnits?: number;
 }
 
 export interface EnemyTargetScoreResult {
@@ -40,7 +42,8 @@ export function scoreEnemyTarget({
   isCurrentlyVisible = false,
   strategicValue = 0,
   distanceWeight = 2,
-  staleAfter = 12
+  staleAfter = 12,
+  nearbyAlliedUnits = 0,
 }: EnemyTargetScoreInput): EnemyTargetScoreResult {
   const typeBias = location.type === 'city' ? 60 : 35;
   const recencyAge = Math.max(0, currentRound - (location.lastSeenRound ?? location.discoveredRound));
@@ -48,7 +51,9 @@ export function scoreEnemyTarget({
   const recencyScore = Math.max(0, freshnessWindow - recencyAge) * 2;
   const visibilityBonus = isCurrentlyVisible ? 8 : 0;
   const distancePenalty = distance * distanceWeight;
-  const score = typeBias + recencyScore + visibilityBonus + strategicValue - distancePenalty;
+  // Bonus for targets we can converge on with multiple units
+  const convergenceBonus = Math.min(nearbyAlliedUnits * 4, 20);
+  const score = typeBias + recencyScore + visibilityBonus + strategicValue + convergenceBonus - distancePenalty;
 
   return {
     score,
@@ -146,7 +151,7 @@ export function collectCityThreatSamples(
   civilizationId: number,
   storage: any,
   roundNumber: number,
-  maxDistance: number = 6
+  maxDistance: number = 8
 ): CityThreatSample[] {
   if (!gameEngine?.squareGrid) {
     return [];
