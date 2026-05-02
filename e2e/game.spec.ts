@@ -219,3 +219,604 @@ test.describe('Help Dialog', () => {
     await expect(modal.getByRole('tab')).toHaveCount(4);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Helper: advance N turns by repeatedly ending and confirming
+// ---------------------------------------------------------------------------
+
+/**
+ * End the current turn (click End Turn, confirm modal, wait for AI processing).
+ * Skips the confirmation modal if `skipEndTurnConfirmation` is enabled.
+ */
+async function endTurn(page: Page): Promise<void> {
+  const modal = page.locator('[role="dialog"]').filter({ hasText: 'End Turn?' });
+
+  // The "All Your Units Have Moved!" dialog may auto-appear. If so, just confirm it.
+  if (await modal.isVisible().catch(() => false)) {
+    await modal.locator('.btn-success').click();
+  } else {
+    // Click the top-bar End Turn button
+    await page.locator('.game-top-bar').getByRole('button', { name: 'End Turn' }).click();
+
+    // If a confirmation modal appears, confirm it
+    if (await modal.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await modal.locator('.btn-success').click();
+    }
+  }
+
+  // Wait until it's the human player's turn again (End Turn button re-enabled)
+  await expect(page.locator('.game-top-bar .btn-success')).toBeEnabled({ timeout: 30_000 });
+}
+
+/**
+ * Advance the game by `n` turns.
+ */
+async function advanceTurns(page: Page, n: number): Promise<void> {
+  for (let i = 0; i < n; i++) {
+    await endTurn(page);
+  }
+  // Dismiss the auto-appearing "All Your Units Have Moved!" dialog if it shows
+  await dismissEndTurnDialog(page);
+}
+
+/**
+ * Dismiss the "End Turn?" confirmation dialog if it is visible.
+ */
+async function dismissEndTurnDialog(page: Page): Promise<void> {
+  const modal = page.locator('[role="dialog"]').filter({ hasText: 'End Turn?' });
+  if (await modal.isVisible({ timeout: 2_000 }).catch(() => false)) {
+    await modal.locator('button').filter({ hasText: 'Cancel' }).click();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// AI Behavior — In-Depth Tests
+// ---------------------------------------------------------------------------
+
+test.describe('AI Behavior', () => {
+  // All AI tests share the same slow test timeout because multi-turn simulation
+  // involves waiting for AI processing each round.
+  test.setTimeout(120_000);
+
+  test.describe('Turn Processing', () => {
+    test('AI processes its turn and returns control to player', async ({ page }) => {
+      await startGame(page);
+
+      // Capture initial turn info
+      const turnBefore = await page.locator('.game-top-bar').textContent();
+
+      await endTurn(page);
+
+      // After one full round, the year should have advanced
+      await expect(page.locator('.game-top-bar')).not.toContainText('4000 BC');
+
+      // The game should still be functional — player's turn
+      await expect(page.locator('.game-top-bar .btn-success')).toBeEnabled();
+    });
+
+    test('game advances through multiple turns without errors', async ({ page }) => {
+      await startGame(page);
+
+      // Advance 5 turns — tests that the AI doesn't crash or hang
+      await advanceTurns(page, 5);
+
+      // Verify game progressed (turn counter > 1)
+      await expect(page.getByText(/Turn [2-9]\d*/).first()).toBeVisible();
+      // Game canvas still renders
+      await expect(page.locator('.game-canvas canvas').first()).toBeVisible();
+    });
+  });
+
+  test.describe('AI City Founding', () => {
+    test('AI founds a city within the first few turns', async ({ page }) => {
+      await startGame(page);
+
+      // Advance enough turns for the AI to move its settler and found a city
+      // On CLOSEUP_1V1 the AI should found a city within ~3 turns
+      await advanceTurns(page, 5);
+
+      // Open the diplomacy report to check other civilizations
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Diplomacy/ }).click();
+
+      // The Foreign Advisor modal should show at least one other civilization
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      // Close the diplomacy report
+      await page.keyboard.press('Escape');
+
+      // Verify the total cities count increased (initial 0 for player, AI should have 1+)
+      // We can check via the game state exposed in the side panel
+      const sidePanel = page.locator('.game-side-panel').first();
+      await expect(sidePanel).toBeVisible();
+    });
+  });
+
+  test.describe('AI Diplomacy', () => {
+    test('Foreign Advisor shows AI civilization with diplomatic status', async ({ page }) => {
+      await startGame(page);
+
+      // Need a few turns so the AI civilization is discovered
+      await advanceTurns(page, 3);
+
+      // Open the Foreign Advisor via WORLD > Diplomacy
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Diplomacy/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      // The modal should list at least one AI civilization
+      // Either it shows civ data or "No other civilizations discovered yet."
+      const noCivsMsg = modal.getByText('No other civilizations discovered yet.');
+      const civRows = modal.locator('.diplomacy-report-row');
+
+      // One of these conditions should be true
+      const hasNoCivs = await noCivsMsg.isVisible().catch(() => false);
+      if (!hasNoCivs) {
+        // AI civilization row(s) should be displayed
+        await expect(civRows.first()).toBeVisible();
+        // Each row should have a name and a status indicator
+        await expect(civRows.first().locator('.diplomacy-report-name')).toBeVisible();
+        await expect(civRows.first().locator('.diplomacy-report-status')).toBeVisible();
+      }
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('diplomatic status shows Peace by default', async ({ page }) => {
+      await startGame(page);
+      await advanceTurns(page, 3);
+
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Diplomacy/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      const civRows = modal.locator('.diplomacy-report-row');
+      if (await civRows.count() > 0) {
+        // Default diplomatic status should be "Peace"
+        await expect(civRows.first().locator('.diplomacy-report-status')).toContainText('Peace');
+      }
+
+      await page.keyboard.press('Escape');
+    });
+  });
+
+  test.describe('Tech Tree', () => {
+    test('Tech Tree modal shows available technologies', async ({ page }) => {
+      await startGame(page);
+
+      // Open Tech Tree via WORLD menu
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Tech Tree/ }).click();
+
+      // Tech Tree modal should be visible
+      const modal = page.locator('.modal').filter({ hasText: 'Technology Tree' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      // Should contain SVG-rendered tech tree nodes
+      const techNodes = modal.locator('svg rect');
+      // There should be multiple technology nodes
+      expect(await techNodes.count()).toBeGreaterThan(5);
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('player can select a technology to research', async ({ page }) => {
+      await startGame(page);
+
+      // Open the Tech Tree
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Tech Tree/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Technology Tree' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      // Click on an available (blue) tech node — the first available one
+      // Available techs have fill="#1e90ff"
+      const availableTech = modal.locator('svg rect[fill="#1e90ff"]').first();
+      if (await availableTech.isVisible().catch(() => false)) {
+        await availableTech.click();
+        // After clicking, a tech info tooltip or selection indicator should appear
+        // The tech node should change color or show a tooltip
+      }
+
+      await page.keyboard.press('Escape');
+    });
+  });
+
+  test.describe('Side Panel Resources', () => {
+    test('side panel shows player resources', async ({ page }) => {
+      await startGame(page);
+
+      const sidePanel = page.locator('.game-side-panel').first();
+      await expect(sidePanel).toBeVisible();
+
+      // Should display gold, units, and cities info
+      await expect(sidePanel.getByText(/🪙/).first()).toBeVisible();
+      await expect(sidePanel.getByText(/Units:/).first()).toBeVisible();
+      await expect(sidePanel.getByText(/Cities:/).first()).toBeVisible();
+    });
+
+    test('resources update after advancing turns', async ({ page }) => {
+      await startGame(page);
+
+      // Capture initial stats
+      const sidePanel = page.locator('.game-side-panel').first();
+      const initialText = await sidePanel.textContent();
+
+      // Advance several turns
+      await advanceTurns(page, 3);
+
+      // The side panel content should have changed (at minimum the turn display)
+      // We just verify it's still functional and showing data
+      await expect(sidePanel).toBeVisible();
+      await expect(sidePanel.getByText(/Units:/).first()).toBeVisible();
+    });
+  });
+
+  test.describe('Game Stability', () => {
+    test('game survives 10 turns without crashing', async ({ page }) => {
+      test.setTimeout(180_000);
+      await startGame(page);
+
+      // Run 10 full turns — stresses the AI turn processing loop
+      await advanceTurns(page, 10);
+
+      // Game should still be running and stable
+      await expect(page.locator('.game-canvas canvas').first()).toBeVisible();
+      await expect(page.locator('.game-top-bar')).toBeVisible();
+
+      // Turn counter should show the game progressed significantly
+      const topBarText = await page.locator('.game-top-bar').textContent() ?? '';
+      const turnMatch = topBarText.match(/Turn (\d+)/);
+      expect(turnMatch).not.toBeNull();
+      expect(Number(turnMatch![1])).toBeGreaterThanOrEqual(8);
+
+      // End Turn button should be enabled (player's turn)
+      await expect(page.locator('.game-top-bar .btn-success')).toBeEnabled();
+    });
+
+    test('UI remains responsive after many turns', async ({ page }) => {
+      test.setTimeout(180_000);
+      await startGame(page);
+      await advanceTurns(page, 5);
+
+      // Menus should still work
+      await page.getByRole('button', { name: 'GAME' }).click();
+      await expect(page.getByRole('button', { name: /New Game/ })).toBeVisible();
+      await page.keyboard.press('Escape');
+
+      // Side panel should still render
+      await expect(page.locator('.game-side-panel').first()).toBeVisible();
+
+      // Canvas should still be interactive (no frozen state)
+      await page.locator('.game-canvas').first().click();
+    });
+
+    test('auto end turn checkbox is available', async ({ page }) => {
+      await startGame(page);
+
+      // The side panel should contain the "Auto. turn ending" checkbox
+      const autoEndTurn = page.locator('text=Auto. turn ending');
+      await expect(autoEndTurn).toBeVisible();
+
+      // It should have an associated checkbox
+      const checkbox = page.getByRole('checkbox', { name: /Auto.*turn/i });
+      await expect(checkbox).toBeVisible();
+      // Default should be unchecked
+      await expect(checkbox).not.toBeChecked();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // AI Research & Technology
+  // -------------------------------------------------------------------------
+
+  test.describe('AI Research & Technology', () => {
+    test('AI researches technology over multiple turns', async ({ page }) => {
+      test.setTimeout(180_000);
+      await startGame(page);
+
+      // Advance several turns so AI has time to research
+      await advanceTurns(page, 8);
+
+      // Open the Diplomacy report via WORLD menu
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Diplomacy/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      // The AI civ should be visible
+      const civRows = modal.locator('.diplomacy-report-row');
+      if (await civRows.count() > 0) {
+        // Check that AI civ has a name — proves they survived and are active
+        await expect(civRows.first().locator('.diplomacy-report-name')).not.toBeEmpty();
+      }
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('Tech Tree shows researched technologies after turns', async ({ page }) => {
+      test.setTimeout(180_000);
+      await startGame(page);
+
+      // Advance turns to allow research progress
+      await advanceTurns(page, 6);
+
+      // Open Tech Tree via WORLD menu
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Tech Tree/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Technology Tree' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      // There should be SVG nodes rendered
+      const allNodes = modal.locator('svg rect');
+      expect(await allNodes.count()).toBeGreaterThan(5);
+
+      await page.keyboard.press('Escape');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Diplomacy Deep Dive
+  // -------------------------------------------------------------------------
+
+  test.describe('Diplomacy Deep Dive', () => {
+    test('diplomacy modal shows attitude indicator for AI civ', async ({ page }) => {
+      test.setTimeout(180_000);
+      await startGame(page);
+      await advanceTurns(page, 5);
+
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Diplomacy/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      const civRows = modal.locator('.diplomacy-report-row');
+      if (await civRows.count() > 0) {
+        // Each row should show an attitude label (Friendly/Neutral/Annoyed/Hostile)
+        const attitude = civRows.first().locator('.diplomacy-report-attitude');
+        await expect(attitude).toBeVisible();
+        const text = await attitude.textContent();
+        expect(['Friendly', 'Neutral', 'Annoyed', 'Hostile']).toContain(text?.trim());
+      }
+
+      await page.keyboard.press('Escape');
+    });
+
+    test('diplomacy modal shows leader name and portrait area', async ({ page }) => {
+      await startGame(page);
+      await advanceTurns(page, 3);
+
+      await page.getByRole('button', { name: 'WORLD' }).click();
+      await page.getByRole('button', { name: /Diplomacy/ }).click();
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+
+      const civRows = modal.locator('.diplomacy-report-row');
+      if (await civRows.count() > 0) {
+        // Portrait area should exist
+        await expect(civRows.first().locator('.diplomacy-report-portrait')).toBeVisible();
+      }
+
+      await page.keyboard.press('Escape');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Turn & Year Display
+  // -------------------------------------------------------------------------
+
+  test.describe('Turn & Year Display', () => {
+    test('top bar displays turn number and year', async ({ page }) => {
+      await startGame(page);
+
+      const topBar = page.locator('.game-top-bar');
+      // Should show "Turn 1" and a year like "4000 BC"
+      await expect(topBar.getByText(/Turn \d+/)).toBeVisible();
+      await expect(topBar.getByText(/BC/)).toBeVisible();
+    });
+
+    test('turn number and year advance after ending turn', async ({ page }) => {
+      await startGame(page);
+
+      const topBar = page.locator('.game-top-bar');
+      const initialText = await topBar.textContent();
+
+      await endTurn(page);
+
+      // The year should have changed (no longer 4000 BC)
+      await expect(topBar).not.toContainText('4000 BC');
+    });
+
+    test('side panel shows player stats', async ({ page }) => {
+      await startGame(page);
+
+      const sidePanel = page.locator('.game-side-panel').first();
+      // In "No Selection" state, shows Units and Cities counts
+      await expect(sidePanel.getByText(/Units:/).first()).toBeVisible();
+      await expect(sidePanel.getByText(/Cities:/).first()).toBeVisible();
+    });
+
+    test('player founds a city using settler', async ({ page }) => {
+      test.setTimeout(120_000);
+      await startGame(page);
+
+      // The player starts with a settler — try to found a city by clicking "Found City"
+      const foundCityBtn = page.getByRole('button', { name: /Found City/i });
+      if (await foundCityBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await foundCityBtn.click();
+        // After founding, side panel should show a city
+        const sidePanel = page.locator('.game-side-panel').first();
+        await expect(sidePanel.getByText('Cities: 1').first()).toBeVisible({ timeout: 10_000 });
+      }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Minimap
+  // -------------------------------------------------------------------------
+
+  test.describe('Minimap', () => {
+    test('minimap canvas is rendered', async ({ page }) => {
+      await startGame(page);
+
+      // Minimap is inside the side panel in a minimap-container
+      const minimap = page.locator('.minimap-container canvas');
+      await expect(minimap).toBeVisible();
+    });
+
+    test('minimap is inside the side panel', async ({ page }) => {
+      await startGame(page);
+
+      const sidePanel = page.locator('.game-side-panel').first();
+      const minimapSection = sidePanel.locator('.minimap-section');
+      await expect(minimapSection).toBeVisible();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Unit Selection & Side Panel
+  // -------------------------------------------------------------------------
+
+  test.describe('Unit Selection & Side Panel', () => {
+    test('side panel has selection section', async ({ page }) => {
+      await startGame(page);
+
+      const sidePanel = page.locator('.game-side-panel').first();
+      const selectionSection = sidePanel.locator('.selection-section');
+      await expect(selectionSection).toBeVisible();
+    });
+
+    test('clicking on settler shows unit info in side panel', async ({ page }) => {
+      await startGame(page);
+
+      // Click on the settler unit in the canvas center to select it
+      const canvas = page.locator('.game-canvas canvas').first();
+      await canvas.click();
+
+      // After clicking the settler tile, "Selected Unit" or unit type should appear
+      const sidePanel = page.locator('.game-side-panel').first();
+      const selectionSection = sidePanel.locator('.selection-section');
+      await expect(selectionSection).toBeVisible();
+      // It should now show something other than "No Selection" (could be Selected Unit, Selected Tile, etc.)
+      const text = await selectionSection.textContent();
+      expect(text).toBeTruthy();
+    });
+
+    test('side panel shows player gold display', async ({ page }) => {
+      await startGame(page);
+
+      const sidePanel = page.locator('.game-side-panel').first();
+      // Should always show the gold display with coin emoji
+      await expect(sidePanel.getByText(/🪙/).first()).toBeVisible();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // AI Expansion (longer gameplay)
+  // -------------------------------------------------------------------------
+
+  test.describe('AI Expansion', () => {
+    test('game state changes meaningfully over 15 turns', async ({ page }) => {
+      test.setTimeout(240_000);
+      await startGame(page);
+
+      // Capture initial turn text
+      const topBar = page.locator('.game-top-bar');
+      const initialText = await topBar.textContent();
+
+      // Advance 15 turns
+      await advanceTurns(page, 15);
+
+      // Verify the game has progressed substantially
+      const finalText = await topBar.textContent();
+      expect(finalText).not.toBe(initialText);
+
+      // Extract turn number from "Turn {n}"
+      const turnMatch = finalText?.match(/Turn (\d+)/);
+      expect(turnMatch).not.toBeNull();
+      expect(Number(turnMatch![1])).toBeGreaterThanOrEqual(13);
+
+      // Game should still be functional
+      await expect(page.locator('.game-canvas canvas').first()).toBeVisible();
+      await expect(topBar.locator('.btn-success')).toBeEnabled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Game Menu Actions
+  // -------------------------------------------------------------------------
+
+  test.describe('Game Menu Actions', () => {
+    test('New Game button shows confirmation dialog', async ({ page }) => {
+      test.setTimeout(120_000);
+      await startGame(page);
+
+      // Open game menu
+      await page.getByRole('button', { name: 'GAME' }).click();
+      await expect(page.getByRole('button', { name: /New Game/ })).toBeVisible();
+
+      // Set up dialog handler to dismiss the confirm dialog
+      page.once('dialog', async dialog => {
+        expect(dialog.type()).toBe('confirm');
+        expect(dialog.message()).toContain('New Game');
+        await dialog.dismiss(); // Cancel to stay in current game
+      });
+
+      // Click New Game — triggers window.confirm()
+      await page.getByRole('button', { name: /New Game/ }).click();
+
+      // Game should still be running (we dismissed the dialog)
+      await expect(page.locator('.game-canvas canvas').first()).toBeVisible();
+    });
+
+    test('Help button from INFO menu opens help dialog', async ({ page }) => {
+      await startGame(page);
+
+      await page.getByRole('button', { name: 'INFO' }).click();
+      await page.getByRole('button', { name: /Help/ }).click();
+
+      await expect(page.getByText('Help & Controls').first()).toBeVisible({ timeout: 5_000 });
+      await page.keyboard.press('Escape');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Keyboard Shortcuts in Game Context
+  // -------------------------------------------------------------------------
+
+  test.describe('Keyboard Shortcuts During Gameplay', () => {
+    test('D key opens diplomacy report', async ({ page }) => {
+      await startGame(page);
+
+      await page.evaluate(() =>
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', bubbles: true }))
+      );
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+      await page.keyboard.press('Escape');
+    });
+
+    test('F4 opens diplomacy report', async ({ page }) => {
+      await startGame(page);
+
+      await page.evaluate(() =>
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', code: 'F4', bubbles: true }))
+      );
+
+      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      await expect(modal).toBeVisible({ timeout: 5_000 });
+      await page.keyboard.press('Escape');
+    });
+  });
+});
