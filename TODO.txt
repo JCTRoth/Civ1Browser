@@ -100,11 +100,3 @@ Leave space for the following images (to be added later):
 * Simple event illustrations (e.g. treaty signed, war declared)
 
 All visuals should match a **retro, minimal, Civ I–style aesthetic**.
-
----
-
-If you want, I can:
-
-* Make it **even closer to Civ I** (no alliances, only cease-fire & peace)
-* Rewrite it as a **technical design spec**
-* Rewrite it as a **game engine task list**

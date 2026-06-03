@@ -405,7 +405,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         cost: 40,
         maintenance: 1,
         canSettle: true,
-        canWork: false,
+        canWork: true,
         naval: false,
         icon: '👷',
         type: 'civilian'

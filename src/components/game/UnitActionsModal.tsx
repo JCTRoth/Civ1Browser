@@ -101,6 +101,36 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
               >
                 🛣️ Build Road
               </button>
+
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('build_irrigation')}
+              >
+                🌾 Build Irrigation
+              </button>
+
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('build_mine')}
+              >
+                ⛏️ Build Mine
+              </button>
+
+              <button
+                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
+                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
+                }`}
+                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
+                onClick={() => handleAction('build_railroad')}
+              >
+                🚆 Build Railroad
+              </button>
             </>
           )}
 

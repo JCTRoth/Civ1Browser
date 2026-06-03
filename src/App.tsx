@@ -622,7 +622,7 @@ function App() {
       >
         {/* Menu items */}
         <div className="d-flex flex-grow-1 h-100 justify-content-center align-items-center">
-          {['GAME', 'ORDERS', 'WORLD', 'INFO'].map((item) => (
+          {['GAME', 'WORLD', 'INFO'].map((item) => (
             <button
               key={item}
               ref={(el) => menuRefs.current[item] = el}
@@ -917,74 +917,6 @@ function App() {
               >
                 ❓ Help
               </button>
-            </div>
-          )}
-          {activeMenu === 'ORDERS' && (
-            <div>
-              {['🏰 Build City', '🛣️ Build Road', '🌾 Irrigate', '🗿 Mine', '🏹 Fortify', '🚆 Railroad', '🌾 Farmland', '⚓ Port', '✈️ Airport', '🛣️ Superhighways', '☠️ Clean Pollution', '🏰 Fortress'].map((item, idx, arr) => (
-                <button 
-                  key={item}
-                  className="btn btn-dark text-start w-100 border-0"
-                  style={{
-                    fontSize: `${settings.menuFontSize * 1.1}px`,
-                    padding: '12px 16px',
-                    fontWeight: '600',
-                    transition: 'all 0.2s ease',
-                    borderBottom: idx < arr.length - 1 ? '1px solid rgba(255,255,255,0.1)' : 'none'
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #38a169 0%, #2f855a 100%)';
-                    (e.target as HTMLElement).style.paddingLeft = '24px';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.target as HTMLElement).style.background = 'transparent';
-                    (e.target as HTMLElement).style.paddingLeft = '16px';
-                  }}
-                  onClick={() => {
-                    console.log(`Civ1App: ORDERS - ${item} clicked`);
-                    setActiveMenu(null);
-
-                    // Map labels to improvement keys
-                    const improvementMap: Record<string, string> = {
-                      '🛣️ Build Road': 'road',
-                      '🌾 Irrigate': 'irrigation',
-                      '🗿 Mine': 'mines',
-                      '🚆 Railroad': 'railroad',
-                      '🌾 Farmland': 'farmland',
-                      '⚓ Port': 'port',
-                      '✈️ Airport': 'airport',
-                      '🛣️ Superhighways': 'superhighways',
-                      '🏰 Fortress': 'fortress'
-                    };
-
-                    const selectedUnitId = gameState.selectedUnit;
-                    if (!selectedUnitId || !gameEngine) {
-                      console.log('App: No unit selected');
-                      return;
-                    }
-                    const selectedUnit = gameEngine.units.find(u => u.id === selectedUnitId);
-                    if (!selectedUnit) {
-                      console.log('App: Selected unit not found');
-                      return;
-                    }
-
-                    // Handle different ORDERS menu actions
-                    if (item === '🏰 Build City') {
-                      if (selectedUnit.type === 'settler') {
-                        gameEngine.foundCityWithSettler(selectedUnit.id);
-                      }
-                    } else if (item === '🏹 Fortify') {
-                      gameEngine.unitFortify(selectedUnit.id);
-                    } else if (item === '☠️ Clean Pollution') {
-                      gameEngine.cleanPollution(selectedUnit.id);
-                    } else if (improvementMap[item]) {
-                      gameEngine.buildImprovement(selectedUnit.id, improvementMap[item]);
-                    }
-                  }}
-                >
-                  {item}
-                </button>
-              ))}
             </div>
           )}
           {activeMenu === 'WORLD' && (

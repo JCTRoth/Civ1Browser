@@ -116,3 +116,5 @@ storybook-static
 
 # Keep documentation files - they're important!
 *.md
+
+test-results/

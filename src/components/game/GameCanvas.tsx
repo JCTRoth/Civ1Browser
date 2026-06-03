@@ -1290,6 +1290,66 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         }
         break;
 
+      case 'build_irrigation':
+        if (unit && gameEngine?.buildImprovement) {
+          console.log(`[ContextMenu] Build irrigation action for unit ${unit.id}`);
+          const result = gameEngine.buildImprovement(unit.id, 'irrigation');
+          if (result) {
+            if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
+            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.addNotification) actions.addNotification({
+              type: 'success',
+              message: 'Irrigation built'
+            });
+          } else {
+            if (actions?.addNotification) actions.addNotification({
+              type: 'warning',
+              message: 'Cannot build irrigation here'
+            });
+          }
+        }
+        break;
+
+      case 'build_mine':
+        if (unit && gameEngine?.buildImprovement) {
+          console.log(`[ContextMenu] Build mine action for unit ${unit.id}`);
+          const result = gameEngine.buildImprovement(unit.id, 'mine');
+          if (result) {
+            if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
+            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.addNotification) actions.addNotification({
+              type: 'success',
+              message: 'Mine built'
+            });
+          } else {
+            if (actions?.addNotification) actions.addNotification({
+              type: 'warning',
+              message: 'Cannot build mine here'
+            });
+          }
+        }
+        break;
+
+      case 'build_railroad':
+        if (unit && gameEngine?.buildImprovement) {
+          console.log(`[ContextMenu] Build railroad action for unit ${unit.id}`);
+          const result = gameEngine.buildImprovement(unit.id, 'railroad');
+          if (result) {
+            if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
+            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.addNotification) actions.addNotification({
+              type: 'success',
+              message: 'Railroad built'
+            });
+          } else {
+            if (actions?.addNotification) actions.addNotification({
+              type: 'warning',
+              message: 'Cannot build railroad here'
+            });
+          }
+        }
+        break;
+
       // ===== CITY ACTIONS =====
       case 'viewProduction':
         if (city) {
