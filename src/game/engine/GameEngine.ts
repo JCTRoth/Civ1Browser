@@ -1368,6 +1368,55 @@ export default class GameEngine {
       const success = !!combatResult;
       return { success, reason: success ? 'combat_victory' : 'combat_defeat' };
     }
+    
+    // Check if there's an enemy city at target
+    const targetCity = this.getCityAt(targetCol, targetRow);
+    if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
+      // Only allow city attack if at war
+      if (this.diplomacyManager) {
+        const dipStatus = this.diplomacyManager.getStatus(unit.civilizationId, targetCity.civilizationId);
+        if (dipStatus !== 'war') {
+          return { success: false, reason: 'not_at_war' };
+        }
+      }
+      // City attack logic - use unit's attackCity method
+      const cityCombatResult = (unit as any).attackCity(targetCity, this);
+      if (!cityCombatResult) {
+        return { success: false, reason: 'cannot_attack_city' };
+      }
+      // If city was destroyed, the unit might move there
+      if (cityCombatResult.cityDestroyed) {
+        // Transfer city to attacker
+        targetCity.civilizationId = unit.civilizationId;
+        targetCity.civilization = this.civilizations?.find(c => c.id === unit.civilizationId);
+        targetCity.resetHitPoints();
+        
+        // Remove unit (sacrificed in capture)
+        this.removeUnit(unitId);
+        
+        if (this.onStateChange) {
+          this.onStateChange('CITY_CAPTURED', { 
+            city: targetCity, 
+            capturedBy: unit.civilizationId,
+            originalCiv: targetCity.civilizationId 
+          });
+        }
+        return { success: true, reason: 'city_captured' };
+      } else if (cityCombatResult.cityHit) {
+        // City took damage but not captured
+        if (this.onStateChange) {
+          this.onStateChange('CITY_ATTACKED', { 
+            city: targetCity, 
+            attacker: unit,
+            result: cityCombatResult 
+          });
+        }
+        return { success: true, reason: 'city_damaged' };
+      } else {
+        // Attacker was destroyed
+        return { success: false, reason: 'attack_failed' };
+      }
+    }
 
     // Move the unit
     const distance = this.squareGrid.chebyshevDistance(unit.col, unit.row, targetCol, targetRow);

@@ -86,6 +86,7 @@ interface SerializedCity {
     workingTiles: string[];
     founded: number;
     supportedUnitIds: string[];
+    hitPoints: number;
 }
 
 // City System
@@ -131,6 +132,10 @@ export class City {
     // Unit support and garrison
     public supportedUnitIds: Set<string>;
     
+    // City combat properties
+    public hitPoints: number;
+    public maxHitPoints: number;
+    
     // Callback for state changes (replaces EventEmitter)
     public onStateChange: ((eventType: string, data: any) => void) | null;
 
@@ -175,6 +180,10 @@ export class City {
 
         // Unit support and garrison
         this.supportedUnitIds = new Set();
+        
+        // City combat properties - HP = population (1-20)
+        this.maxHitPoints = 20;
+        this.hitPoints = this.population;
 
         // Initialize with city center
         this.workingTiles.add(`${col},${row}`);
@@ -348,6 +357,9 @@ export class City {
 
         // Update max population based on buildings
         this.updateMaxPopulation();
+        
+        // Update HP to match new population (restore 1 HP when growing)
+        this.hitPoints = Math.min(this.population, this.hitPoints + 1);
 
         // Automatically assign new citizen to work best available tile
         this.autoAssignWorker(gameMap);
@@ -360,6 +372,9 @@ export class City {
         if (this.population > 1) {
             this.population--;
             this.foodStorage = 0;
+            
+            // HP also decreases with population
+            this.hitPoints = this.population;
 
             // Remove a worker from the least productive tile
             this.removeWorker();
@@ -595,6 +610,53 @@ export class City {
     // Update city state based on happiness
     updateCityState(): void {
         this.disorder = this.unhappiness > this.happiness;
+    }
+
+    // Get city defense value (base defense = population, doubled with walls)
+    getDefenseValue(): number {
+        let defense = this.population;
+        if (this.buildings.has('city_walls')) {
+            defense *= 2;
+        }
+        return defense;
+    }
+
+    // Get defending units at this city
+    getDefendingUnits(gameMap: any): any[] {
+        const defendingUnits: any[] = [];
+        const neighbors = gameMap.grid.getNeighbors(this.col, this.row);
+        
+        for (const neighbor of neighbors) {
+            const unit = gameMap.getUnitAt(neighbor.col, neighbor.row);
+            if (unit && unit.civilizationId === this.civilizationId && unit.attackPoints > 0) {
+                defendingUnits.push(unit);
+            }
+        }
+        
+        return defendingUnits;
+    }
+
+    // City takes damage from attack
+    takeDamage(amount: number): void {
+        this.hitPoints = Math.max(0, this.hitPoints - amount);
+    }
+
+    // Check if city is captured (HP = 0)
+    isCaptured(): boolean {
+        return this.hitPoints <= 0;
+    }
+
+    // Reset HP to full (at start of turn or after being captured)
+    resetHitPoints(): void {
+        this.hitPoints = this.population;
+    }
+
+    // Update max HP when population changes
+    updateMaxHitPoints(): void {
+        // HP equals population (capped at maxHitPoints)
+        if (this.hitPoints > this.population) {
+            this.hitPoints = this.population;
+        }
     }
 
     // Update max population based on buildings
@@ -922,7 +984,8 @@ export class City {
             carriedOverProgress: this.carriedOverProgress,
             workingTiles: Array.from(this.workingTiles),
             founded: this.founded,
-            supportedUnitIds: Array.from(this.supportedUnitIds)
+            supportedUnitIds: Array.from(this.supportedUnitIds),
+            hitPoints: this.hitPoints
         };
     }
 
@@ -940,6 +1003,7 @@ export class City {
         city.workingTiles = new Set(data.workingTiles);
         city.founded = data.founded;
         city.supportedUnitIds = new Set(data.supportedUnitIds || []);
+        city.hitPoints = data.hitPoints || data.population;
         return city;
     }
 }

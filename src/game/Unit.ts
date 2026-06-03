@@ -19,6 +19,16 @@ interface CombatResult {
     attackerWinChance: number;
 }
 
+interface CityCombatResult {
+    cityHit: boolean;
+    cityDestroyed: boolean;
+    attackerRoll: number;
+    cityRoll: number;
+    attackStrength: number;
+    defenseStrength: number;
+    cityRemainingHP: number;
+}
+
 interface UnitInfo {
     id: string;
     name: string;
@@ -336,6 +346,161 @@ export class Unit {
 
     // Resolve combat between this unit and target
     resolveCombat(target: Unit, gameMap: any): CombatResult {
+        let attackStrength = this.attackPoints;
+        let defenseStrength = target.defensePoints;
+
+        // Apply veteran bonuses
+        if (this.veteran) attackStrength = Math.floor(attackStrength * 1.5);
+        if (target.veteran) defenseStrength = Math.floor(defenseStrength * 1.5);
+
+        // Apply terrain defense bonus
+        const targetTile = gameMap.getTile(target.col, target.row);
+        const terrainBonus = targetTile.getDefenseBonus();
+        defenseStrength += terrainBonus;
+
+        // Apply city defense bonus
+        const city = gameMap.getCityAt(target.col, target.row);
+        if (city) {
+            const cityDefense = city.population >= 8 ? 2.7 : 1.8;
+            defenseStrength += cityDefense;
+        }
+
+        // Apply fortification bonus
+        if (target.fortified) {
+            defenseStrength = Math.floor(defenseStrength * 1.5);
+        }
+
+        // Calculate combat odds
+        const totalStrength = attackStrength + defenseStrength;
+        const attackerWinChance = attackStrength / totalStrength;
+
+        // Determine winner
+        const random = Math.random();
+        const attackerWins = random < attackerWinChance;
+
+        return {
+            attackerWins,
+            attackStrength,
+            defenseStrength,
+            attackerWinChance
+        };
+    }
+
+    // Attack a city
+    attackCity(city: any, gameMap: any): CityCombatResult | null {
+        if (!this.canAttackCity(city, gameMap)) {
+            return null;
+        }
+
+        const distance = gameMap.grid.distance(this.col, this.row, city.col, city.row);
+        if (distance > 1) {
+            return null; // Can only attack adjacent cities
+        }
+
+        // Check for defending units - resolve unit combat first
+        const defendingUnits = city.getDefendingUnits(gameMap);
+        if (defendingUnits.length > 0) {
+            // Combat against defending units first
+            for (const defender of defendingUnits) {
+                const result = this.resolveCombat(defender, gameMap);
+                if (result.attackerWins) {
+                    defender.destroy();
+                    // Attacker moves to defender's tile
+                    this.col = defender.col;
+                    this.row = defender.row;
+                    this.addExperience(20);
+                    defender.addExperience(10);
+                } else {
+                    // Attacker destroyed
+                    this.destroy();
+                    this.movement = 0;
+                    this.moved = true;
+                    return {
+                        cityHit: false,
+                        cityDestroyed: false,
+                        attackerRoll: 0,
+                        cityRoll: 0,
+                        attackStrength: result.attackStrength,
+                        defenseStrength: result.defenseStrength,
+                        cityRemainingHP: city.hitPoints
+                    };
+                }
+            }
+        }
+
+        // Now attack the city itself using Civ1 mechanics: A + d6 vs D + d6
+        const attackStrength = this.attackPoints;
+        const defenseStrength = city.getDefenseValue();
+        
+        // Roll dice
+        const attackerRoll = Math.floor(Math.random() * 6) + 1;
+        const cityRoll = Math.floor(Math.random() * 6) + 1;
+        
+        const totalAttack = attackStrength + attackerRoll;
+        const totalDefense = defenseStrength + cityRoll;
+        
+        const cityHit = totalAttack > totalDefense;
+        let cityDestroyed = false;
+        
+        if (cityHit) {
+            city.takeDamage(1);
+            if (city.isCaptured()) {
+                cityDestroyed = true;
+            }
+        } else {
+            // Attacker is destroyed when failing to hit city
+            this.destroy();
+        }
+
+        // End movement for attacker if not destroyed
+        if (!cityDestroyed && this.active) {
+            this.movement = 0;
+            this.moved = true;
+        }
+
+        // Update city HP if population changed
+        city.updateMaxHitPoints();
+
+        if (this.onStateChange && !cityDestroyed) {
+            this.onStateChange('attackedCity', { 
+                attacker: this, 
+                city, 
+                cityHit,
+                attackerRoll,
+                cityRoll,
+                attackStrength,
+                defenseStrength,
+                cityRemainingHP: city.hitPoints
+            });
+        }
+
+        return {
+            cityHit,
+            cityDestroyed,
+            attackerRoll,
+            cityRoll,
+            attackStrength,
+            defenseStrength,
+            cityRemainingHP: city.hitPoints
+        };
+    }
+
+    // Check if unit can attack a city
+    canAttackCity(city: any, gameMap: any): boolean {
+        if (!city || city.civilization.id === this.civilization.id) {
+            return false;
+        }
+
+        if (this.attackPoints === 0) {
+            return false; // Non-combat units can't attack
+        }
+
+        const distance = gameMap.grid.distance(this.col, this.row, city.col, city.row);
+        return distance <= 1;
+    }
+
+    // Resolve combat against a defending unit (used during city attack)
+    private resolveCombat(target: Unit, gameMap: any): CombatResult {
         let attackStrength = this.attackPoints;
         let defenseStrength = target.defensePoints;
 

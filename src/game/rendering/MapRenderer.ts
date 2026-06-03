@@ -1299,6 +1299,30 @@ export class MapRenderer {
     ctx.font = `${Math.max(8, 10 * cameraZoom)}px monospace`;
     ctx.fillStyle = '#000';
     ctx.fillText(city.name, centerX, centerY + 24 * cameraZoom);
+    
+    // Show HP bar if city has taken damage or has more than 1 HP
+    const cityHP = (city as any).hitPoints || (city as any).population || 1;
+    const cityMaxHP = (city as any).population || 1;
+    if (cityHP < cityMaxHP) {
+      // Draw damaged HP bar
+      const hpBarWidth = 40 * cameraZoom;
+      const hpBarHeight = 6 * cameraZoom;
+      const hpBarY = centerY - size / 2 - 10 * cameraZoom;
+      
+      // Background (max HP)
+      ctx.fillStyle = '#333';
+      ctx.fillRect(centerX - hpBarWidth / 2, hpBarY, hpBarWidth, hpBarHeight);
+      
+      // HP fill (red when damaged)
+      const hpPercent = cityHP / cityMaxHP;
+      ctx.fillStyle = hpPercent < 0.5 ? '#FF0000' : '#00FF00';
+      ctx.fillRect(centerX - hpBarWidth / 2, hpBarY, hpBarWidth * hpPercent, hpBarHeight);
+      
+      // Border
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(centerX - hpBarWidth / 2, hpBarY, hpBarWidth, hpBarHeight);
+    }
   }
 
   /**
@@ -1585,10 +1609,16 @@ export class MapRenderer {
     }
 
     // Always show destination marker (even on unexplored terrain)
-    // Check if path ends at an enemy unit - if so, show combat icon instead of arrow
+    // Check if path ends at an enemy unit or city - if so, show combat icon instead of arrow
     const lastPathStep = path[path.length - 1];
     const targetUnit = units.find(u => u.col === lastPathStep.col && u.row === lastPathStep.row);
-    const isEnemyAtDestination = targetUnit && targetUnit.civilizationId !== unit.civilizationId;
+    const isEnemyAtUnit = targetUnit && targetUnit.civilizationId !== unit.civilizationId;
+    
+    // Check for enemy city at destination
+    const cities = (gameState as any).cities || [];
+    const targetCity = cities.find((c: any) => c.col === lastPathStep.col && c.row === lastPathStep.row);
+    const isEnemyAtCity = targetCity && targetCity.civilizationId !== unit.civilizationId;
+    const isEnemyAtDestination = isEnemyAtUnit || isEnemyAtCity;
 
     // Always draw destination marker regardless of explored status
     if (path.length >= 1) {
