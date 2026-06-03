@@ -5,7 +5,40 @@ interface LeaderPortraitProps {
   config: LeaderPortraitConfig;
   mood: 'friendly' | 'neutral' | 'annoyed' | 'hostile';
   size?: number;
+  leaderName?: string;
 }
+
+// Import leader images
+import leader_Alexander_the_Great from '@/assets/leader/Alexander_the_Great.jpg';
+import leader_Elizabeth_I from '@/assets/leader/Elizabeth_I.jpg';
+import leader_Frederick_the_Great from '@/assets/leader/Frederick_the_Great.jpg';
+import leader_Genghis_Khan from '@/assets/leader/Genghis_Khan.jpg';
+import leader_Hammurabi from '@/assets/leader/Hammurabi.jpg';
+import leader_Joseph_Stalin from '@/assets/leader/Joseph_Stalin.jpg';
+import leader_Julius_Caesar from '@/assets/leader/Julius_Caesar.jpg';
+import leader_Mahatma_Gandhi from '@/assets/leader/Mahatma_Gandhi.jpg';
+import leader_Mao_Tse_Tung from '@/assets/leader/Mao_Tse_Tung.jpg';
+import leader_Montezuma from '@/assets/leader/Montezuma.jpg';
+import leader_Napoleon_Bonaparte from '@/assets/leader/Napoleon_Bonaparte.jpg';
+import leader_Ramesses_II from '@/assets/leader/Ramesses_II.jpg';
+import leader_Shaka from '@/assets/leader/Shaka.jpg';
+
+// Map leader names to image paths
+const LEADER_IMAGES: Record<string, string> = {
+  'Alexander the Great': leader_Alexander_the_Great,
+  'Elizabeth I': leader_Elizabeth_I,
+  'Frederick the Great': leader_Frederick_the_Great,
+  'Dschingis Khan': leader_Genghis_Khan,
+  'Hammurabi': leader_Hammurabi,
+  'Joseph Stalin': leader_Joseph_Stalin,
+  'Julius Caesar': leader_Julius_Caesar,
+  'Mahatma Gandhi': leader_Mahatma_Gandhi,
+  'Mao Tse Tung': leader_Mao_Tse_Tung,
+  'Montezuma': leader_Montezuma,
+  'Napoleon Bonaparte': leader_Napoleon_Bonaparte,
+  'Ramesses II': leader_Ramesses_II,
+  'Shaka': leader_Shaka,
+};
 
 function renderHeadgear(cfg: LeaderPortraitConfig, cx: number, topY: number): React.ReactNode {
   const c = cfg.headgearColor;
@@ -196,14 +229,43 @@ function renderScene(cfg: LeaderPortraitConfig, w: number, h: number): React.Rea
   }
 }
 
-/** Procedurally rendered SVG leader portrait for the diplomacy screen */
-const LeaderPortrait: React.FC<LeaderPortraitProps> = ({ config, mood, size = 120 }) => {
+/** Leader portrait - uses image file if available, otherwise procedural SVG */
+const LeaderPortrait: React.FC<LeaderPortraitProps> = ({ config, mood, size = 120, leaderName }) => {
   const w = size;
   const h = size * 1.3;
   const cx = w / 2;
   const headY = h * 0.35;
   const headR = w * 0.18;
   const mouthY = headY + headR * 0.45;
+
+  // Use image file if available
+  if (leaderName && LEADER_IMAGES[leaderName]) {
+    return (
+      <div 
+        className="leader-portrait-image"
+        style={{
+          width: w,
+          height: h,
+          position: 'relative',
+          borderRadius: '4px',
+          overflow: 'hidden',
+          background: '#111',
+          border: '2px solid #555'
+        }}
+      >
+        <img 
+          src={LEADER_IMAGES[leaderName]} 
+          alt={leaderName}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center'
+          }}
+        />
+      </div>
+    );
+  }
 
   // Mood-based expression: mouth shape
   const mouthPath = mood === 'friendly'
