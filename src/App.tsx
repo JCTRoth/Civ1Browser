@@ -35,6 +35,45 @@ function App() {
   const [terrainData, setTerrainData] = useState(null);
   const menuRefs = React.useRef({});
 
+  // Simple toast notification (DOM-based for immediate feedback)
+  const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
+    try {
+      const colors: Record<string, string> = {
+        success: '#4caf50',
+        error: '#f44336',
+        warning: '#ff9800',
+      };
+      const toast = document.createElement('div');
+      toast.textContent = message;
+      Object.assign(toast.style, {
+        position: 'fixed',
+        top: '60px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: colors[type] || '#333',
+        color: '#fff',
+        padding: '12px 24px',
+        borderRadius: '4px',
+        zIndex: '99999',
+        fontFamily: 'monospace',
+        fontSize: '14px',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        opacity: '0',
+        transition: 'opacity 0.3s ease',
+        maxWidth: '80vw',
+        textAlign: 'center' as const,
+      });
+      document.body.appendChild(toast);
+      requestAnimationFrame(() => { toast.style.opacity = '1'; });
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => { if (document.body.contains(toast)) document.body.removeChild(toast); }, 300);
+      }, 3000);
+    } catch (e) {
+      console.warn('[App] showToast failed:', e);
+    }
+  };
+
   // Preload unit icons on mount
   useEffect(() => {
     preloadAllUnitIcons().catch(err => {
@@ -769,11 +808,39 @@ function App() {
                   (e.target as HTMLElement).style.paddingLeft = '16px';
                 }}
                 onClick={() => {
-                  if (gameEngine) {
-                    const ok = gameEngine.saveGame();
-                    if (ok) {
-                      window.dispatchEvent(new CustomEvent('gameNotification', { detail: { type: 'success', message: 'Game saved!' } }));
+                  if (!gameEngine) {
+                    setActiveMenu(null);
+                    return;
+                  }
+                  try {
+                    // Get save JSON
+                    let json: string | null = null;
+                    if (typeof gameEngine.getSaveJSON === 'function') {
+                      json = gameEngine.getSaveJSON();
+                    } else if (typeof gameEngine.saveGame === 'function') {
+                      gameEngine.saveGame();
+                      json = localStorage.getItem('civ1_savegame');
                     }
+                    if (!json) {
+                      showToast('Failed to generate save data', 'error');
+                      setActiveMenu(null);
+                      return;
+                    }
+                    // Trigger file download
+                    const filename = `civ1-save-turn-${gameState.currentTurn}.json`;
+                    const blob = new Blob([json], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 5000);
+                    showToast(`Game saved to ${filename}`, 'success');
+                  } catch (e) {
+                    console.error('[App] Save failed:', e);
+                    showToast('Save failed: ' + (e as Error).message, 'error');
                   }
                   setActiveMenu(null);
                 }}
@@ -797,16 +864,55 @@ function App() {
                   (e.target as HTMLElement).style.background = 'transparent';
                   (e.target as HTMLElement).style.paddingLeft = '16px';
                 }}
-                onClick={async () => {
-                  if (gameEngine) {
-                    const ok = await gameEngine.loadGame();
-                    if (ok) {
-                      window.dispatchEvent(new CustomEvent('gameNotification', { detail: { type: 'success', message: 'Game loaded!' } }));
-                    } else {
-                      window.dispatchEvent(new CustomEvent('gameNotification', { detail: { type: 'warning', message: 'No save game found' } }));
-                    }
+                onClick={() => {
+                  if (!gameEngine || typeof gameEngine.loadGame !== 'function') {
+                    showToast('Load not available', 'warning');
+                    setActiveMenu(null);
+                    return;
                   }
-                  setActiveMenu(null);
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json,application/json';
+                  input.style.display = 'none';
+                  input.onchange = async () => {
+                    const file = input.files?.[0];
+                    if (!file) {
+                      setActiveMenu(null);
+                      return;
+                    }
+                    try {
+                      const text = await file.text();
+                      const saveData = JSON.parse(text);
+                      if (!saveData || saveData.version !== 1) {
+                        showToast('Invalid or incompatible save file.', 'error');
+                        setActiveMenu(null);
+                        return;
+                      }
+                      localStorage.setItem('civ1_savegame', text);
+                      const success = await gameEngine.loadGame();
+                      if (success) {
+                        // Force a full store sync
+                        actions.updateMap(gameEngine.map);
+                        actions.updateUnits(gameEngine.getAllUnits());
+                        actions.updateCities(gameEngine.getAllCities());
+                        actions.updateCivilizations(gameEngine.civilizations);
+                        actions.updateTechnologies(gameEngine.technologies);
+                        actions.updateVisibility();
+                        showToast(`Game loaded from ${file.name}`, 'success');
+                      } else {
+                        showToast('Failed to load game state.', 'error');
+                      }
+                    } catch (e) {
+                      console.error('[App] Load failed:', e);
+                      showToast('Failed to read save file: ' + (e as Error).message, 'error');
+                    }
+                    setActiveMenu(null);
+                  };
+                  document.body.appendChild(input);
+                  input.click();
+                  setTimeout(() => {
+                    if (document.body.contains(input)) document.body.removeChild(input);
+                  }, 1000);
                 }}
               >
                 📁 Load Game

@@ -292,6 +292,7 @@ export interface GameEngine {
   cycleUnitsInTile(unitId: string): string | null;
   selectCityByIndex(index: number): boolean;
   saveGame(): boolean;
+  getSaveJSON(): string | null;
   loadGame(): Promise<boolean>;
   getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
   executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any;

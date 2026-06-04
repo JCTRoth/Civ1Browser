@@ -563,6 +563,12 @@ Lighter weight, less boilerplate, better TypeScript integration for this project
 **Bootstrap Integration**::
 Provides consistent, responsive UI without custom CSS framework development.
 
+=== Documentation
+
+Additional documentation is available in the `doc/` folder:
+
+* link:doc/save-load-system.adoc[Save & Load System] — Implementation details for game save/load and Diplomacy Report leader portrait system
+
 === Testing Strategy
 
 * **Unit Tests**: Core game logic functions

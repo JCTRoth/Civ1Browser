@@ -1388,11 +1388,11 @@ export default class GameEngine {
       if (cityCombatResult.cityDestroyed) {
         // Transfer city to attacker
         targetCity.civilizationId = unit.civilizationId;
-        targetCity.civilization = this.civilizations?.find(c => c.id === unit.civilizationId);
-        targetCity.resetHitPoints();
+        // Reset city HP as it changes hands
+        (targetCity as any).resetHitPoints?.();
         
         // Remove unit (sacrificed in capture)
-        this.removeUnit(unitId);
+        this.units = this.units.filter(u => u.id !== unitId);
         
         if (this.onStateChange) {
           this.onStateChange('CITY_CAPTURED', { 
@@ -2513,9 +2513,10 @@ export default class GameEngine {
   }
 
   /**
-   * Save game state to localStorage
+   * Return the save game data as a JSON string (without side-effects).
+   * Returns null if serialization fails.
    */
-  saveGame(): boolean {
+  getSaveJSON(): string | null {
     try {
       const saveData = {
         version: 1,
@@ -2530,8 +2531,20 @@ export default class GameEngine {
         civilizations: this.civilizations.map(c => ({ ...c })),
         technologies: this.technologies,
       };
+      return JSON.stringify(saveData);
+    } catch (e) {
+      console.error('[GameEngine] getSaveJSON failed:', e);
+      return null;
+    }
+  }
 
-      const json = JSON.stringify(saveData);
+  /**
+   * Save game state to localStorage and trigger GAME_SAVED event.
+   */
+  saveGame(): boolean {
+    try {
+      const json = this.getSaveJSON();
+      if (!json) return false;
       localStorage.setItem('civ1_savegame', json);
       console.log(`[GameEngine] Game saved (${(json.length / 1024).toFixed(1)} KB)`);
 
@@ -2563,7 +2576,25 @@ export default class GameEngine {
         return false;
       }
 
-      // Restore state
+      // ── Full internal reset before loading ──
+      // This prevents any old state from leaking into the loaded game
+      this.isGameOver = true;
+      this.isInitialized = false;
+      this.map = null;
+      this.units = [];
+      this.cities = [];
+      this.civilizations = [];
+      this.technologies = [];
+      this.squareGrid = null;
+
+      // Reset all subsystems
+      this.playerStorage.clear();
+      this.scoutMemory.clear();
+      this.diplomacyManager.reset();
+      this.victoryManager.reset();
+      this.victoryManager.syncStoreActions(this.storeActions);
+
+      // ── Restore state from save ──
       this.gameSettings = saveData.gameSettings;
       this.currentTurn = saveData.currentTurn;
       this.currentYear = saveData.currentYear;
@@ -2576,19 +2607,16 @@ export default class GameEngine {
       this.isInitialized = true;
       this.isGameOver = false;
 
-      // Recreate grid
+      // Recreate grid from saved map dimensions
       if (this.map) {
         this.squareGrid = new SquareGrid(this.map.width, this.map.height);
       }
 
-      // Re-init subsystems
-      this.playerStorage.clear();
-      this.scoutMemory.clear();
-      this.diplomacyManager.reset();
-      this.victoryManager.reset();
+      // Re-init diplomacy with all known civs
+      this.diplomacyManager.initialize(this.civilizations.map((c: any) => c.id));
       this.victoryManager.syncStoreActions(this.storeActions);
 
-      // Rebuild unit turn queue
+      // Rebuild unit turn queue for the active player
       if (this.unitTurnQueue) {
         this.unitTurnQueue.initializeQueue(this.activePlayer);
         for (const unit of this.units) {
@@ -2598,19 +2626,28 @@ export default class GameEngine {
         }
       }
 
-      // Sync to store
+      // ── Sync restored state to the Zustand store ──
       if (this.storeActions) {
+        this.storeActions.clearGameResult?.();
         this.storeActions.updateMap(this.map);
         this.storeActions.updateUnits([...this.units]);
         this.storeActions.updateCities([...this.cities]);
         this.storeActions.updateCivilizations([...this.civilizations]);
+        this.storeActions.updateTechnologies(this.technologies);
         this.storeActions.updateGameState({
           currentTurn: this.currentTurn,
           currentYear: this.currentYear,
           isLoading: false,
           gamePhase: 'playing',
           mapGenerated: true,
+          selectedHex: null,
+          selectedUnit: null,
+          activeUnit: null,
+          selectedCity: null,
+          gameResult: null,
+          winner: null,
         });
+        this.storeActions.updateVisibility();
       }
 
       console.log(`[GameEngine] Game loaded — Turn ${this.currentTurn}, Year ${this.currentYear}`);

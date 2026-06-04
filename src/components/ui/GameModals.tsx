@@ -144,6 +144,120 @@ const GameModals = ({ gameEngine }) => {
     handleCloseDialog();
   };
 
+  const handleSaveGame = () => {
+    console.log('[CLICK] Save Game button');
+    try {
+      if (!gameEngine) {
+        console.warn('[GameModals] handleSaveGame: no gameEngine');
+        actions.addNotification({ type: 'warning', message: 'Save not available.' });
+        handleCloseDialog();
+        return;
+      }
+
+      // Build save data from engine state
+      let json: string | null = null;
+      if (typeof gameEngine.getSaveJSON === 'function') {
+        json = gameEngine.getSaveJSON();
+        console.log('[GameModals] handleSaveGame: got JSON via getSaveJSON(), length:', json?.length);
+      } else if (typeof gameEngine.saveGame === 'function') {
+        gameEngine.saveGame();
+        json = localStorage.getItem('civ1_savegame');
+        console.log('[GameModals] handleSaveGame: got JSON via saveGame(), length:', json?.length);
+      }
+
+      if (!json) {
+        console.error('[GameModals] handleSaveGame: no JSON produced');
+        actions.addNotification({ type: 'error', message: 'Failed to generate save data.' });
+        handleCloseDialog();
+        return;
+      }
+
+      // Trigger file download
+      const turn = gameStats?.turn ?? 'unknown';
+      const filename = `civ1-save-turn-${turn}.json`;
+
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      console.log('[GameModals] handleSaveGame: download triggered for', filename);
+      actions.addNotification({ type: 'success', message: `Game saved to ${filename}` });
+    } catch (e) {
+      console.error('[GameModals] handleSaveGame error:', e);
+      actions.addNotification({ type: 'error', message: 'Save failed: ' + (e as Error).message });
+    }
+    handleCloseDialog();
+  };
+
+  const handleLoadGame = () => {
+    console.log('[CLICK] Load Game button');
+    if (!gameEngine || typeof gameEngine.loadGame !== 'function') {
+      console.warn('[GameModals] handleLoadGame: engine or loadGame not available');
+      actions.addNotification({ type: 'warning', message: 'Load not available.' });
+      handleCloseDialog();
+      return;
+    }
+    // Create hidden file input to let user pick a save file
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        console.log('[GameModals] handleLoadGame: no file selected');
+        handleCloseDialog();
+        return;
+      }
+      console.log('[GameModals] handleLoadGame: selected file', file.name);
+      try {
+        const text = await file.text();
+        console.log('[GameModals] handleLoadGame: read file, length:', text.length);
+        // Validate it's a valid save file
+        const saveData = JSON.parse(text);
+        if (!saveData || saveData.version !== 1) {
+          console.warn('[GameModals] handleLoadGame: invalid save data, version:', saveData?.version);
+          actions.addNotification({ type: 'error', message: 'Invalid or incompatible save file.' });
+          handleCloseDialog();
+          return;
+        }
+        // Store in localStorage so engine.loadGame() can read it
+        localStorage.setItem('civ1_savegame', text);
+        // Let the engine restore state
+        const success = await gameEngine.loadGame();
+        console.log('[GameModals] handleLoadGame: engine.loadGame returned', success);
+        if (success) {
+          // Force a full store sync after loading
+          actions.updateMap(gameEngine.map);
+          actions.updateUnits(gameEngine.getAllUnits());
+          actions.updateCities(gameEngine.getAllCities());
+          actions.updateCivilizations(gameEngine.civilizations);
+          actions.updateTechnologies(gameEngine.technologies);
+          actions.updateVisibility();
+          actions.addNotification({ type: 'success', message: `Game loaded from ${file.name}` });
+        } else {
+          actions.addNotification({ type: 'error', message: 'Failed to load game state.' });
+        }
+      } catch (e) {
+        console.error('[GameModals] handleLoadGame error:', e);
+        actions.addNotification({ type: 'error', message: 'Failed to read save file: ' + (e as Error).message });
+      }
+      handleCloseDialog();
+    };
+    document.body.appendChild(input);
+    input.click();
+    // Clean up: remove the input after a short delay (after file picker opened)
+    setTimeout(() => {
+      if (document.body.contains(input)) document.body.removeChild(input);
+    }, 1000);
+  };
+
   const handleResearchTechnology = (techId) => {
     console.log(`[CLICK] Research technology: ${techId}`);
     if (gameEngine && currentPlayer) {
@@ -195,7 +309,7 @@ const GameModals = ({ gameEngine }) => {
             <i className="bi bi-plus-circle"></i> New Game
           </Button>
           
-          <Button variant="info" size="lg" onClick={() => console.log('[CLICK] Save Game button (not implemented)')}>
+          <Button variant="info" size="lg" onClick={handleSaveGame}>
             <i className="bi bi-download"></i> Save Game
           </Button>
           
@@ -205,7 +319,7 @@ const GameModals = ({ gameEngine }) => {
             </Button>
           )}
           
-          <Button variant="warning" size="lg" onClick={() => console.log('[CLICK] Load Game button (not implemented)')}>
+          <Button variant="warning" size="lg" onClick={handleLoadGame}>
             <i className="bi bi-upload"></i> Load Game
           </Button>
           
@@ -461,7 +575,7 @@ const GameModals = ({ gameEngine }) => {
                       {/* Leader portrait slot */}
                       <div className="diplomacy-portrait-slot" style={{ borderColor: moodColors.border }}>
                         {portraitConfig ? (
-                          <LeaderPortrait config={portraitConfig} mood={selectedAttitude} size={110} />
+                          <LeaderPortrait config={portraitConfig} mood={selectedAttitude} size={110} leaderName={leaderName} />
                         ) : (
                           <div className="diplomacy-portrait-placeholder" style={{ color: selectedCivData.color || '#fff' }}>
                             <span className="diplomacy-portrait-icon">{selectedCivData.icon || '👤'}</span>
@@ -767,7 +881,7 @@ const GameModals = ({ gameEngine }) => {
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">
-          <Modal.Title>📋 Foreign Advisor</Modal.Title>
+          <Modal.Title>Diplomacy Report</Modal.Title>
         </Modal.Header>
         <Modal.Body className="diplomacy-body">
           {otherCivs.length === 0 ? (
@@ -787,7 +901,7 @@ const GameModals = ({ gameEngine }) => {
                   <div key={civ.id} className="diplomacy-report-row" style={{ borderLeftColor: civ.color || '#555' }}>
                     <div className="diplomacy-report-portrait">
                       {portraitConfig ? (
-                        <LeaderPortrait config={portraitConfig} mood={attitude} size={60} />
+                        <LeaderPortrait config={portraitConfig} mood={attitude} size={60} leaderName={leaderName} />
                       ) : (
                         <span className="diplomacy-report-icon" style={{ color: civ.color || '#fff' }}>
                           {civ.icon || '👤'}
