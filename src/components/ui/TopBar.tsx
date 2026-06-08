@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar, Nav, Button, Badge } from 'react-bootstrap';
 import { useGameStore } from '@/stores/GameStore';
 import HoverTooltip from './HoverTooltip';
@@ -15,6 +15,20 @@ const TopBar: React.FC<TopBarProps> = ({ gameEngine, onEndTurnRequest }) => {
   const uiState = useGameStore(state => state.uiState);
   const actions = useGameStore(state => state.actions);
   const turnButtonDisabled = uiState.turnButtonDisabled;
+  const turnFlashTrigger = uiState.turnFlashTrigger;
+
+  // Flash the top bar border when turn switches
+  const [isFlashing, setIsFlashing] = useState(false);
+
+  useEffect(() => {
+    // Skip the initial render
+    if (turnFlashTrigger === 0) return;
+    
+    console.log('[TopBar] Turn flash triggered, count:', turnFlashTrigger);
+    setIsFlashing(true);
+    const timer = setTimeout(() => setIsFlashing(false), 400);
+    return () => clearTimeout(timer);
+  }, [turnFlashTrigger]);
 
   const handleNextTurn = () => {
     console.log('[CLICK] Next Turn button');
@@ -53,7 +67,15 @@ const TopBar: React.FC<TopBarProps> = ({ gameEngine, onEndTurnRequest }) => {
   };
 
   return (
-    <Navbar bg="dark" variant="dark" className="game-top-bar">
+    <Navbar 
+      bg="dark" 
+      variant="dark" 
+      className="game-top-bar"
+      style={isFlashing ? { 
+        borderBottom: '3px solid #f1c40f', 
+        boxShadow: '0 0 30px rgba(241, 196, 15, 0.8)' 
+      } : undefined}
+    >
       {/* Left side - Game controls (Mobile: Hamburger menu) */}
       <Nav className="me-auto d-flex align-items-center">
         <HoverTooltip text="Open game menu and settings">

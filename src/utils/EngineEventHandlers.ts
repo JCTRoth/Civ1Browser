@@ -58,7 +58,7 @@ export class EngineEventRouter {
         this.onTurnEndConfirmationNeeded();
         break;
       case 'TURN_END':
-        this.onTurnEnd();
+        this.onTurnEnd(eventData);
         break;
       case 'AI_CLEAR_HIGHLIGHTS':
         this.onAIClearHighlights(eventData);
@@ -108,6 +108,9 @@ export class EngineEventRouter {
     const active = (this.gameEngine as any).activePlayer;
     const civ = this.gameEngine.civilizations?.[active];
     console.log('[EngineEventRouter] TURN_START for player', active, civ?.name);
+
+    // Trigger top-bar flash animation on every turn start
+    this.actions.incrementTurnFlash();
     
     const tm = (this.gameEngine as any).roundManager;
     
@@ -266,12 +269,20 @@ export class EngineEventRouter {
     }
   }
 
-  private onTurnEnd() {
-    console.log('[EngineEventRouter] TURN_END: Clearing UI state');
+  private onTurnEnd(eventData: any) {
+    console.log('[EngineEventRouter] TURN_END: Clearing UI state, civ:', eventData?.civilizationId);
     // Pure UI cleanup only
     this.actions.setGoToMode(false, null);
     this.actions.selectUnit(null);
-    // Renderer cleanup is now handled in TurnManager
+    
+    // Flash the top bar when the human player's turn ends (auto and manual)
+    const civId = eventData?.civilizationId;
+    if (civId != null) {
+      const civ = this.gameEngine.civilizations?.[civId];
+      if (civ?.isHuman) {
+        this.actions.incrementTurnFlash();
+      }
+    }
   }
 
   private onAIClearHighlights(eventData: any) {

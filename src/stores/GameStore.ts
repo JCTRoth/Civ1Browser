@@ -52,7 +52,8 @@ const createInitialUIState = (): UIState => ({
   goToMode: false,
   goToUnit: '',
   turnButtonDisabled: false,
-  currentQueueUnitId: null
+  currentQueueUnitId: null,
+  turnFlashTrigger: 0
 });
 
 // Helper function for visibility calculations
@@ -308,6 +309,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     setCurrentQueueUnitId: (unitId: string | null) => set(state => ({
       uiState: { ...state.uiState, currentQueueUnitId: unitId }
+    })),
+
+    incrementTurnFlash: () => set(state => ({
+      uiState: { ...state.uiState, turnFlashTrigger: state.uiState.turnFlashTrigger + 1 }
     })),
 
     showDialog: (dialog) => set(state => ({

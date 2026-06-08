@@ -35,6 +35,17 @@ function App() {
   const [terrainData, setTerrainData] = useState(null);
   const menuRefs = React.useRef({});
 
+  // Turn flash effect on top bar
+  const turnFlashTrigger = useGameStore(state => state.uiState.turnFlashTrigger);
+  const [isFlashing, setIsFlashing] = useState(false);
+
+  useEffect(() => {
+    if (turnFlashTrigger === 0) return;
+    setIsFlashing(true);
+    const timer = setTimeout(() => setIsFlashing(false), 400);
+    return () => clearTimeout(timer);
+  }, [turnFlashTrigger]);
+
   // Simple toast notification (DOM-based for immediate feedback)
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     try {
@@ -653,10 +664,9 @@ function App() {
     >
       {/* Top Menu Bar */}
       <div 
-        className="game-top-bar border-bottom border-light d-flex" 
+        className={`game-top-bar border-bottom border-light d-flex${isFlashing ? ' flash' : ''}`} 
         style={{ 
-          height: `${48 * settings.uiScale}px`,
-          boxShadow: 'none'
+          height: `${48 * settings.uiScale}px`
         }}
       >
         {/* Menu items */}

@@ -169,6 +169,7 @@ export interface UIState {
   goToUnit: string | null; // Unit id targeted by Go To mode (null when not set)
   turnButtonDisabled: boolean;
   currentQueueUnitId: string | null; // Current unit in the turn queue (only this unit pulses)
+  turnFlashTrigger: number; // Incremented on each turn start to trigger top-bar flash animation
 }
 
 export interface Notification {
@@ -264,6 +265,7 @@ export interface GameActions {
   resetGameState: () => void;
   resetFogOfWar: () => void;
   setTurnButtonDisabled: (disabled: boolean) => void;
+  incrementTurnFlash: () => void;
 }
 
 export interface GameEngine {

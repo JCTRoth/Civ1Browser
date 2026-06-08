@@ -98,6 +98,12 @@ body {
   min-height: 50px;
 }
 
+/* Turn-flash effect for top bar when turn switches */
+.game-top-bar.flash {
+  border-bottom: 3px solid #f1c40f !important;
+  box-shadow: 0 0 30px rgba(241, 196, 15, 0.8) !important;
+}
+
 .game-bottom-panel {
   height: auto;
   max-height: 40vh;

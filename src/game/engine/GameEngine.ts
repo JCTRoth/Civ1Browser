@@ -2055,6 +2055,12 @@ export default class GameEngine {
     // Update turn done status
     this.updateUnitTurnsDoneFlag(unit);
 
+    // Remove sleeping unit from turn queue and check if turn should auto-end
+    if (this.unitTurnQueue) {
+      this.unitTurnQueue.checkUnitStatus(unitId);
+    }
+    this.checkAndEndTurnIfNoMoves();
+
     if (this.onStateChange) {
       this.onStateChange('UNIT_SLEPT', { unit });
     }
@@ -2095,6 +2101,12 @@ export default class GameEngine {
 
     // Update turn done status
     this.updateUnitTurnsDoneFlag(unit);
+
+    // Remove fortified unit from turn queue and check if turn should auto-end
+    if (this.unitTurnQueue) {
+      this.unitTurnQueue.checkUnitStatus(unitId);
+    }
+    this.checkAndEndTurnIfNoMoves();
 
     if (this.onStateChange) {
       this.onStateChange('UNIT_FORTIFIED', { unit });

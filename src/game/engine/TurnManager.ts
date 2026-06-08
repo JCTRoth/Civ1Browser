@@ -248,6 +248,12 @@ export class TurnManager {
           // For human players, auto-select and focus on the first unit in the queue
           this.selectCurrentQueueUnit(this.currentPlayer);
         }
+        
+        // After GoTo paths are processed and queue is initialized, check if turn should auto-end
+        // (GoTo movements may have consumed all unit moves, leaving nothing for the player to do)
+        if (this.gameEngine.checkAndEndTurnIfNoMoves) {
+          this.gameEngine.checkAndEndTurnIfNoMoves();
+        }
         break;
       case TurnPhase.CITY_PRODUCTION:
         this.handleCityProduction(this.currentPlayer);
