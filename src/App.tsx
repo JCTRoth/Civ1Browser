@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from './stores/GameStore';
 import GameEngine from '@/game/engine/GameEngine';
 import GameCanvas from './components/game/GameCanvas';
@@ -35,15 +35,27 @@ function App() {
   const [terrainData, setTerrainData] = useState(null);
   const menuRefs = React.useRef({});
 
-  // Turn flash effect on top bar
+  // Turn flash effect on top bar - direct DOM manipulation for reliability
   const turnFlashTrigger = useGameStore(state => state.uiState.turnFlashTrigger);
-  const [isFlashing, setIsFlashing] = useState(false);
+  const topBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (turnFlashTrigger === 0) return;
-    setIsFlashing(true);
-    const timer = setTimeout(() => setIsFlashing(false), 400);
-    return () => clearTimeout(timer);
+    if (turnFlashTrigger === 0 || !topBarRef.current) return;
+    
+    console.log('[App] Turn flash triggered, count:', turnFlashTrigger);
+    const el = topBarRef.current;
+    
+    // Apply flash styles directly to DOM
+    el.classList.add('flash');
+    
+    const timer = setTimeout(() => {
+      el.classList.remove('flash');
+    }, 400);
+    
+    return () => {
+      clearTimeout(timer);
+      el.classList.remove('flash');
+    };
   }, [turnFlashTrigger]);
 
   // Simple toast notification (DOM-based for immediate feedback)
@@ -664,7 +676,8 @@ function App() {
     >
       {/* Top Menu Bar */}
       <div 
-        className={`game-top-bar border-bottom border-light d-flex${isFlashing ? ' flash' : ''}`} 
+        ref={topBarRef}
+        className="game-top-bar border-bottom border-light d-flex" 
         style={{ 
           height: `${48 * settings.uiScale}px`
         }}
