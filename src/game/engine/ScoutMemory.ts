@@ -24,6 +24,11 @@ export class ScoutMemory {
     this.currentRound = round;
   }
   
+  /** Get the current round number (for save/load) */
+  public getCurrentRound(): number {
+    return this.currentRound;
+  }
+
   /**
    * Record a new discovery or update an existing one
    */
@@ -151,6 +156,31 @@ export class ScoutMemory {
    */
   public clear(): void {
     this.discoveries.clear();
+    this.currentRound = 0;
     console.log(`[SCOUT-MEMORY] Cleared all discoveries`);
+  }
+
+  /** Restore discoveries from saved data (for load game) */
+  public restoreDiscoveries(data: Record<number, any[]>): void {
+    this.discoveries.clear();
+    for (const [civId, records] of Object.entries(data)) {
+      this.discoveries.set(Number(civId), records.map(r => ({
+        ...r,
+        col: r.col,
+        row: r.row,
+        type: r.type,
+        lastSeenRound: r.lastSeenRound,
+        confirmationCount: r.confirmationCount,
+      })));
+    }
+  }
+
+  /** Get all stored discoveries (for save/load) */
+  public getAllDiscoveries(): Record<number, DiscoveryRecord[]> {
+    const result: Record<number, DiscoveryRecord[]> = {};
+    for (const [civId, records] of this.discoveries.entries()) {
+      result[civId] = records.map(r => ({ ...r }));
+    }
+    return result;
   }
 }

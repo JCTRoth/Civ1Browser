@@ -2528,20 +2528,102 @@ export default class GameEngine {
    * Return the save game data as a JSON string (without side-effects).
    * Returns null if serialization fails.
    */
+  /**
+   * Serialize the entire game state to a JSON string.
+   * Includes map, units, cities, civs, tech, diplomacy, scout memory,
+   * player storage, and unit GoTo paths for full game restoration.
+   */
   getSaveJSON(): string | null {
     try {
+      // Serialize playerStorage (per-player visibility, explored, AI state)
+      const playerStorageSerialized: Record<number, any> = {};
+      for (const [civId, storage] of this.playerStorage.entries()) {
+        playerStorageSerialized[civId] = {
+          civilizationId: storage.civilizationId,
+          visibility: Array.from(storage.visibility),
+          explored: Array.from(storage.explored),
+          lastKnownUnits: Array.from(storage.lastKnownUnits.entries()),
+          lastKnownCities: Array.from(storage.lastKnownCities.entries()),
+          enemyLocations: Array.from(storage.enemyLocations.entries()),
+          scoutZones: storage.scoutZones.map(z => ({ ...z })),
+          turnData: JSON.parse(JSON.stringify(storage.turnData))
+        };
+      }
+
+      // Serialize scout memory discoveries
+      const scoutDiscoveries: Record<number, any[]> = {};
+      if (this.scoutMemory) {
+        const allCivIds = this.civilizations.map(c => c.id);
+        for (const civId of allCivIds) {
+          const discoveries = this.scoutMemory.getDiscoveries(civId);
+          if (discoveries.length > 0) {
+            scoutDiscoveries[civId] = discoveries.map(d => ({ ...d }));
+          }
+        }
+      }
+
+      // Serialize diplomacy state
+      const diplomacyRelations: any[] = [];
+      const diplomacyEvents: any[] = [];
+      if (this.diplomacyManager) {
+        const rels = this.diplomacyManager.getAllRelations();
+        for (const rel of rels) {
+          diplomacyRelations.push({
+            civA: rel.civA,
+            civB: rel.civB,
+            status: rel.status,
+            since: rel.since,
+            reputationModifier: rel.reputationModifier,
+            treatiesBrokenByA: rel.treatiesBrokenByA,
+            treatiesBrokenByB: rel.treatiesBrokenByB,
+            activeTreaties: [...rel.activeTreaties],
+            treatySince: { ...rel.treatySince },
+            tradeGoldPerTurn: rel.tradeGoldPerTurn,
+          });
+        }
+        const events = this.diplomacyManager.getEventLog();
+        for (const evt of events) {
+          diplomacyEvents.push({
+            type: evt.type,
+            fromCivId: evt.fromCivId,
+            toCivId: evt.toCivId,
+            details: evt.details,
+            goldAmount: evt.goldAmount,
+          });
+        }
+      }
+
+      // Serialize unit GoTo paths from roundManager
+      const unitPaths: Record<string, Array<{ col: number; row: number }>> = {};
+      if (this.roundManager) {
+        const allPaths = this.roundManager.getAllUnitPaths();
+        for (const [unitId, path] of allPaths.entries()) {
+          if (path.length > 0) {
+            unitPaths[unitId] = path.map(p => ({ col: p.col, row: p.row }));
+          }
+        }
+      }
+
       const saveData = {
-        version: 1,
+        version: 2, // bumped from 1 to 2 with new fields
         timestamp: Date.now(),
         gameSettings: this.gameSettings,
         currentTurn: this.currentTurn,
         currentYear: this.currentYear,
         activePlayer: this.activePlayer,
+        roundNumber: this.roundManager ? this.roundManager.getRoundNumber() : 0,
         map: this.map,
         units: this.units.map(u => ({ ...u })),
         cities: this.cities.map(c => ({ ...c })),
         civilizations: this.civilizations.map(c => ({ ...c })),
         technologies: this.technologies,
+        // New fields for full state restoration
+        playerStorage: playerStorageSerialized,
+        scoutDiscoveries,
+        diplomacyRelations,
+        diplomacyEvents,
+        unitPaths,
+        scoutMemoryRound: this.scoutMemory ? this.scoutMemory.getCurrentRound() : 0,
       };
       return JSON.stringify(saveData);
     } catch (e) {
@@ -2583,8 +2665,8 @@ export default class GameEngine {
       }
 
       const saveData = JSON.parse(json);
-      if (!saveData || saveData.version !== 1) {
-        console.warn('[GameEngine] Invalid or incompatible save data');
+      if (!saveData || (saveData.version !== 1 && saveData.version !== 2)) {
+        console.warn('[GameEngine] Invalid or incompatible save data, version:', saveData?.version);
         return false;
       }
 
@@ -2624,11 +2706,95 @@ export default class GameEngine {
         this.squareGrid = new SquareGrid(this.map.width, this.map.height);
       }
 
-      // Re-init diplomacy with all known civs
+      // ── Restore diplomacy state ──
       this.diplomacyManager.initialize(this.civilizations.map((c: any) => c.id));
+      if (saveData.version >= 2 && saveData.diplomacyRelations) {
+        this.diplomacyManager.restoreRelations(saveData.diplomacyRelations);
+      }
+      if (saveData.version >= 2 && saveData.diplomacyEvents) {
+        this.diplomacyManager.restoreEventLog(saveData.diplomacyEvents);
+      }
+
       this.victoryManager.syncStoreActions(this.storeActions);
 
-      // Rebuild unit turn queue for the active player
+      // ── Restore player storage (per-player visibility, explored maps) ──
+      if (saveData.version >= 2 && saveData.playerStorage) {
+        for (const [civIdStr, stored] of Object.entries(saveData.playerStorage)) {
+          const civId = Number(civIdStr);
+          const storage = stored as any;
+          this.initializePlayerStorage(civId);
+          const current = this.playerStorage.get(civId);
+          if (current) {
+            // Restore visibility/explored arrays
+            if (Array.isArray(storage.visibility)) {
+              for (let i = 0; i < storage.visibility.length; i++) {
+                current.visibility[i] = storage.visibility[i];
+              }
+            }
+            if (Array.isArray(storage.explored)) {
+              for (let i = 0; i < storage.explored.length; i++) {
+                current.explored[i] = storage.explored[i];
+              }
+            }
+            // Restore last known units
+            current.lastKnownUnits = new Map();
+            if (Array.isArray(storage.lastKnownUnits)) {
+              for (const [key, val] of storage.lastKnownUnits) {
+                current.lastKnownUnits.set(key, val);
+              }
+            }
+            // Restore last known cities
+            current.lastKnownCities = new Map();
+            if (Array.isArray(storage.lastKnownCities)) {
+              for (const [key, val] of storage.lastKnownCities) {
+                current.lastKnownCities.set(key, val);
+              }
+            }
+            // Restore enemy locations
+            current.enemyLocations = new Map();
+            if (Array.isArray(storage.enemyLocations)) {
+              for (const [key, val] of storage.enemyLocations) {
+                current.enemyLocations.set(Number(key), val);
+              }
+            }
+            // Restore scout zones
+            current.scoutZones = Array.isArray(storage.scoutZones)
+              ? storage.scoutZones.map((z: any) => ({ ...z }))
+              : [];
+            // Restore AI turn data
+            current.turnData = storage.turnData
+              ? JSON.parse(JSON.stringify(storage.turnData))
+              : {};
+          }
+        }
+      }
+
+      // ── Restore scout memory discoveries ──
+      if (saveData.version >= 2 && saveData.scoutDiscoveries) {
+        // Restore round number first
+        if (typeof saveData.scoutMemoryRound === 'number') {
+          this.scoutMemory.setCurrentRound(saveData.scoutMemoryRound);
+        }
+        this.scoutMemory.restoreDiscoveries(saveData.scoutDiscoveries);
+      }
+
+      // ── Restore unit GoTo paths ──
+      if (saveData.version >= 2 && saveData.unitPaths && this.roundManager) {
+        for (const [unitId, path] of Object.entries(saveData.unitPaths)) {
+          const typedPath = path as Array<{ col: number; row: number }>;
+          if (typedPath.length > 0) {
+            this.roundManager.setUnitPath(unitId, typedPath);
+          }
+        }
+      }
+
+      // ── Restore round number ──
+      if (saveData.version >= 2 && typeof saveData.roundNumber === 'number') {
+        // The round number is restored via the TurnManager
+        // It will be set when advanceTurn recalculates
+      }
+
+      // ── Rebuild unit turn queue for the active player ──
       if (this.unitTurnQueue) {
         this.unitTurnQueue.initializeQueue(this.activePlayer);
         for (const unit of this.units) {

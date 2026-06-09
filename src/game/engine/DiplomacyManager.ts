@@ -145,6 +145,25 @@ export class DiplomacyManager {
     return result;
   }
 
+  /** Get all diplomatic relations (for save/load serialization) */
+  getAllRelations(): DiplomaticRelation[] {
+    return Array.from(this.relations.values());
+  }
+
+  /** Restore relations from saved data (for load game) */
+  restoreRelations(relations: DiplomaticRelation[]): void {
+    this.relations.clear();
+    for (const rel of relations) {
+      const key = this.key(rel.civA, rel.civB);
+      this.relations.set(key, { ...rel });
+    }
+  }
+
+  /** Restore event log from saved data (for load game) */
+  restoreEventLog(events: DiplomacyEvent[]): void {
+    this.eventLog = events.map(e => ({ ...e }));
+  }
+
   /** Get the recent event log */
   getEventLog(): DiplomacyEvent[] {
     return [...this.eventLog];

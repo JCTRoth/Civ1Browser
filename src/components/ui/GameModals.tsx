@@ -221,7 +221,7 @@ const GameModals = ({ gameEngine }) => {
         console.log('[GameModals] handleLoadGame: read file, length:', text.length);
         // Validate it's a valid save file
         const saveData = JSON.parse(text);
-        if (!saveData || saveData.version !== 1) {
+        if (!saveData || (saveData.version !== 1 && saveData.version !== 2)) {
           console.warn('[GameModals] handleLoadGame: invalid save data, version:', saveData?.version);
           actions.addNotification({ type: 'error', message: 'Invalid or incompatible save file.' });
           handleCloseDialog();
