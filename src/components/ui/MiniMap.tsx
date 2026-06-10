@@ -78,7 +78,7 @@ const MiniMap: React.FC<MiniMapProps> = ({ gameEngine = null }) => {
     const civilizationsSource = effectiveCivilizations && effectiveCivilizations.length > 0 ? effectiveCivilizations : civilizations;
 
     // Show all units and cities, rely on fog-of-war visibility in renderer.
-    // This ensures enemy movement appears on the minimap when inside player vision.
+    // This ensures enemy movement appears on the minimap only when inside player vision.
     const visibleUnits = units;
     const visibleCities = cities;
     if (!settings.devMode) {

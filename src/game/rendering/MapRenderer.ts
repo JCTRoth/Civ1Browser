@@ -192,6 +192,18 @@ export interface RenderMinimapParams {
   civilizations: Civilization[];
   /** When true, ignore fog-of-war (show all tiles/units) */
   ignoreFog?: boolean;
+  /**
+   * Per-player visibility array to use instead of map.visibility.
+   * When set, the minimap shows fog of war from this player's perspective
+   * rather than the active player's. Used to keep the minimap showing the
+   * human player's view even during AI turns.
+   */
+  playerVisibility?: boolean[];
+  /**
+   * Per-player explored/revealed array to use instead of map.revealed.
+   * Paired with playerVisibility for consistent per-player fog of war.
+   */
+  playerRevealed?: boolean[];
 }
 
 /**
@@ -238,6 +250,10 @@ interface MinimapFogState {
   hasVisibility: boolean;
   /** Whether any tiles have been revealed */
   anyRevealed: boolean;
+  /** Optional per-player visibility array (overrides map.visibility) */
+  visibility?: boolean[] | null;
+  /** Optional per-player revealed array (overrides map.revealed) */
+  revealed?: boolean[] | null;
 }
 
 /**
@@ -575,14 +591,31 @@ export class MapRenderer {
    * @param params - Parameters for minimap rendering
    */
   renderMinimap(params: RenderMinimapParams): void {
-    const { ctx, map, cssWidth, cssHeight, camera, units, cities, civilizations, ignoreFog } = params;
+    const { ctx, map, cssWidth, cssHeight, camera, units, cities, civilizations, ignoreFog, playerVisibility, playerRevealed } = params;
     this.resetMinimapCanvas(ctx, cssWidth, cssHeight);
 
-    const fogState = ignoreFog ? { visibility: null, revealed: null } as any : this.getMinimapFogState(map);
+    // When per-player visibility is provided, create a fog state that uses it
+    // instead of the global map.visibility/map.revealed. This allows the minimap
+    // to show a specific player's perspective (e.g. the human player) even when
+    // the active player changes during AI turns.
+    let fogState: MinimapFogState;
+    if (ignoreFog) {
+      fogState = { visibility: null, revealed: null } as any;
+    } else if (playerVisibility && playerRevealed) {
+      fogState = {
+        hasRevealed: true,
+        hasVisibility: true,
+        anyRevealed: playerRevealed.some(Boolean),
+        visibility: playerVisibility,
+        revealed: playerRevealed
+      };
+    } else {
+      fogState = this.getMinimapFogState(map);
+    }
 
     this.drawMinimapTerrain(ctx, map, cssWidth, cssHeight, fogState);
-    this.drawMinimapCities(ctx, map, cities, cssWidth, cssHeight);
-    this.drawMinimapUnits(ctx, map, units, civilizations, cssWidth, cssHeight, !!ignoreFog);
+    this.drawMinimapCities(ctx, map, cities, cssWidth, cssHeight, fogState);
+    this.drawMinimapUnits(ctx, map, units, civilizations, cssWidth, cssHeight, !!ignoreFog, fogState);
     this.drawMinimapViewport(ctx, map, camera, cssWidth, cssHeight);
   }
 
@@ -966,25 +999,34 @@ export class MapRenderer {
     const tileWidth = width / map.width;
     const tileHeight = height / map.height;
 
+    // Use per-player arrays if provided, otherwise fall back to map's defaults
+    const revealedArr = fogState.revealed ?? map.revealed;
+    const visibilityArr = fogState.visibility ?? map.visibility;
+
     for (let row = 0; row < map.height; row++) {
       for (let col = 0; col < map.width; col++) {
         const tileIndex = this.getTileIndex(row, col, map.width);
         const tile: any = map.tiles?.[tileIndex];
         if (!tile) continue;
 
+        // Default to black for unexplored tiles when fog data is available
+        if (fogState.hasRevealed) {
+          const explored = revealedArr?.[tileIndex] ?? false;
+          if (!explored) {
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
+            continue;
+          }
+        }
+
         const terrainProps = this.resolveTerrain(tile.type);
         ctx.fillStyle = terrainProps.color;
         ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
 
-        if (fogState.hasRevealed && fogState.anyRevealed) {
-          const explored = map.revealed?.[tileIndex] ?? true;
-          const visible = map.visibility?.[tileIndex] ?? true;
-          if (!explored) {
-            // Draw completely black for unexplored areas
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
-          } else if (!visible) {
-            // Draw semi-transparent black for explored but not currently visible
+        // Apply semi-transparent overlay for explored but not currently visible tiles
+        if (fogState.hasRevealed) {
+          const visible = visibilityArr?.[tileIndex] ?? false;
+          if (!visible) {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
           }
@@ -1008,7 +1050,8 @@ export class MapRenderer {
     map: MapState,
     cities: City[],
     width: number,
-    height: number
+    height: number,
+    fogState?: MinimapFogState
   ): void {
     if (!Array.isArray(cities) || cities.length === 0) {
       return;
@@ -1017,9 +1060,12 @@ export class MapRenderer {
     const tileWidth = width / map.width;
     const tileHeight = height / map.height;
 
+    // Use per-player visibility if provided, otherwise fall back to map's default
+    const visibilityArr = fogState?.visibility ?? map.visibility;
+
     for (const city of cities) {
       const tileIndex = this.getTileIndex(city.row, city.col, map.width);
-      const isVisible = map.visibility ? map.visibility[tileIndex] : false;
+      const isVisible = visibilityArr ? visibilityArr[tileIndex] : false;
       if (!isVisible) continue;
 
       const x = city.col * tileWidth;
@@ -1047,7 +1093,8 @@ export class MapRenderer {
     civilizations: Civilization[],
     width: number,
     height: number,
-    ignoreFog: boolean = false
+    ignoreFog: boolean = false,
+    fogState?: MinimapFogState
   ): void {
     if (!Array.isArray(units) || units.length === 0) {
       return;
@@ -1056,9 +1103,12 @@ export class MapRenderer {
     const tileWidth = width / map.width;
     const tileHeight = height / map.height;
 
+    // Use per-player visibility if provided, otherwise fall back to map's default
+    const visibilityArr = fogState?.visibility ?? map.visibility;
+
     for (const unit of units) {
       const tileIndex = this.getTileIndex(unit.row, unit.col, map.width);
-      const isVisible = ignoreFog ? true : (map.visibility ? map.visibility[tileIndex] : false);
+      const isVisible = ignoreFog ? true : (visibilityArr ? visibilityArr[tileIndex] : false);
       
       // Only draw units on visible tiles (fog of war)
       if (!isVisible) continue;

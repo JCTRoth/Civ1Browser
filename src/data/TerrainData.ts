@@ -8,7 +8,7 @@ export type TerrainInfo = {
 export const TILE_SIZE = 32;
 
 export const TERRAIN_TYPES: Record<string, TerrainInfo> = {
-  OCEAN: { color: '#4169E1', char: '~', name: 'Ocean' },
+  OCEAN: { color: '#4169E1', char: '~~', name: 'Ocean' },
   PLAINS: { color: '#90EE90', char: '=', name: 'Plains' },
   GRASSLAND: { color: '#32CD32', char: '"', name: 'Grassland' },
   FOREST: { color: '#228B22', char: '♦', name: 'Forest' },
@@ -17,7 +17,7 @@ export const TERRAIN_TYPES: Record<string, TerrainInfo> = {
   DESERT: { color: '#F4A460', char: '~', name: 'Desert' },
   TUNDRA: { color: '#B0C4DE', char: '.', name: 'Tundra' },
   ARCTIC: { color: '#F0F8FF', char: '*', name: 'Arctic' },
-  RIVER: { color: '#0000FF', char: '~', name: 'River' }
+  RIVER: { color: '#0000FF', char: '~~', name: 'River' }
 };
 
 /**

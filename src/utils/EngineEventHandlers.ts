@@ -127,6 +127,10 @@ export class EngineEventRouter {
     this.actions.setTurnButtonDisabled(false);
     this.lastQueueLengths.delete(active);
     this.endTurnPromptShown.delete(active);
+
+    // Refresh visibility for the current player so the minimap and main view
+    // reflect the correct per-player fog of war on turn start
+    this.actions.updateVisibility();
   }
 
   private onPhaseChange(eventData: any) {

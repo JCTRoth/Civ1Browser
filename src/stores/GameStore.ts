@@ -412,15 +412,20 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         };
       }
 
+      // The store's visibility always reflects the human player's perspective (player 0).
+      // The game engine maintains per-player visibility separately for AI decision-making.
+      // This ensures the UI (minimap, main canvas) never reveals what other players see.
+      const HUMAN_PLAYER_ID = 0;
+
       // Create new visibility arrays
       const newVisibility = new Array(map.tiles.length).fill(false);
       const newRevealed = [...(map.revealed || new Array(map.tiles.length).fill(false))];
 
       // Clear current visibility (but keep revealed status)
       // Revealed tiles stay permanently visible
-      // Reveal around all of the active player's units only
+      // Only reveal around the human player's units
       for (const unit of units) {
-        if (unit.civilizationId !== state.gameState.activePlayer) {
+        if (unit.civilizationId !== HUMAN_PLAYER_ID) {
           continue;
         }
 
@@ -453,9 +458,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         }
       }
 
-      // Reveal around all player cities (civilizationId === active player)
+      // Reveal around the human player's cities
       for (const city of cities) {
-        if (city.civilizationId === state.gameState.activePlayer) {
+        if (city.civilizationId === HUMAN_PLAYER_ID) {
           const cityViewRadius = 2; // Cities can see 2 tiles away
           setVisibilityAreaInternal(newVisibility, newRevealed, city.col, city.row, cityViewRadius, map.width, map.height);
         }
