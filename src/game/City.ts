@@ -677,7 +677,7 @@ export class City {
         
         for (const neighbor of neighbors) {
             const unit = gameMap.getUnitAt(neighbor.col, neighbor.row);
-            if (unit && unit.civilizationId === this.civilizationId && unit.attackPoints > 0) {
+            if (unit && unit.civilizationId === this.civilization.id && unit.attackPoints > 0) {
                 defendingUnits.push(unit);
             }
         }
