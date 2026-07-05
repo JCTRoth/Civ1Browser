@@ -5,6 +5,7 @@ import { ModalUtils } from './ModalUtils';
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
 import ProductionSelectionModal from './ProductionSelectionModal';
+import '../../../styles/cityModal.css';
 
 interface CityModalProps {
   show: boolean;
@@ -321,6 +322,11 @@ const CityModal: React.FC<CityModalProps> = ({
                       <div className="resource-section">
                         <h6 className="resource-title">
                           <i className="bi bi-apple"></i> Food
+                          {resources.food.hasGranary && (
+                            <span className="granary-badge ms-2">
+                              <i className="bi bi-building"></i> Granary
+                            </span>
+                          )}
                         </h6>
                         <div className="resource-values">
                           <div className="resource-line">
@@ -331,7 +337,38 @@ const CityModal: React.FC<CityModalProps> = ({
                             </span>
                           </div>
                           <small className="resource-desc">
-                            Needs {resources.food.needed} food per turn. {resources.food.surplus >= 0 ? 'Surplus stored for growth.' : 'Shortfall - population may starve.'}
+                            Needs {resources.food.needed} food per turn.
+                          </small>
+
+                          {/* Food storage progress: stored / threshold + turns to grow */}
+                          <div className="growth-info">
+                            <span>
+                              <span className="label">Food stored: </span>
+                              <span className="value">{resources.food.storage}</span>
+                              <span className="label"> / {resources.food.growthThreshold}</span>
+                              {resources.food.hasGranary && (
+                                <span className="label"> (granary line: {resources.food.granaryLine})</span>
+                              )}
+                            </span>
+                            {resources.food.surplus > 0 && resources.food.turnsUntilGrowth > 0 && (
+                              <span>
+                                <span className="label">Growth in: </span>
+                                <span className="value positive">{resources.food.turnsUntilGrowth} {resources.food.turnsUntilGrowth === 1 ? 'turn' : 'turns'}</span>
+                              </span>
+                            )}
+                            {resources.food.surplus > 0 && resources.food.turnsUntilGrowth <= 0 && (
+                              <span className="value positive">Growing next turn!</span>
+                            )}
+                            {resources.food.surplus < 0 && (
+                              <span>
+                                <span className="label">Starvation in: </span>
+                                <span className="value negative">{resources.food.turnsUntilStarvation > 0 ? `${resources.food.turnsUntilStarvation} ${resources.food.turnsUntilStarvation === 1 ? 'turn' : 'turns'}` : 'NOW!'}</span>
+                              </span>
+                            )}
+                          </div>
+                          <small className="resource-desc">
+                            Each citizen consumes 2 food per turn. Surplus fills the storage box; at {resources.food.growthThreshold} food the city grows.
+                            {resources.food.hasGranary && ' A Granary preserves 50% of stored food after growth.'}
                           </small>
                         </div>
                       </div>

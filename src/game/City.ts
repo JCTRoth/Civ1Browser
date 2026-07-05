@@ -4,6 +4,7 @@ import { Constants } from '../utils/Constants';
 import type { Civilization } from './Civilization';
 import {GameUtils} from "@/utils/GameUtils";
 import {MathUtils} from "@/utils/MathUtils";
+import { BUILDING_TYPES } from '@/data/BuildingConstants';
 
 // Type definitions
 
@@ -377,14 +378,25 @@ export class City {
     }
 
     // Get food needed to grow to next population level
+    // Civ1 formula: (current_population + 1) × 10
+    // Size 1 → 20, Size 2 → 30, Size 3 → 40, etc.
     getGrowthThreshold(): number {
-        return 20 + (this.population * 2);
+        return (this.population + 1) * 10;
     }
 
     // Grow city population
+    // Civ1: Granary preserves 50% of stored food; without granary the box fully empties.
     grow(gameMap: GameMap): void {
+        const surplus = this.foodStorage - this.getGrowthThreshold();
         this.population++;
-        this.foodStorage = 0;
+
+        // Granary: box only half-empties (drops to 50% of new threshold)
+        // Without granary: box fully empties
+        if (this.buildings.has(BUILDING_TYPES.GRANARY)) {
+            this.foodStorage = Math.floor(this.getGrowthThreshold() / 2) + Math.max(0, surplus);
+        } else {
+            this.foodStorage = Math.max(0, surplus);
+        }
 
         // Update max population based on buildings
         this.updateMaxPopulation();
@@ -465,7 +477,7 @@ export class City {
         const unit: GameUnit = new UnitCtor(unitType, this.civilization, this.col, this.row);
 
         // Set veteran status if city has barracks
-        if (this.buildings.has('barracks')) {
+        if (this.buildings.has(BUILDING_TYPES.BARRACKS)) {
             unit.veteran = true;
         }
 
@@ -652,7 +664,7 @@ export class City {
     // Get city defense value (base defense = population, doubled with walls)
     getDefenseValue(): number {
         let defense = this.population;
-        if (this.buildings.has('city_walls')) {
+        if (this.buildings.has(BUILDING_TYPES.CITY_WALLS)) {
             defense *= 2;
         }
         return defense;

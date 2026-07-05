@@ -1,0 +1,82 @@
+/* Food Storage Box – visual columns like Civ1 */
+.food-box-container {
+  display: flex;
+  gap: 3px;
+  margin: 8px 0 4px 0;
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.food-box-column {
+  flex: 1;
+  height: 16px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  transition: background 0.2s;
+}
+
+.food-box-column.filled {
+  background: #4caf50;
+}
+
+.food-box-column.filled-granary {
+  background: #ff9800; /* orange for granary-assisted food */
+}
+
+.food-box-column.partial {
+  background: linear-gradient(90deg, #4caf50 0%, #4caf50 var(--fill-pct), rgba(255,255,255,0.08) var(--fill-pct));
+}
+
+.food-box-column.granary-line {
+  background: rgba(255, 152, 0, 0.5);
+}
+
+/* Granary indicator */
+.granary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ff9800;
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.granary-badge i {
+  font-size: 0.9rem;
+}
+
+/* Growth / starvation info */
+.growth-info {
+  font-size: 0.8rem;
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.growth-info .label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.growth-info .value {
+  color: #fff;
+  font-weight: 600;
+}
+
+.growth-info .value.positive {
+  color: #4caf50;
+}
+
+.growth-info .value.negative {
+  color: #f44336;
+}
+
+.resource-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  padding: 1px 0;
+}
