@@ -1,6 +1,11 @@
 import { TERRAIN_PROPS } from '@/utils/Constants';
 import type { SquareCoordinate } from '../HexGrid';
 
+// Type aliases for AI function parameters to avoid `any`
+type TileData = { type: string; explored?: boolean; resource?: string | null; fortress?: boolean; river?: boolean; passable?: boolean };
+type UnitData = { civilizationId?: number; col?: number; row?: number; attack?: number; defense?: number; id?: string; type?: string };
+type CityData = { id?: string; civilizationId?: number; col?: number; row?: number };
+
 // Cache for terrain costs to avoid repeated lookups
 const terrainCostCache = new Map<string, number>();
 const terrainPassableCache = new Map<string, boolean>();
@@ -52,8 +57,8 @@ export class AIUtility {
     unitCol: number,
     unitRow: number,
     neighbors: SquareCoordinate[],
-    getTileAt: (col: number, row: number) => any,
-    getUnitAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileData | null | undefined,
+    getUnitAt: (col: number, row: number) => UnitData | null | undefined,
     isValidSquare: (col: number, row: number) => boolean
   ): TerrainAnalysis {
     const analysis: TerrainAnalysis = {
@@ -243,7 +248,7 @@ export class AIUtility {
     unitCol: number,
     unitRow: number,
     getNeighbors: (col: number, row: number) => SquareCoordinate[],
-    getTileAt: (col: number, row: number) => any
+    getTileAt: (col: number, row: number) => TileData | null | undefined
   ): SquareCoordinate | null {
     const neighbors = getNeighbors(unitCol, unitRow);
     for (const tilePos of neighbors) {
@@ -263,8 +268,8 @@ export class AIUtility {
     unitRow: number,
     unitCivilizationId: number,
     getNeighbors: (col: number, row: number) => SquareCoordinate[],
-    getUnitAt: (col: number, row: number) => any
-  ): any {
+    getUnitAt: (col: number, row: number) => UnitData | null | undefined
+  ): UnitData | null {
     const neighbors = getNeighbors(unitCol, unitRow);
     for (const tilePos of neighbors) {
       const enemyUnit = getUnitAt(tilePos.col, tilePos.row);
@@ -283,9 +288,9 @@ export class AIUtility {
     unitCol: number,
     unitRow: number,
     unitCivilizationId: number,
-    cities: any[],
+    cities: CityData[],
     squareDistance?: (col1: number, row1: number, col2: number, row2: number) => number
-  ): any {
+  ): CityData | null {
     if (!cities || cities.length === 0) return null;
 
     // Use internal distance function if not provided
@@ -323,7 +328,7 @@ export class AIUtility {
     col: number,
     row: number,
     civilizationId: number,
-    getUnitsInRadius: (col: number, row: number, radius: number) => any[],
+    getUnitsInRadius: (col: number, row: number, radius: number) => UnitData[],
     radius: number = 3
   ): number {
     const nearbyUnits = getUnitsInRadius(col, row, radius);
@@ -348,9 +353,9 @@ export class AIUtility {
   static evaluatePosition(
     col: number,
     row: number,
-    getTileAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileData | null | undefined,
     _civilizationId: number,
-    _getCityAt?: (col: number, row: number) => any
+    _getCityAt?: (col: number, row: number) => CityData | null | undefined
   ): number {
     const tile = getTileAt(col, row);
     if (!tile) return 0;
@@ -388,8 +393,8 @@ export class AIUtility {
     _unitCol: number,
     _unitRow: number,
     neighbors: SquareCoordinate[],
-    getTileAt: (col: number, row: number) => any,
-    getUnitAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileData | null | undefined,
+    getUnitAt: (col: number, row: number) => UnitData | null | undefined,
     isValidSquare: (col: number, row: number) => boolean
   ): SquareCoordinate | null {
     let bestPosition: SquareCoordinate | null = null;
@@ -538,8 +543,8 @@ export function findInterceptPosition(
   threatCol: number,
   threatRow: number,
   getNeighbors: (col: number, row: number) => SquareCoordinate[],
-  getTileAt: (col: number, row: number) => any,
-  getUnitAt: (col: number, row: number) => any,
+  getTileAt: (col: number, row: number) => TileData | null | undefined,
+  getUnitAt: (col: number, row: number) => UnitData | null | undefined,
   distanceFn: (c1: number, r1: number, c2: number, r2: number) => number
 ): SquareCoordinate | null {
   const neighbors = getNeighbors(unitCol, unitRow);

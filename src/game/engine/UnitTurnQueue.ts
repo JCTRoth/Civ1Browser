@@ -18,7 +18,7 @@ import type { Unit } from '../../../types/game';
 
 
 export class UnitTurnQueue {
-  private gameEngine: any;
+  private gameEngine: import('../../../types/game').GameEngine;
   
   // Per-player queues: Map<civilizationId, unitId[]>
   private playerQueues: Map<number, string[]> = new Map();
@@ -29,7 +29,7 @@ export class UnitTurnQueue {
   // Callback for state changes
   private onQueueChange: ((civilizationId: number, currentUnitId: string | null, queueLength: number) => void) | null = null;
 
-  constructor(gameEngine: any) {
+  constructor(gameEngine: import('../../../types/game').GameEngine) {
     this.gameEngine = gameEngine;
     console.log('[UnitTurnQueue] Initialized');
   }

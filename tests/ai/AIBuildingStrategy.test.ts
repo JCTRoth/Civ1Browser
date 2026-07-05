@@ -2,7 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { AIBuildingStrategy } from '@/game/engine/AIBuildingStrategy';
 import type { BuildingPlan, Personality } from '@/game/engine/AITypes';
 
-const makeCity = (overrides: Record<string, unknown> = {}): any => ({
+interface TestCity {
+  id: string;
+  name: string;
+  civilizationId: number;
+  col: number;
+  row: number;
+  population: number;
+  buildings: string[];
+}
+
+const makeCity = (overrides: Record<string, unknown> = {}): TestCity => ({
   id: 'city-1',
   name: 'TestCity',
   civilizationId: 1,
@@ -11,9 +21,16 @@ const makeCity = (overrides: Record<string, unknown> = {}): any => ({
   population: 4,
   buildings: [],
   ...overrides,
-});
+} as TestCity);
 
-const makeCiv = (overrides: Record<string, unknown> = {}): any => ({
+interface TestCiv {
+  id: number;
+  name: string;
+  technologies: Set<string>;
+  personality: Personality;
+}
+
+const makeCiv = (overrides: Record<string, unknown> = {}): TestCiv => ({
   id: 1,
   name: 'TestCiv',
   technologies: new Set<string>(['pottery', 'masonry']),
@@ -21,7 +38,7 @@ const makeCiv = (overrides: Record<string, unknown> = {}): any => ({
     aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5,
   } as Personality,
   ...overrides,
-});
+} as TestCiv);
 
 const baseBuildingGameState = (overrides: Record<string, unknown> = {}) => ({
   currentYear: -2000,

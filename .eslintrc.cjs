@@ -22,5 +22,9 @@ module.exports = {
         ignoreRestSiblings: true,
       },
     ],
+    // Downgraded from error to warn to reduce noise on pre-existing code
+    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/ban-ts-comment': 'warn',
+    'no-case-declarations': 'warn',
   },
 }

@@ -28,14 +28,15 @@ export function getTerrainInfo(type?: string | null): TerrainInfo | null {
   if (!type) return null;
   if (typeof type !== 'string') return null;
   // direct key
-  if ((TERRAIN_TYPES as any)[type]) return (TERRAIN_TYPES as any)[type];
+  const entry = TERRAIN_TYPES[type];
+  if (entry) return entry;
   const up = type.toUpperCase();
-  if ((TERRAIN_TYPES as any)[up]) return (TERRAIN_TYPES as any)[up];
+  const entryUp = TERRAIN_TYPES[up];
+  if (entryUp) return entryUp;
   const low = type.toLowerCase();
-  if ((TERRAIN_TYPES as any)[low]) return (TERRAIN_TYPES as any)[low];
+  const entryLow = TERRAIN_TYPES[low];
+  if (entryLow) return entryLow;
   // try to match by display name
   const found = Object.values(TERRAIN_TYPES).find(t => t.name && t.name.toLowerCase() === type.toLowerCase());
   return found || null;
 }
-
-

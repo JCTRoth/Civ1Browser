@@ -1,9 +1,7 @@
 // Terrain and Tile System - Legacy Implementation (Converted to TypeScript)
 
-import { Constants } from '@/utils/Constants';
+import { Constants, SpecialResource } from '@/utils/Constants';
 import { IMPROVEMENT_REQUIREMENTS } from '@/data/TileImprovementConstants';
-import {ArrayUtils} from "@/utils/ArrayUtils";
-import {MathUtils} from "@/utils/MathUtils";
 
 // Type definitions
 interface Improvement {
@@ -17,7 +15,7 @@ interface Resource {
     food: number;
     production: number;
     trade: number;
-    terrain: string[];
+    terrain: string;
 }
 
 interface ImprovementProperties {
@@ -33,9 +31,20 @@ interface ImprovementProperties {
     convertsTo?: string;
 }
 
+interface TerrainPropsValue {
+    food: number;
+    production: number;
+    trade: number;
+    movement: number;
+    defense: number;
+    passable: boolean;
+    description?: string;
+    buildModifier?: number;
+}
+
 interface TerrainConstants {
-    TERRAIN_PROPS: Record<string, any>;
-    RESOURCE_PROPS: Record<string, any>;
+    TERRAIN_PROPS: Record<string, TerrainPropsValue>;
+    RESOURCE_PROPS: SpecialResource[];
     IMPROVEMENT_PROPS: Record<string, ImprovementProperties>;
 }
 
@@ -349,7 +358,7 @@ export class Tile {
     }
 
     // Get movement cost for unit
-    getMovementCost(unit: any): number {
+    getMovementCost(unit: { type: string; isNaval: boolean }): number {
         let cost = this.movementCost;
 
         // Apply unit-specific modifiers
@@ -389,253 +398,6 @@ export class Tile {
 }
 
 // Resource types and properties
-export const RESOURCE_PROPS: Record<string, Resource> = {
-    wheat: { food: 1, production: 0, trade: 0, terrain: ['grassland', 'plains'] },
-    cattle: { food: 1, production: 0, trade: 0, terrain: ['grassland', 'plains'] },
-    fish: { food: 2, production: 0, trade: 0, terrain: ['ocean'] },
-    coal: { food: 0, production: 1, trade: 0, terrain: ['hills', 'mountains'] },
-    iron: { food: 0, production: 1, trade: 0, terrain: ['hills', 'mountains'] },
-    gold: { food: 0, production: 0, trade: 3, terrain: ['hills', 'mountains'] },
-    gems: { food: 0, production: 0, trade: 4, terrain: ['hills', 'mountains'] },
-    silk: { food: 0, production: 0, trade: 2, terrain: ['forest', 'grassland'] },
-    spices: { food: 0, production: 0, trade: 3, terrain: ['grassland', 'plains'] },
-    whales: { food: 1, production: 0, trade: 2, terrain: ['ocean'] }
-};
+// RESOURCE_PROPS constant removed (unused)
 
-// TerrainGenerator class removed (unused)
-    private noise: SimplexNoise;
-
-    constructor(width: number, height: number, seed: number | null = null) {
-        this.width = width;
-        this.height = height;
-        this.seed = seed || Math.random();
-        this.noise = new SimplexNoise(this.seed);
-    }
-
-    generateTerrain(): Tile[][] {
-        const tiles: Tile[][] = ArrayUtils.create2D(this.width, this.height) as Tile[][];
-
-        // Generate base terrain using noise
-        for (let row = 0; row < this.height; row++) {
-            for (let col = 0; col < this.width; col++) {
-                const terrain = this.getTerrainAtPosition(col, row);
-                tiles[row][col] = new Tile(col, row, terrain);
-            }
-        }
-
-        // Post-process to ensure realistic terrain distribution
-        this.postProcessTerrain(tiles);
-
-        // Add resources
-        this.addResources(tiles);
-
-        return tiles;
-    }
-
-    private getTerrainAtPosition(col: number, row: number): string {
-        const scale = 0.05;
-        const elevation = this.noise.noise2D(col * scale, row * scale);
-        const temperature = this.noise.noise2D((col + 1000) * scale, (row + 1000) * scale);
-        const humidity = this.noise.noise2D((col + 2000) * scale, (row + 2000) * scale);
-
-        // Ocean (lowest elevation)
-        if (elevation < -0.3) {
-            return Constants.TERRAIN.OCEAN;
-        }
-
-        // Mountains (highest elevation)
-        if (elevation > 0.4) {
-            return Constants.TERRAIN.MOUNTAINS;
-        }
-
-        // Hills (high elevation)
-        if (elevation > 0.2) {
-            return Constants.TERRAIN.HILLS;
-        }
-
-        // Temperature and humidity based terrain
-        if (temperature < -0.2) {
-            return Constants.TERRAIN.TUNDRA;
-        }
-
-        if (temperature > 0.3 && humidity < -0.2) {
-            return Constants.TERRAIN.DESERT;
-        }
-
-        // Forest (moderate temperature and high humidity)
-        if (humidity > 0.2 && temperature > -0.1 && temperature < 0.3) {
-            return Constants.TERRAIN.FOREST;
-        }
-
-        // Plains (moderate conditions)
-        if (humidity < 0.1) {
-            return Constants.TERRAIN.PLAINS;
-        }
-
-        // Default to grassland
-        return Constants.TERRAIN.GRASSLAND;
-    }
-
-    private postProcessTerrain(tiles: Tile[][]): void {
-        // Ensure continents are formed properly
-        this.smoothCoastlines(tiles);
-
-        // Add some rivers (simplified)
-        this.addRivers(tiles);
-    }
-
-    private smoothCoastlines(tiles: Tile[][]): void {
-        const newTiles: Tile[][] = ArrayUtils.create2D(this.width, this.height) as Tile[][];
-
-        for (let row = 0; row < this.height; row++) {
-            for (let col = 0; col < this.width; col++) {
-                const currentTile = tiles[row][col];
-                let oceanNeighbors = 0;
-                let landNeighbors = 0;
-
-                // Count ocean vs land neighbors
-                for (let dr = -1; dr <= 1; dr++) {
-                    for (let dc = -1; dc <= 1; dc++) {
-                        const newRow = row + dr;
-                        const newCol = col + dc;
-
-                        if (newRow >= 0 && newRow < this.height &&
-                            newCol >= 0 && newCol < this.width) {
-                            if (tiles[newRow][newCol].terrain === Constants.TERRAIN.OCEAN) {
-                                oceanNeighbors++;
-                            } else {
-                                landNeighbors++;
-                            }
-                        }
-                    }
-                }
-
-                // Smooth isolated tiles
-                if (currentTile.terrain === Constants.TERRAIN.OCEAN && oceanNeighbors < 3) {
-                    newTiles[row][col] = new Tile(col, row, Constants.TERRAIN.GRASSLAND);
-                } else if (currentTile.terrain !== Constants.TERRAIN.OCEAN && landNeighbors < 3) {
-                    newTiles[row][col] = new Tile(col, row, Constants.TERRAIN.OCEAN);
-                } else {
-                    newTiles[row][col] = currentTile;
-                }
-            }
-        }
-
-        // Copy smoothed tiles back
-        for (let row = 0; row < this.height; row++) {
-            for (let col = 0; col < this.width; col++) {
-                tiles[row][col] = newTiles[row][col];
-            }
-        }
-    }
-
-    private addRivers(tiles: Tile[][]): void {
-        // Simple river generation - find paths from mountains to ocean
-        const riverSources: { col: number; row: number }[] = [];
-
-        // Find potential river sources (mountains)
-        for (let row = 0; row < this.height; row++) {
-            for (let col = 0; col < this.width; col++) {
-                if (tiles[row][col].terrain === Constants.TERRAIN.MOUNTAINS) {
-                    riverSources.push({ col, row });
-                }
-            }
-        }
-
-        // Generate rivers from some sources
-        const riverCount = Math.floor(riverSources.length * 0.1);
-        for (let i = 0; i < riverCount; i++) {
-            const source = MathUtils.randomChoice(riverSources);
-            this.generateRiver(tiles, source.col, source.row);
-        }
-    }
-
-    private generateRiver(_tiles: Tile[][], _startCol: number, _startRow: number): void {
-        // Simple river generation - not implemented in detail for this demo
-        // Would involve pathfinding toward lower elevation or ocean
-    }
-
-    private addResources(tiles: Tile[][]): void {
-        const resourceChance = 0.15; // 15% of tiles get resources
-
-        for (let row = 0; row < this.height; row++) {
-            for (let col = 0; col < this.width; col++) {
-                const tile = tiles[row][col];
-
-                if (Math.random() < resourceChance) {
-                    const compatibleResources = this.getCompatibleResources(tile.terrain);
-                    if (compatibleResources.length > 0) {
-                        const resourceType = MathUtils.randomChoice(compatibleResources);
-                        tile.resources = {
-                            type: resourceType,
-                            ...RESOURCE_PROPS[resourceType]
-                        };
-                    }
-                }
-            }
-        }
-    }
-
-    private getCompatibleResources(terrain: string): string[] {
-        const compatible: string[] = [];
-
-        for (const [resourceType, props] of Object.entries(RESOURCE_PROPS)) {
-            if (props.terrain.includes(terrain)) {
-                compatible.push(resourceType);
-            }
-        }
-
-        return compatible;
-    }
-}
-
-// Simplified Simplex Noise implementation
-class SimplexNoise {
-    private p: number[];
-    private perm: number[];
-
-    constructor(_seed: number) {
-        this.p = [];
-        this.perm = [];
-
-        // Initialize permutation table with seed
-        for (let i = 0; i < 256; i++) {
-            this.p[i] = Math.floor(Math.random() * 256);
-        }
-
-        for (let i = 0; i < 512; i++) {
-            this.perm[i] = this.p[i & 255];
-        }
-    }
-
-    noise2D(x: number, y: number): number {
-        // Simplified noise function
-        const xi = Math.floor(x) & 255;
-        const yi = Math.floor(y) & 255;
-
-        const xf = x - Math.floor(x);
-        const yf = y - Math.floor(y);
-
-        const u = MathUtils.fade(xf);
-        const v = MathUtils.fade(yf);
-
-        const aa = this.perm[this.perm[xi] + yi];
-        const ab = this.perm[this.perm[xi] + yi + 1];
-        const ba = this.perm[this.perm[xi + 1] + yi];
-        const bb = this.perm[this.perm[xi + 1] + yi + 1];
-
-        const x1 = MathUtils.lerp(this.grad(aa, xf, yf), this.grad(ba, xf - 1, yf), u);
-        const x2 = MathUtils.lerp(this.grad(ab, xf, yf - 1), this.grad(bb, xf - 1, yf - 1), u);
-
-        return MathUtils.lerp(x1, x2, v);
-    }
-
-    // fade method removed (unused)
-
-    private grad(hash: number, x: number, y: number): number {
-        const h = hash & 15;
-        const u = h < 8 ? x : y;
-        const v = h < 4 ? y : (h === 12 || h === 14 ? x : 0);
-        return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
-    }
-}
+// TerrainGenerator and SimplexNoise classes removed (unused)

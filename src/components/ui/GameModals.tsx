@@ -12,8 +12,9 @@ import '../../styles/gameModals.css';
 import '../../styles/diplomacyModal.css';
 import LeaderPortrait from './LeaderPortrait';
 import { LEADER_PORTRAITS, MOOD_COLORS } from '@/data/LeaderPortraits';
+import type { City, Civilization, GameEngine } from '../../../types/game';
 
-const GameModals = ({ gameEngine }) => {
+const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   // console.log('[GameModals] Component rendering, gameEngine present:', !!gameEngine);
   const uiState = useGameStore(state => state.uiState);
   const actions = useGameStore(state => state.actions);
@@ -42,7 +43,7 @@ const GameModals = ({ gameEngine }) => {
     return value.charAt(0).toUpperCase() + value.slice(1);
   };
 
-  const getProductionPerTurn = (city: any): number => {
+  const getProductionPerTurn = (city: City | null | undefined): number => {
     if (!city) return 0;
     if (typeof city?.yields?.production === 'number') return city.yields.production;
     if (typeof city?.production === 'number') return city.production;
@@ -50,7 +51,7 @@ const GameModals = ({ gameEngine }) => {
     return 0;
   };
 
-  const getProductionCost = (item: any): number => {
+  const getProductionCost = (item: string | number | { cost?: number; type?: string; name?: string; itemType?: string } | null | undefined): number => {
     if (!item) return 0;
     if (typeof item === 'number') return item;
     if (typeof item === 'string') {
@@ -79,7 +80,7 @@ const GameModals = ({ gameEngine }) => {
     return 0;
   };
 
-  const getProductionName = (item: any): string => {
+  const getProductionName = (item: string | { name?: string; type?: string; itemType?: string } | null | undefined): string => {
     if (!item) return 'Unknown';
     if (typeof item === 'string') {
       return UNIT_PROPS[item]?.name || BUILDING_PROPERTIES[item]?.name || capitalizeName(item);
@@ -250,18 +251,6 @@ const GameModals = ({ gameEngine }) => {
 
   // handleResearchTechnology removed (unused)
 
-  // Helpers: compute prerequisite depth (used to infer era) and group by era
-  const getPrerequisiteDepth = (techId: string, visited = new Set()): number => {
-    const tech = technologies?.find(t => t.id === techId);
-    if (!tech || visited.has(techId)) return 0;
-    visited.add(techId);
-    if (!tech.prerequisites || tech.prerequisites.length === 0) return 0;
-    const depths = tech.prerequisites.map(pr => getPrerequisiteDepth(pr, new Set(visited)));
-    return Math.max(...depths) + 1;
-  };
-
-  // eraFromDepth + groupByEra removed (unused)
-
   // Game Menu Modal
   const renderGameMenu = () => (
     <Modal show={uiState.activeDialog === 'game-menu'} onHide={handleCloseDialog} centered>
@@ -337,7 +326,7 @@ const GameModals = ({ gameEngine }) => {
   const [selectedDiploCiv, setSelectedDiploCiv] = useState<number | null>(null);
   const [diplomacyLog, setDiplomacyLog] = useState<string[]>([]);
   const [showTreatyPanel, setShowTreatyPanel] = useState(false);
-  const [counterProposal, setCounterProposal] = useState<any>(null);
+  const [counterProposal, setCounterProposal] = useState<{ fromCivId: number; toCivId: number; action: string; goldAmount?: number } | null>(null);
 
   const addDiploLog = (msg: string): void => {
     setDiplomacyLog(prev => [msg, ...prev].slice(0, 20));
@@ -346,7 +335,7 @@ const GameModals = ({ gameEngine }) => {
   const renderDiplomacy = () => {
     const dm = gameEngine?.diplomacyManager;
     const playerId = currentPlayer?.id ?? 0;
-    const otherCivs = civilizations.filter((c: any) => c.id !== playerId && c.isAlive !== false);
+    const otherCivs = civilizations.filter((c: Civilization) => c.id !== playerId && c.isAlive !== false);
 
     const STATUS_ICONS: Record<string, string> = {
       peace: '🕊️',
@@ -370,9 +359,9 @@ const GameModals = ({ gameEngine }) => {
       embargo_target: { icon: '🚫', label: 'Embargo' },
     };
 
-    const handleDiplomacyAction = (targetId: number, action: string, extra?: Record<string, any>) => {
+    const handleDiplomacyAction = (targetId: number, action: string, extra?: { treaty?: string }) => {
       if (!dm) return;
-      let result: any;
+      let result: { accepted?: boolean; counterProposal?: typeof counterProposal; reason?: string; goldTransferred?: number } | null = null;
       switch (action) {
         case 'declare_war':
           dm.declareWar(playerId, targetId);
@@ -510,7 +499,7 @@ const GameModals = ({ gameEngine }) => {
               {/* Left: Civilization list */}
               <div className="diplomacy-civ-list">
                 <div className="diplomacy-section-label">CIVILIZATIONS</div>
-                {otherCivs.map((civ: any) => {
+                {otherCivs.map((civ: Civilization) => {
                   const status = dm?.getStatus(playerId, civ.id) ?? 'peace';
                   const treaties = dm?.getActiveTreaties?.(playerId, civ.id) ?? [];
                   const isSelected = selectedDiploCiv === civ.id;
@@ -753,9 +742,9 @@ const GameModals = ({ gameEngine }) => {
 
                     {/* Global diplomacy history from DiplomacyManager */}
                     {(() => {
-                      const events = dm?.getEventLog?.() ?? [];
+                      const events: Array<{ type: string; fromCivId: number; toCivId: number; goldAmount?: number; details?: string }> = dm?.getEventLog?.() ?? [];
                       const relevant = events.filter(
-                        (e: any) => e.fromCivId === selectedDiploCiv || e.toCivId === selectedDiploCiv
+                        (e) => e.fromCivId === selectedDiploCiv || e.toCivId === selectedDiploCiv
                           || e.fromCivId === playerId || e.toCivId === playerId
                       ).slice(0, 8);
                       if (relevant.length === 0) return null;
@@ -763,7 +752,7 @@ const GameModals = ({ gameEngine }) => {
                         <>
                           <div className="diplomacy-section-label">HISTORY</div>
                           <div className="diplomacy-log">
-                            {relevant.map((e: any, i: number) => {
+                            {relevant.map((e, i: number) => {
                               const from = civilizations[e.fromCivId]?.name ?? `Civ ${e.fromCivId}`;
                               const to = civilizations[e.toCivId]?.name ?? `Civ ${e.toCivId}`;
                               const labels: Record<string, string> = {
@@ -815,7 +804,7 @@ const GameModals = ({ gameEngine }) => {
   const renderDiplomacyReport = (): React.ReactNode => {
     const dm = gameEngine?.diplomacyManager;
     const playerId = currentPlayer?.id ?? 0;
-    const otherCivs = civilizations.filter((c: any) => c.id !== playerId && c.isAlive !== false);
+    const otherCivs = civilizations.filter((c: Civilization) => c.id !== playerId && c.isAlive !== false);
 
     const STATUS_ICONS: Record<string, string> = {
       peace: '🕊️',
@@ -855,7 +844,7 @@ const GameModals = ({ gameEngine }) => {
             <p className="text-muted text-center py-4">No other civilizations discovered yet.</p>
           ) : (
             <div className="diplomacy-report-list">
-              {otherCivs.map((civ: any) => {
+              {otherCivs.map((civ: Civilization) => {
                 const status = dm?.getStatus(playerId, civ.id) ?? 'peace';
                 const attitude = dm?.getAttitude(playerId, civ.id) ?? 'neutral';
                 const relation = dm?.getRelation?.(playerId, civ.id);
@@ -909,14 +898,14 @@ const GameModals = ({ gameEngine }) => {
 
               {/* Global diplomacy history */}
               {(() => {
-                const events = dm?.getEventLog?.() ?? [];
+                const events: Array<{ type: string; fromCivId: number; toCivId: number; goldAmount?: number; details?: string }> = dm?.getEventLog?.() ?? [];
                 const recent = events.slice(0, 12);
                 if (recent.length === 0) return null;
                 return (
                   <>
                     <div className="diplomacy-section-label" style={{ marginTop: '16px' }}>RECENT HISTORY</div>
                     <div className="diplomacy-log">
-                      {recent.map((e: any, i: number) => {
+                      {recent.map((e, i: number) => {
                         const from = civilizations[e.fromCivId]?.name ?? `Civ ${e.fromCivId}`;
                         const to = civilizations[e.toCivId]?.name ?? `Civ ${e.toCivId}`;
                         const labels: Record<string, string> = {
@@ -1184,7 +1173,7 @@ const GameModals = ({ gameEngine }) => {
   const [selectedQueueIndex, setSelectedQueueIndex] = useState<number | null>(null);
 
   // Helper function to check if a city is coastal (has water tiles adjacent or on its position)
-  const checkIfCityIsCoastal = useCallback((city: any, gameEngine: any): boolean => {
+  const checkIfCityIsCoastal = useCallback((city: City | null | undefined, gameEngine: GameEngine | null | undefined): boolean => {
     if (!gameEngine || !gameEngine.map || !gameEngine.map.getTile) return false;
     
     const directions = [
@@ -1207,7 +1196,7 @@ const GameModals = ({ gameEngine }) => {
   const availableProductionKeys = useMemo(() => {
     return Object.keys(UNIT_PROPS).filter((key) => {
       const u = UNIT_PROPS[key];
-      const req = (u as any).requires || null;
+      const req = (u as { requires?: string | string[] }).requires || null;
       if (req && currentPlayer && Array.isArray(currentPlayer.technologies)) {
         // Handle both single requirement and array of requirements
         const requirements = Array.isArray(req) ? req : [req];
@@ -1226,6 +1215,7 @@ const GameModals = ({ gameEngine }) => {
 
       return true;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPlayer, selectedCity, checkIfCityIsCoastal]);
 
   // Ensure there is a default selection when modal opens or available list changes
@@ -1237,12 +1227,14 @@ const GameModals = ({ gameEngine }) => {
     if (availableProductionKeys.length === 0) setSelectedProductionKey(null);
     // Log available production options for debugging
     // console.log('[GameModals] availableProductionKeys', availableProductionKeys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [availableProductionKeys]);
 
   // Reset queue selection when the selected city changes
   useEffect(() => {
     setSelectedQueueIndex(null);
     if (selectedCity) console.log('[GameModals] selectedCity changed', { id: selectedCity.id, name: selectedCity.name, buildQueue: selectedCity.buildQueue });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCityId]);
 
   const renderCityProduction = () => (
@@ -1341,8 +1333,8 @@ const GameModals = ({ gameEngine }) => {
                   const queue = [...selectedCity.buildQueue];
                   [queue[selectedQueueIndex - 1], queue[selectedQueueIndex]] = [queue[selectedQueueIndex], queue[selectedQueueIndex - 1]];
                   // Update queue in engine and UI
-                  if (gameEngine && typeof gameEngine.setCityQueue === 'function') {
-                    gameEngine.setCityQueue(selectedCity.id, queue);
+                  if (gameEngine && typeof (gameEngine as GameEngine & { setCityQueue?: (cityId: string, queue: unknown[]) => void }).setCityQueue === 'function') {
+                    (gameEngine as GameEngine & { setCityQueue: (cityId: string, queue: unknown[]) => void }).setCityQueue(selectedCity.id, queue);
                   } else {
                     selectedCity.buildQueue = queue;
                   }
@@ -1362,8 +1354,8 @@ const GameModals = ({ gameEngine }) => {
                   const queue = [...selectedCity.buildQueue];
                   [queue[selectedQueueIndex + 1], queue[selectedQueueIndex]] = [queue[selectedQueueIndex], queue[selectedQueueIndex + 1]];
                   // Update queue in engine and UI
-                  if (gameEngine && typeof gameEngine.setCityQueue === 'function') {
-                    gameEngine.setCityQueue(selectedCity.id, queue);
+                  if (gameEngine && typeof (gameEngine as GameEngine & { setCityQueue?: (cityId: string, queue: unknown[]) => void }).setCityQueue === 'function') {
+                    (gameEngine as GameEngine & { setCityQueue: (cityId: string, queue: unknown[]) => void }).setCityQueue(selectedCity.id, queue);
                   } else {
                     selectedCity.buildQueue = queue;
                   }
@@ -1376,7 +1368,7 @@ const GameModals = ({ gameEngine }) => {
             </div>
           <div className="queue-box bg-dark border border-secondary rounded p-2" style={{maxHeight: '220px', overflowY: 'auto'}}>
             {hasQueueItems ? (
-              selectedCity.buildQueue.map((q: any, i: number) => {
+              selectedCity.buildQueue.map((q: { name?: string; type?: string; itemType?: string; cost?: number }, i: number) => {
                 const queueItemName = getProductionName(q);
                 const queueItemCost = getProductionCost(q);
                 const queueTurns = productionPerTurn > 0 && queueItemCost > 0
@@ -1414,20 +1406,21 @@ const GameModals = ({ gameEngine }) => {
                   const unitDef = UNIT_PROPS[selectedProductionKey];
                   const item = { type: 'unit', itemType: selectedProductionKey, name: unitDef.name, cost: unitDef.cost };
                   if (gameEngine) {
-                    const hasMethod = typeof (gameEngine as any).setCityProduction === 'function';
+                    const engine = gameEngine as GameEngine & { setCityProduction?: (cityId: string, item: Record<string, unknown>, queue: boolean) => { success: boolean } | null };
+                    const hasMethod = typeof engine.setCityProduction === 'function';
                     console.log('[GameModals] Inline Add to Queue: engine method?', { hasMethod });
-                    let ok: any = null;
+                    let ok: { success: boolean } | null = null;
                     try {
-                      if (hasMethod) ok = (gameEngine as any).setCityProduction(selectedCity.id, item, true);
+                      if (hasMethod) ok = engine.setCityProduction!(selectedCity.id, item, true);
                     } catch (e) {
                       console.error('[GameModals] Inline Add to Queue: setCityProduction exception', e);
                     }
                     console.log('[GameModals] Inline Add to Queue: setCityProduction returned', ok);
-                    if ((gameEngine as any).getAllCities) {
-                      const allCities = (gameEngine as any).getAllCities();
-                      console.log('[GameModals] Inline Add to Queue: engine.getAllCities()', allCities.map((c: any) => ({ id: c.id, buildQueue: c.buildQueue })));
+                    if (typeof gameEngine.getAllCities === 'function') {
+                      const allCities = gameEngine.getAllCities();
+                      console.log('[GameModals] Inline Add to Queue: engine.getAllCities()', allCities.map((c: City) => ({ id: c.id, buildQueue: c.buildQueue })));
                       actions.updateCities(allCities);
-                      const updated = allCities.find((c: any) => c.id === selectedCity.id);
+                      const updated = allCities.find((c: City) => c.id === selectedCity.id);
                       console.log('[GameModals] Inline Add to Queue: updated selectedCity', { id: updated?.id, buildQueue: updated?.buildQueue });
                     }
                     if (ok) {
@@ -1447,12 +1440,14 @@ const GameModals = ({ gameEngine }) => {
                 disabled={selectedQueueIndex === null || selectedQueueIndex === undefined || !Array.isArray(selectedCity?.buildQueue) || selectedCity.buildQueue.length === 0 || !gameEngine}
                 onClick={async () => {
                   if (selectedQueueIndex === null || selectedQueueIndex === undefined) return;
-                  if (!gameEngine || typeof gameEngine.removeCityQueueItem !== 'function') return;
-                  const res = (gameEngine as any).removeCityQueueItem(selectedCity.id, selectedQueueIndex);
+                  if (!gameEngine) return;
+                  const engine = gameEngine as GameEngine & { removeCityQueueItem?: (cityId: string, index: number) => { success?: boolean; removed?: { name?: string }; reason?: string } | null };
+                  if (typeof engine.removeCityQueueItem !== 'function') return;
+                  const res = engine.removeCityQueueItem(selectedCity.id, selectedQueueIndex);
                   if (res && res.success) {
                     actions.addNotification({ type: 'success', message: `Removed from queue: ${res.removed?.name || 'item'}` });
                     // Refresh cities data from engine if available
-                    if (gameEngine.getAllCities) actions.updateCities(gameEngine.getAllCities());
+                    if (typeof gameEngine.getAllCities === 'function') actions.updateCities(gameEngine.getAllCities());
                     setSelectedQueueIndex(null);
                   } else {
                     actions.addNotification({ type: 'warning', message: `Failed to remove: ${res?.reason || 'unknown'}` });
@@ -1474,8 +1469,9 @@ const GameModals = ({ gameEngine }) => {
     if (!unitDef) return;
 
     const item = { type: 'unit', itemType: unitKey, name: unitDef.name, cost: unitDef.cost };
-    if (gameEngine && typeof gameEngine.purchaseCityProduction === 'function') {
-      const res = gameEngine.purchaseCityProduction(selectedCity.id, item);
+    const engine = gameEngine as GameEngine & { purchaseCityProduction?: (cityId: string, item: Record<string, unknown>, civId?: number) => { success?: boolean; reason?: string } | null };
+    if (gameEngine && typeof engine.purchaseCityProduction === 'function') {
+      const res = engine.purchaseCityProduction(selectedCity.id, item);
       if (res && res.success) {
         actions.addNotification({ type: 'success', message: `Purchased ${item.name}` });
         actions.updateCities(gameEngine.getAllCities());
@@ -1515,7 +1511,7 @@ const GameModals = ({ gameEngine }) => {
       <div className="row">
         {Object.keys(UNIT_PROPS).filter(k => {
           const u = UNIT_PROPS[k];
-          const req = (u as any).requires || null;
+          const req = (u as { requires?: string }).requires || null;
           if (req && currentPlayer && Array.isArray(currentPlayer.technologies)) {
             if (!currentPlayer.technologies.includes(req)) return false;
           }

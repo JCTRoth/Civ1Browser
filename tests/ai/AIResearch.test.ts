@@ -3,7 +3,15 @@ import { AIResearch } from '@/game/engine/AIResearch';
 import { TECHNOLOGIES_DATA } from '@/data/TechnologyData';
 import type { Personality } from '@/game/engine/AITypes';
 
-const baseCiv = (overrides: Record<string, unknown> = {}): any => ({
+type TestCiv = {
+  id: number;
+  name: string;
+  technologies: Set<string> | string[];
+  currentResearch: null;
+  personality: Personality;
+};
+
+const baseCiv = (overrides: Record<string, unknown> = {}): TestCiv => ({
   id: 1,
   name: 'TestCiv',
   technologies: new Set<string>(),
@@ -12,7 +20,7 @@ const baseCiv = (overrides: Record<string, unknown> = {}): any => ({
     aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5,
   } as Personality,
   ...overrides,
-});
+} as TestCiv);
 
 const baseGameState = (overrides: Record<string, unknown> = {}) => ({
   currentYear: -3000,

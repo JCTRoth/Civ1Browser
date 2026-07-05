@@ -77,9 +77,40 @@ interface AttackData {
     result: CombatResult;
 }
 
+/** Minimal city-like interface for methods called by Unit */
+interface CityLike {
+  civilization: { id: string };
+  population: number;
+  hitPoints: number;
+  col: number;
+  row: number;
+  getDefendingUnits(gameMap: GameMap): Array<{ destroy(): void; addExperience(n: number): void; col: number; row: number }>;
+  getDefenseValue(): number;
+  takeDamage(n: number): void;
+  isCaptured(): boolean;
+  updateMaxHitPoints(): void;
+}
+
+/** Minimal game-map interface for methods called by Unit */
+interface GameMap {
+  grid: { distance(c1: number, r1: number, c2: number, r2: number): number };
+  getTile(col: number, row: number): {
+    getMovementCost(unit: { type: string; isNaval: boolean }): number;
+    hasImprovement(type: string): boolean;
+    getDefenseBonus(): number;
+    canImprove(type: string): boolean;
+    addImprovement(type: string): boolean;
+    terrain: string;
+  } | null;
+  getUnitAt(col: number, row: number): { civilization: { id: string } } | null;
+  getCityAt(col: number, row: number): CityLike | null;
+  getCities(): Array<{ col: number; row: number; civilization: { id: string } }>;
+  foundCity(col: number, row: number, civilization: Civilization): unknown;
+}
+
 interface SettleData {
     unit: Unit;
-    city: any; // Would be City type
+    city: unknown; // City type would require circular import
 }
 
 interface WorkData {
@@ -131,7 +162,7 @@ class Unit {
     public experience: number;
     public veteran: boolean;
     public fortified: boolean;
-    public orders: any;
+    public orders: unknown | null;
     public workTurns: number;
     public workTarget: string | null;
 
@@ -140,7 +171,7 @@ class Unit {
     public moved: boolean;
     
     // Callback for state changes (replaces EventEmitter)
-    public onStateChange: ((eventType: string, data: any) => void) | null;
+    public onStateChange: ((eventType: string, data: unknown) => void) | null;
 
     constructor(type: string, civilization: Civilization, col: number, row: number) {
         this.id = GameUtils.generateId();
@@ -186,7 +217,7 @@ class Unit {
     }
 
     // Move unit to new position
-    moveTo(col: number, row: number, gameMap: any): boolean {
+    moveTo(col: number, row: number, gameMap: GameMap): boolean {
         if (!this.canMoveTo(col, row, gameMap)) {
             return false;
         }
@@ -231,7 +262,7 @@ class Unit {
     }
 
     // Check if unit can move to position
-    canMoveTo(col: number, row: number, gameMap: any): boolean {
+    canMoveTo(col: number, row: number, gameMap: GameMap): boolean {
         const tile = gameMap.getTile(col, row);
         if (!tile) return false;
 
@@ -248,7 +279,7 @@ class Unit {
     }
 
     // Get possible moves for this unit
-    getPossibleMoves(gameMap: any, grid: any): Position[] {
+    getPossibleMoves(gameMap: GameMap, grid: { getNeighbors(col: number, row: number): Array<{ col: number; row: number }> }): Position[] {
         const moves: Position[] = [];
         const visited = new Set<string>();
         const queue = [{ col: this.col, row: this.row, movement: this.movement }];
@@ -290,7 +321,7 @@ class Unit {
     }
 
     // Attack another unit
-    attackUnit(target: Unit, gameMap: any): CombatResult | null {
+    attackUnit(target: Unit, gameMap: GameMap): CombatResult | null {
         if (!this.canAttack(target, gameMap)) {
             return null;
         }
@@ -329,7 +360,7 @@ class Unit {
     }
 
     // Check if this unit can attack target
-    canAttack(target: Unit, gameMap: any): boolean {
+    canAttack(target: Unit, gameMap: GameMap): boolean {
         if (!target || target.civilization.id === this.civilization.id) {
             return false;
         }
@@ -343,7 +374,7 @@ class Unit {
     }
 
     // Resolve combat between this unit and target
-    resolveCombat(target: Unit, gameMap: any): CombatResult {
+    resolveCombat(target: Unit, gameMap: GameMap): CombatResult {
         let attackStrength = this.attackPoints;
         let defenseStrength = target.defensePoints;
 
@@ -385,7 +416,7 @@ class Unit {
     }
 
     // Attack a city
-    attackCity(city: any, gameMap: any): CityCombatResult | null {
+    attackCity(city: CityLike, gameMap: GameMap): CityCombatResult | null {
         if (!this.canAttackCity(city, gameMap)) {
             return null;
         }
@@ -400,7 +431,7 @@ class Unit {
         if (defendingUnits.length > 0) {
             // Combat against defending units first
             for (const defender of defendingUnits) {
-                const result = this.resolveCombat(defender, gameMap);
+                const result = this.resolveCombat(defender as Unit, gameMap);
                 if (result.attackerWins) {
                     defender.destroy();
                     // Attacker moves to defender's tile
@@ -484,7 +515,7 @@ class Unit {
     }
 
     // Check if unit can attack a city
-    canAttackCity(city: any, gameMap: any): boolean {
+    canAttackCity(city: CityLike, gameMap: GameMap): boolean {
         if (!city || city.civilization.id === this.civilization.id) {
             return false;
         }
@@ -500,7 +531,7 @@ class Unit {
     // resolveCombat removed (unused)
 
     // Settle a city (for settler units)
-    settle(gameMap: any): any {
+    settle(gameMap: GameMap): unknown {
         if (!this.canSettle) {
             return null;
         }
@@ -528,7 +559,7 @@ class Unit {
     }
 
     // Check if unit can settle at current location
-    canSettleAt(tile: any, gameMap: any): boolean {
+    canSettleAt(tile: { terrain: string }, gameMap: GameMap): boolean {
         if (!tile || tile.terrain === Constants.TERRAIN.OCEAN) {
             return false;
         }
@@ -548,7 +579,7 @@ class Unit {
     }
 
     // Start working on tile improvement
-    startWork(improvementType: string, gameMap: any): boolean {
+    startWork(improvementType: string, gameMap: GameMap): boolean {
         if (!this.canWork) {
             return false;
         }
@@ -578,7 +609,7 @@ class Unit {
     }
 
     // Continue work on current project
-    doWork(gameMap: any): boolean {
+    doWork(gameMap: GameMap): boolean {
         if (!this.workTarget || this.workTurns <= 0) {
             return false;
         }
@@ -729,156 +760,4 @@ class Unit {
     }
 }
 
-// Unit Manager - handles collections of units
-class UnitManager {
-    private units: Map<string, Unit>;
-    private unitsByPosition: Map<string, Unit[]>;
-    private unitsByCivilization: Map<string, Unit[]>;
-    public onStateChange: ((eventType: string, data: any) => void) | null;
-
-    constructor() {
-        this.units = new Map();
-        this.unitsByPosition = new Map();
-        this.unitsByCivilization = new Map();
-        this.onStateChange = null;
-    }
-
-    // Add unit to manager
-    addUnit(unit: Unit): void {
-        this.units.set(unit.id, unit);
-        this.updatePositionIndex(unit);
-        this.updateCivilizationIndex(unit);
-
-        // Set callback to receive unit events
-        unit.onStateChange = (eventType, data) => {
-            if (eventType === 'moved') {
-                this.updatePositionIndex(unit);
-                if (this.onStateChange) {
-                    this.onStateChange('unitMoved', data);
-                }
-            } else if (eventType === 'destroyed') {
-                this.removeUnit(unit.id);
-                if (this.onStateChange) {
-                    this.onStateChange('unitDestroyed', data);
-                }
-            }
-        };
-
-        if (this.onStateChange) {
-            this.onStateChange('unitAdded', { unit });
-        }
-    }
-
-    // Remove unit from manager
-    removeUnit(unitId: string): boolean {
-        const unit = this.units.get(unitId);
-        if (!unit) return false;
-
-        this.units.delete(unitId);
-        this.removeFromPositionIndex(unit);
-        this.removeFromCivilizationIndex(unit);
-
-        if (this.onStateChange) {
-            this.onStateChange('unitRemoved', { unit });
-        }
-
-        return true;
-    }
-
-    // Get unit by ID
-    getUnit(unitId: string): Unit | undefined {
-        return this.units.get(unitId);
-    }
-
-    // Get unit at position
-    getUnitAt(col: number, row: number): Unit | null {
-        const key = `${col},${row}`;
-        const unitsAtPosition = this.unitsByPosition.get(key);
-        return unitsAtPosition ? unitsAtPosition[0] : null;
-    }
-
-    // Get all units at position
-    getUnitsAt(col: number, row: number): Unit[] {
-        const key = `${col},${row}`;
-        return this.unitsByPosition.get(key) || [];
-    }
-
-    // Get units by civilization
-    getUnitsByCivilization(civilizationId: string): Unit[] {
-        return this.unitsByCivilization.get(civilizationId) || [];
-    }
-
-    // Get all units
-    getAllUnits(): Unit[] {
-        return Array.from(this.units.values());
-    }
-
-    // Update position index
-    private updatePositionIndex(unit: Unit): void {
-        // Remove from old position
-        this.removeFromPositionIndex(unit);
-
-        // Add to new position
-        const key = `${unit.col},${unit.row}`;
-        if (!this.unitsByPosition.has(key)) {
-            this.unitsByPosition.set(key, []);
-        }
-        this.unitsByPosition.get(key)!.push(unit);
-    }
-
-    // Remove from position index
-    private removeFromPositionIndex(unit: Unit): void {
-        for (const [key, units] of this.unitsByPosition.entries()) {
-            const index = units.indexOf(unit);
-            if (index !== -1) {
-                units.splice(index, 1);
-                if (units.length === 0) {
-                    this.unitsByPosition.delete(key);
-                }
-                break;
-            }
-        }
-    }
-
-    // Update civilization index
-    private updateCivilizationIndex(unit: Unit): void {
-        const civId = unit.civilization.id;
-        if (!this.unitsByCivilization.has(civId)) {
-            this.unitsByCivilization.set(civId, []);
-        }
-
-        const civUnits = this.unitsByCivilization.get(civId)!;
-        if (!civUnits.includes(unit)) {
-            civUnits.push(unit);
-        }
-    }
-
-    // Remove from civilization index
-    private removeFromCivilizationIndex(unit: Unit): void {
-        const civId = unit.civilization.id;
-        const civUnits = this.unitsByCivilization.get(civId);
-
-        if (civUnits) {
-            const index = civUnits.indexOf(unit);
-            if (index !== -1) {
-                civUnits.splice(index, 1);
-
-                if (civUnits.length === 0) {
-                    this.unitsByCivilization.delete(civId);
-                }
-            }
-        }
-    }
-
-    // Start turn for all units of civilization
-    startTurnForCivilization(civilizationId: string): void {
-        const units = this.getUnitsByCivilization(civilizationId);
-        units.forEach(unit => unit.startTurn());
-    }
-
-    // End turn for all units of civilization
-    endTurnForCivilization(civilizationId: string): void {
-        const units = this.getUnitsByCivilization(civilizationId);
-        units.forEach(unit => unit.endTurn());
-    }
-}
+// UnitManager class removed (unused)

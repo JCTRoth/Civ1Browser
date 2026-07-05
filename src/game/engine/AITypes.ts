@@ -212,7 +212,7 @@ const UNIT_TECH_REQUIREMENTS: Record<string, string | null> = {
  * Check if a civilization has researched a specific technology.
  * Handles both Set<string> and string[] formats.
  */
-function civHasTech(civ: any, techId: string): boolean {
+function civHasTech(civ: { technologies?: Set<string> | string[] }, techId: string): boolean {
   if (!civ || !techId) return false;
   if (civ.technologies instanceof Set) {
     return civ.technologies.has(techId);
@@ -226,7 +226,7 @@ function civHasTech(civ: any, techId: string): boolean {
 /**
  * Check if a civ can build a specific unit type given its technologies.
  */
-export function canBuildUnit(civ: any, unitType: string): boolean {
+export function canBuildUnit(civ: { technologies?: Set<string> | string[] }, unitType: string): boolean {
   const requiredTech = UNIT_TECH_REQUIREMENTS[unitType];
   if (!requiredTech) return true; // No tech required
   return civHasTech(civ, requiredTech);
@@ -241,7 +241,7 @@ export function canBuildUnit(civ: any, unitType: string): boolean {
  * @param buildingPrereqs - BUILDING_PREREQUISITES map
  */
 export function canBuildBuilding(
-  civ: any,
+  civ: { technologies?: Set<string> | string[] },
   buildingType: string,
   buildingProps: { requiredTechnology?: string } | undefined,
   cityBuildings: string[] | Set<string>,

@@ -5,9 +5,10 @@ import { TILE_SIZE } from '@/data/TerrainData';
 import { TERRAIN_PROPERTIES } from '@/data/TerrainConstants';
 import MiniMap from './MiniMap';
 import '../../styles/sidePanel.css';
+import type { GameEngine, City, Civilization } from '../../../types/game';
 
 // New side panel matching the provided mockup image
-const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
+const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine }) => {
   const currentPlayer = useGameStore((s) => s.currentPlayer);
   const civilizations = useGameStore((s) => s.civilizations);
   const playerUnits = useGameStore((s) => s.playerUnits);
@@ -52,7 +53,8 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
     const isExplored = map.revealed?.[tileIndex] ?? false;
     
     // Get movement cost from TERRAIN_PROPERTIES instead of TERRAIN_TYPES
-    const moveCost = (TERRAIN_PROPERTIES as any)[tile.type]?.movement ?? 1;
+    const terrainProps = TERRAIN_PROPERTIES as Record<string, { movement?: number; defense?: number }>;
+    const moveCost = terrainProps[tile.type]?.movement ?? 1;
     
     return {
       ...tile,
@@ -60,7 +62,7 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
       terrainName: tile.type || 'Unknown',
       visible: isVisible,
       explored: isExplored,
-      defenseBonus: (TERRAIN_PROPERTIES as any)[tile.type]?.defense ?? 0
+      defenseBonus: terrainProps[tile.type]?.defense ?? 0
     };
   };
 
@@ -89,9 +91,9 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
   const handleAvatarClick = () => {
     console.log('[SidePanel] Avatar clicked');
     console.log('[SidePanel] displayPlayer:', displayPlayer);
-    console.log('[SidePanel] displayPlayer.capital:', (displayPlayer as any)?.capital);
+    console.log('[SidePanel] displayPlayer.capital:', (displayPlayer as Civilization | { capital?: City })?.capital);
     
-    let capitalCity = (displayPlayer as any)?.capital;
+    let capitalCity = (displayPlayer as Civilization | { capital?: City })?.capital;
     
     // Fallback: if no capital is set, find the first city of this civilization
     if (!capitalCity && displayPlayer && 'id' in displayPlayer) {
@@ -154,7 +156,7 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
 
             <div className="name-div">
               <div className="player-name">{displayPlayer.name}</div>
-              <div className="side-panel-small-muted player-leader">{(displayPlayer as any)?.civilizationName || displayPlayer.leader || 'Unknown Civilization'}</div>
+              <div className="side-panel-small-muted player-leader">{(displayPlayer as { civilizationName?: string })?.civilizationName || displayPlayer.leader || 'Unknown Civilization'}</div>
               <div className="gold-div">
                 <strong className="gold-strong">{(playerResources.gold ?? 0)} 🪙</strong>
               </div>
@@ -185,7 +187,7 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
                 HP: {selectedUnit.health ?? 100} • Moves: {selectedUnit.movesRemaining ?? 0}
               </div>
               <div className="side-panel-small-muted unit-attack-defense">
-                Attack: {(selectedUnit as any)?.attack ?? 0} • Defense: {(selectedUnit as any)?.defense ?? 0}
+                Attack: {selectedUnit?.attack ?? 0} • Defense: {selectedUnit?.defense ?? 0}
               </div>
             </div>
           ) : effectiveSelectedCity ? (
@@ -204,7 +206,7 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
                 </div>
               ) : (
                 <div className="side-panel-small-muted unit-attack-defense">
-                  Attack: {(unitAtSelectedTile as any)?.attack ?? 0} • Defense: {(unitAtSelectedTile as any)?.defense ?? 0}
+                  Attack: {unitAtSelectedTile?.attack ?? 0} • Defense: {unitAtSelectedTile?.defense ?? 0}
                 </div>
               )}
             </div>
@@ -269,9 +271,9 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
                 <div className="side-panel-small-muted">Location: {selectedUnit.col}, {selectedUnit.row}</div>
                 <div className="stats-div">
                   <div>Health: {selectedUnit.health ?? 100}/100</div>
-                  <div>Moves: {selectedUnit.movesRemaining ?? 0}/{(selectedUnit as any)?.maxMoves ?? 1}</div>
-                  <div>Attack: {(selectedUnit as any)?.attack ?? 0}</div>
-                  <div>Defense: {(selectedUnit as any)?.defense ?? 0}</div>
+                  <div>Moves: {selectedUnit.movesRemaining ?? 0}/{selectedUnit?.maxMoves ?? 1}</div>
+                  <div>Attack: {selectedUnit?.attack ?? 0}</div>
+                  <div>Defense: {selectedUnit?.defense ?? 0}</div>
                 </div>
 
                 {/* Unit Actions */}
@@ -296,8 +298,8 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
                       className="unit-action-btn clear-path-btn"
                       onClick={() => {
                         console.log('[SidePanel] Clear path button clicked for unit', selectedUnit.id);
-                        if (gameEngine && typeof gameEngine.clearUnitPath === 'function') {
-                          gameEngine.clearUnitPath(selectedUnit.id);
+                        if (gameEngine && typeof (gameEngine as GameEngine & { clearUnitPath?: (id: string) => void }).clearUnitPath === 'function') {
+                          (gameEngine as GameEngine & { clearUnitPath: (id: string) => void }).clearUnitPath(selectedUnit.id);
                         }
                       }}
                       title="Clear the planned route"

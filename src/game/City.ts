@@ -2,34 +2,79 @@
 
 import { Constants } from '../utils/Constants';
 import type { Civilization } from './Civilization';
-import { CIVILIZATIONS } from '../data/GameData';
 import {GameUtils} from "@/utils/GameUtils";
 import {MathUtils} from "@/utils/MathUtils";
 
 // Type definitions
 
 // BuildingEffects interface removed (unused)
-
-// Provide a CITY_NAMES export for legacy modules. Prefer names from `CIVILIZATIONS` data if present.
-const CITY_NAMES: Record<string, string[]> = (() => {
-    const mapping: Record<string, string[]> = {};
-    try {
-        if (Array.isArray(CIVILIZATIONS) && CIVILIZATIONS.length > 0) {
-            CIVILIZATIONS.forEach((civ, idx) => {
-                const names = Array.isArray(civ.cityNames) ? civ.cityNames : [];
-                // numeric key (stringified index)
-                mapping[String(idx)] = names;
-                // key by civilization name lowercased
-                if (civ.name) mapping[civ.name.toLowerCase()] = names;
-            });
-        }
-    } catch (e) {
-        // ignore and return whatever mapping we have
-    }
-    return mapping;
-})();
-
+// CITY_NAMES constant removed (unused)
 // Building interface removed (unused)
+
+/** Yields produced by a tile (food/production/trade) */
+interface TileYields {
+    food: number;
+    production: number;
+    trade: number;
+}
+
+/** A tile within the game map */
+interface GameTile {
+    type: string;
+    resource?: string;
+    hasRiver?: boolean;
+    explored?: boolean;
+    getYields(): TileYields;
+    col: number;
+    row: number;
+}
+
+/** Grid neighbor position */
+interface GridNeighbor {
+    col: number;
+    row: number;
+}
+
+/** Building effects that modify city attributes */
+interface BuildingEffects {
+    foodBonus?: number;
+    productionBonus?: number;
+    tradeBonus?: number;
+    goldBonus?: number;
+    scienceBonus?: number;
+    happiness?: number;
+    maxPopulation?: number;
+    foodStorage?: number;
+}
+
+/** A unit within the game engine (used by GameMap) */
+interface GameUnit {
+    id: string;
+    type: string;
+    civilization: Civilization;
+    civilizationId: string;
+    col: number;
+    row: number;
+    veteran?: boolean;
+    homeCityId?: string;
+    maintenance?: number;
+    attackPoints?: number;
+}
+
+/** The game map object providing tile/unit access */
+interface GameMap {
+    getTile(col: number, row: number): GameTile | null;
+    getUnitAt(col: number, row: number): GameUnit | null;
+    grid: {
+        getNeighbors(col: number, row: number): GridNeighbor[];
+        squareDistance(col1: number, row1: number, col2: number, row2: number): number;
+    };
+    unitManager: {
+        addUnit(unit: GameUnit): void;
+        getUnit(unitId: string): GameUnit | undefined;
+        removeUnit(unitId: string): boolean;
+    };
+}
 
 interface ProductionItem {
     type: 'unit' | 'building';
@@ -121,7 +166,7 @@ export class City {
     public maxHitPoints: number;
     
     // Callback for state changes (replaces EventEmitter)
-    public onStateChange: ((eventType: string, data: any) => void) | null;
+    public onStateChange: ((eventType: string, data: unknown) => void) | null;
 
     constructor(name: string, civilization: Civilization, col: number, row: number) {
         this.id = GameUtils.generateId();
@@ -177,7 +222,7 @@ export class City {
     }
 
     // Process city turn
-    processTurn(gameMap: any, turn: number): void {
+    processTurn(gameMap: GameMap, turn: number): void {
         // Calculate yields from worked tiles
         this.calculateYields(gameMap);
 
@@ -205,7 +250,7 @@ export class City {
     }
 
     // Calculate yields from all worked tiles
-    calculateYields(gameMap: any): void {
+    calculateYields(gameMap: GameMap): void {
         let totalFood = 0;
         let totalProduction = 0;
         let totalTrade = 0;
@@ -271,30 +316,32 @@ export class City {
             const building = Constants.BUILDING_PROPS[buildingType];
             if (!building || !building.effects) continue;
 
+            const effects = building.effects as BuildingEffects;
+
             switch (yieldType) {
                 case 'food':
-                    if ((building.effects as any).foodBonus) {
-                        modifiedYield = Math.floor(modifiedYield * (1 + (building.effects as any).foodBonus));
+                    if (effects.foodBonus) {
+                        modifiedYield = Math.floor(modifiedYield * (1 + effects.foodBonus));
                     }
                     break;
                 case 'production':
-                    if ((building.effects as any).productionBonus) {
-                        modifiedYield = Math.floor(modifiedYield * (1 + (building.effects as any).productionBonus));
+                    if (effects.productionBonus) {
+                        modifiedYield = Math.floor(modifiedYield * (1 + effects.productionBonus));
                     }
                     break;
                 case 'trade':
-                    if ((building.effects as any).tradeBonus) {
-                        modifiedYield = Math.floor(modifiedYield * (1 + (building.effects as any).tradeBonus));
+                    if (effects.tradeBonus) {
+                        modifiedYield = Math.floor(modifiedYield * (1 + effects.tradeBonus));
                     }
                     break;
                 case 'gold':
-                    if ((building.effects as any).goldBonus) {
-                        modifiedYield = Math.floor(modifiedYield * (1 + (building.effects as any).goldBonus));
+                    if (effects.goldBonus) {
+                        modifiedYield = Math.floor(modifiedYield * (1 + effects.goldBonus));
                     }
                     break;
                 case 'science':
-                    if ((building.effects as any).scienceBonus) {
-                        modifiedYield = Math.floor(modifiedYield * (1 + (building.effects as any).scienceBonus));
+                    if (effects.scienceBonus) {
+                        modifiedYield = Math.floor(modifiedYield * (1 + effects.scienceBonus));
                     }
                     break;
             }
@@ -304,7 +351,7 @@ export class City {
     }
 
     // Process food consumption and growth
-    processFood(gameMap: any): void {
+    processFood(gameMap: GameMap): void {
         const foodNeeded = this.population * 2;
         const foodSurplus = this.food - foodNeeded;
 
@@ -335,7 +382,7 @@ export class City {
     }
 
     // Grow city population
-    grow(gameMap: any): void {
+    grow(gameMap: GameMap): void {
         this.population++;
         this.foodStorage = 0;
 
@@ -413,7 +460,9 @@ export class City {
 
     // Produce a unit
     produceUnit(unitType: string): void {
-        const unit = new (require('./Unit').Unit)(unitType, this.civilization, this.col, this.row);
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const UnitCtor: new (type: string, civilization: Civilization, col: number, row: number) => GameUnit = require('./Unit').Unit;
+        const unit: GameUnit = new UnitCtor(unitType, this.civilization, this.col, this.row);
 
         // Set veteran status if city has barracks
         if (this.buildings.has('barracks')) {
@@ -450,11 +499,12 @@ export class City {
         // Apply building effects
         const building = Constants.BUILDING_PROPS[buildingType];
         if (building && building.effects) {
-            if ((building.effects as any).maxPopulation) {
-                this.maxPopulation += (building.effects as any).maxPopulation;
+            const effects = building.effects as BuildingEffects;
+            if (effects.maxPopulation) {
+                this.maxPopulation += effects.maxPopulation;
             }
-            if ((building.effects as any).foodStorage) {
-                this.maxFoodStorage += (building.effects as any).foodStorage;
+            if (effects.foodStorage) {
+                this.maxFoodStorage += effects.foodStorage;
             }
         }
 
@@ -462,7 +512,7 @@ export class City {
     }
 
     // Process unit support and maintenance costs
-    processUnitSupport(gameMap: any): void {
+    processUnitSupport(gameMap: GameMap): void {
         const maintenanceCost = this.calculateUnitMaintenanceCost(gameMap);
 
         // Check if city can afford to support all units
@@ -473,7 +523,7 @@ export class City {
     }
 
     // Calculate total maintenance cost for all supported units
-    calculateUnitMaintenanceCost(gameMap: any): number {
+    calculateUnitMaintenanceCost(gameMap: GameMap): number {
         let totalCost = 0;
 
         for (const unitId of this.supportedUnitIds) {
@@ -487,7 +537,7 @@ export class City {
     }
 
     // Disband units when city cannot afford maintenance
-    disbandUnits(gameMap: any, maxAffordableCost: number): void {
+    disbandUnits(gameMap: GameMap, maxAffordableCost: number): void {
         let currentCost = 0;
         const unitsToKeep: string[] = [];
         const unitsToDisband: string[] = [];
@@ -525,7 +575,7 @@ export class City {
     }
 
     // Re-home a unit to this city
-    rehomeUnit(unitId: string, gameMap: any): boolean {
+    rehomeUnit(unitId: string, gameMap: GameMap): boolean {
         const unit = gameMap.unitManager.getUnit(unitId);
         if (!unit || unit.civilization.id !== this.civilization.id) {
             return false; // Can only re-home own civilization's units
@@ -534,7 +584,7 @@ export class City {
         // Remove from old home city
         if (unit.homeCityId) {
             // Find old home city in civilization's cities
-            const oldHomeCity = this.civilization.cities.find((city: any) => city.id === unit.homeCityId);
+            const oldHomeCity = this.civilization.cities.find((city: City) => city.id === unit.homeCityId);
             if (oldHomeCity && oldHomeCity !== this) {
                 oldHomeCity.supportedUnitIds.delete(unitId);
             }
@@ -578,12 +628,15 @@ export class City {
     calculateHappiness(): void {
         // Base happiness from buildings
         let happiness = 0;
-        let unhappiness = this.population; // 1 unhappiness per citizen
+        const unhappiness = this.population; // 1 unhappiness per citizen
 
         for (const buildingType of this.buildings) {
             const building = Constants.BUILDING_PROPS[buildingType];
-            if (building && building.effects && (building.effects as any).happiness) {
-                happiness += (building.effects as any).happiness;
+            if (building && building.effects) {
+                const effects = building.effects as BuildingEffects;
+                if (effects.happiness) {
+                    happiness += effects.happiness;
+                }
             }
         }
 
@@ -606,8 +659,8 @@ export class City {
     }
 
     // Get defending units at this city
-    getDefendingUnits(gameMap: any): any[] {
-        const defendingUnits: any[] = [];
+    getDefendingUnits(gameMap: GameMap): GameUnit[] {
+        const defendingUnits: GameUnit[] = [];
         const neighbors = gameMap.grid.getNeighbors(this.col, this.row);
         
         for (const neighbor of neighbors) {
@@ -649,14 +702,17 @@ export class City {
 
         for (const buildingType of this.buildings) {
             const building = Constants.BUILDING_PROPS[buildingType];
-            if (building && building.effects && (building.effects as any).maxPopulation) {
-                this.maxPopulation += (building.effects as any).maxPopulation;
+            if (building && building.effects) {
+                const effects = building.effects as BuildingEffects;
+                if (effects.maxPopulation) {
+                    this.maxPopulation += effects.maxPopulation;
+                }
             }
         }
     }
 
     // Auto-assign worker to best available tile
-    autoAssignWorker(gameMap: any): void {
+    autoAssignWorker(gameMap: GameMap): void {
         this.optimizeWorkerAssignment(gameMap);
     }
 
@@ -685,8 +741,8 @@ export class City {
     }
 
     // Get available tiles for working (tiles in radius that aren't already worked)
-    getAvailableTiles(gameMap: any): any[] {
-        const availableTiles: any[] = [];
+    getAvailableTiles(gameMap: GameMap): GameTile[] {
+        const availableTiles: GameTile[] = [];
         const radiusTiles = this.getCityRadiusTiles(gameMap);
 
         for (const { col, row, tile } of radiusTiles) {
@@ -702,8 +758,8 @@ export class City {
     }
 
     // Get all tiles within city radius (2 squares in every direction except diagonally)
-    getCityRadiusTiles(gameMap: any): Array<{col: number, row: number, tile: any}> {
-        const radiusTiles: Array<{col: number, row: number, tile: any}> = [];
+    getCityRadiusTiles(gameMap: GameMap): Array<{col: number, row: number, tile: GameTile}> {
+        const radiusTiles: Array<{col: number, row: number, tile: GameTile}> = [];
         // City radius is a diamond-shaped 5x5 area centered on the city
         // We include all tiles with Chebyshev distance <= 2, but exclude the four corner tiles
         // and exclude the city center itself. That yields exactly 20 workable tiles.
@@ -734,7 +790,7 @@ export class City {
     }
 
     // Check if a tile can be worked by this city
-    canWorkTile(tileCol: number, tileRow: number, gameMap: any): boolean {
+    canWorkTile(tileCol: number, tileRow: number, gameMap: GameMap): boolean {
         const tile = gameMap.getTile(tileCol, tileRow);
         if (!tile) return false;
 
@@ -760,16 +816,16 @@ export class City {
     }
 
     // Check if a tile is coastal (adjacent to land)
-    private isCoastalTile(tileCol: number, tileRow: number, gameMap: any): boolean {
+    private isCoastalTile(tileCol: number, tileRow: number, gameMap: GameMap): boolean {
         const neighbors = gameMap.grid.getNeighbors(tileCol, tileRow);
-        return neighbors.some((neighbor: any) => {
+        return neighbors.some((neighbor: GridNeighbor) => {
             const neighborTile = gameMap.getTile(neighbor.col, neighbor.row);
             return neighborTile && neighborTile.type !== 'ocean';
         });
     }
 
     // Evaluate city site quality based on resources and terrain
-    evaluateCitySite(gameMap: any): {
+    evaluateCitySite(gameMap: GameMap): {
         foodPotential: number;
         productionPotential: number;
         tradePotential: number;
@@ -843,8 +899,8 @@ export class City {
     }
 
     // Get tiles that can be worked (considering population limit)
-    getWorkableTiles(gameMap: any): Array<{col: number, row: number, tile: any, yields: any}> {
-        const workableTiles: Array<{col: number, row: number, tile: any, yields: any}> = [];
+    getWorkableTiles(gameMap: GameMap): Array<{col: number, row: number, tile: GameTile, yields: TileYields}> {
+        const workableTiles: Array<{col: number, row: number, tile: GameTile, yields: TileYields}> = [];
         const radiusTiles = this.getCityRadiusTiles(gameMap);
 
         for (const { col, row, tile } of radiusTiles) {
@@ -873,7 +929,7 @@ export class City {
     }
     
     // Civ1 tile priority tiers
-    private getTilePriority(yields: any): number {
+    private getTilePriority(yields: TileYields): number {
         // Tier 1: Food-rich tiles (prevent famine) - food >= 3
         if (yields.food >= 3) return 1;
         
@@ -888,7 +944,7 @@ export class City {
     }
 
     // Auto-assign workers to best available tiles
-    optimizeWorkerAssignment(gameMap: any): void {
+    optimizeWorkerAssignment(gameMap: GameMap): void {
         // Reset all assignments except city center
         const cityCenter = `${this.col},${this.row}`;
         this.workingTiles.clear();
@@ -910,7 +966,7 @@ export class City {
     // Serialize city for saving
 
     // Get score for tile (food priority for growth)
-    getTileScore(tile: any): number {
+    getTileScore(tile: GameTile): number {
         const yields = tile.getYields();
         return yields.food * 2 + yields.production + yields.trade;
     }
@@ -922,7 +978,7 @@ export class City {
     }
 
     // Assign worker to tile
-    assignWorker(tile: any): void {
+    assignWorker(tile: GameTile): void {
         const tileKey = `${tile.col},${tile.row}`;
         this.workingTiles.add(tileKey);
     }
@@ -994,139 +1050,3 @@ export class City {
 
 
 // CityManager class removed (unused)
-    public onStateChange: ((eventType: string, data: any) => void) | null;
-
-    constructor() {
-        this.cities = new Map();
-        this.citiesByPosition = new Map();
-        this.citiesByCivilization = new Map();
-        this.onStateChange = null;
-    }
-
-    // Add city to manager
-    addCity(city: City): void {
-        this.cities.set(city.id, city);
-        this.updatePositionIndex(city);
-        this.updateCivilizationIndex(city);
-
-        // Set callback to receive city events
-        city.onStateChange = (eventType, data) => {
-            if (this.onStateChange) {
-                this.onStateChange(eventType, data);
-            }
-        };
-
-        if (this.onStateChange) { this.onStateChange('cityAdded', { city }); }
-    }
-
-    // Remove city from manager
-    removeCity(cityId: string): boolean {
-        const city = this.cities.get(cityId);
-        if (!city) return false;
-
-        this.cities.delete(cityId);
-        this.removeFromPositionIndex(city);
-        this.removeFromCivilizationIndex(city);
-
-        if (this.onStateChange) { this.onStateChange('cityRemoved', { city }); }
-
-        return true;
-    }
-
-    // Get city by ID
-    getCity(cityId: string): City | undefined {
-        return this.cities.get(cityId);
-    }
-
-    // Get city at position
-    getCityAt(col: number, row: number): City | null {
-        const key = `${col},${row}`;
-        return this.citiesByPosition.get(key) || null;
-    }
-
-    // Get cities by civilization
-    getCitiesByCivilization(civilizationId: string): City[] {
-        return this.citiesByCivilization.get(civilizationId) || [];
-    }
-
-    // Get all cities
-    getAllCities(): City[] {
-        return Array.from(this.cities.values());
-    }
-
-    // Update position index
-    private updatePositionIndex(city: City): void {
-        this.removeFromPositionIndex(city);
-        const key = `${city.col},${city.row}`;
-        this.citiesByPosition.set(key, city);
-    }
-
-    // Remove from position index
-    private removeFromPositionIndex(city: City): void {
-        for (const [key, cityAtPos] of this.citiesByPosition.entries()) {
-            if (cityAtPos === city) {
-                this.citiesByPosition.delete(key);
-                break;
-            }
-        }
-    }
-
-    // Update civilization index
-    private updateCivilizationIndex(city: City): void {
-        const civId = city.civilization.id;
-        if (!this.citiesByCivilization.has(civId)) {
-            this.citiesByCivilization.set(civId, []);
-        }
-
-        const civCities = this.citiesByCivilization.get(civId)!;
-        if (!civCities.includes(city)) {
-            civCities.push(city);
-        }
-    }
-
-    // Remove from civilization index
-    private removeFromCivilizationIndex(city: City): void {
-        const civId = city.civilization.id;
-        const civCities = this.citiesByCivilization.get(civId);
-
-        if (civCities) {
-            const index = civCities.indexOf(city);
-            if (index !== -1) {
-                civCities.splice(index, 1);
-
-                if (civCities.length === 0) {
-                    this.citiesByCivilization.delete(civId);
-                }
-            }
-        }
-    }
-
-    // Process turn for all cities of civilization
-    processTurnForCivilization(civilizationId: string, gameMap: any, turn: number): void {
-        const cities = this.getCitiesByCivilization(civilizationId);
-        cities.forEach(city => city.processTurn(gameMap, turn));
-    }
-
-    // Get next city name for civilization
-    getNextCityName(civilizationId: string): string {
-        const civCities = this.getCitiesByCivilization(civilizationId);
-        const usedNames = new Set(civCities.map(city => city.name));
-
-        const availableNames = CITY_NAMES[civilizationId] || CITY_NAMES.romans;
-
-        for (const name of availableNames) {
-            if (!usedNames.has(name)) {
-                return name;
-            }
-        }
-
-        // If all names used, generate numbered names
-        const baseName = availableNames[0];
-        let counter = 2;
-        while (usedNames.has(`${baseName} ${counter}`)) {
-            counter++;
-        }
-
-        return `${baseName} ${counter}`;
-    }
-}

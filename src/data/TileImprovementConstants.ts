@@ -13,7 +13,7 @@ export interface ImprovementDisplayConfig {
 export interface TileImprovementConstants {
     name: string;
     turns: number;
-    effects: Record<string, any>;
+    effects: Record<string, number>;
     terrainRestrictions?: string[];
     requiredTech?: string;
     display?: ImprovementDisplayConfig;

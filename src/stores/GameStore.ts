@@ -7,6 +7,26 @@ import { UNIT_TYPES } from '../data/GameData';
 import { UNIT_PROPERTIES } from '../data/UnitConstants';
 import type { GameStoreState, GameState, MapState, CameraState, UIState, GameResult } from '../../types/game';
 
+// Internal store property types for cached/computed state
+type StoreWithInternals = GameStoreState & {
+  _lastActivePlayer: number | null;
+  _cachedPlayerResources: { food: number; production: number; trade: number; science: number; gold: number };
+  _cachedGameStats: { turn: number; totalCities: number; totalUnits: number; aliveCivilizations: number; gameStarted: boolean };
+};
+/** Shape of each entry in UNIT_DATA_MAP / UNIT_TYPES */
+type UnitTypeDef = {
+  id: string;
+  name: string;
+  cost: number;
+  attack: number;
+  defense: number;
+  movement: number;
+  sightRange?: number;
+  icon: string;
+  requires?: string | null;
+  description?: string;
+};
+
 const createInitialGameState = (): GameState => ({
   isLoading: false,
   isGameStarted: false,
@@ -199,7 +219,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
       // Find next unit belonging to active player that still has moves and is not sleeping
       const activeId = state.gameState.activePlayer;
-      const lastActive = (state as any)._lastActivePlayer;
+      const lastActive = (state as StoreWithInternals)._lastActivePlayer;
       const devMode = !!state.settings?.devMode;
       const candidate = state.units.find(u => u.civilizationId === activeId && (u.movesRemaining || 0) > 0 && !u.isSleeping);
 
@@ -277,7 +297,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
             zoom: zoom
           };
 
-          const lastActive = (state as any)._lastActivePlayer;
+          const lastActive = (state as StoreWithInternals)._lastActivePlayer;
           const devMode = !!state.settings?.devMode;
           const shouldMoveCamera = devMode || lastActive === null || lastActive === activeId;
 
@@ -295,7 +315,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       return state;
     }),
 
-    updateCamera: (cameraUpdate) => set(state => ({
+    updateCamera: (cameraUpdate: Partial<CameraState>) => set(state => ({
       camera: { ...state.camera, ...cameraUpdate }
     })),
 
@@ -433,24 +453,24 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         const unitTypeId = unit.type ? String(unit.type).toLowerCase() : null;
 
         // Try to find the game data UNIT_TYPES entry by matching its inner `id` field
-        let gameTypeDef: any = null;
+        let gameTypeDef: UnitTypeDef | null = null;
         if (unitTypeId && UNIT_TYPES && typeof UNIT_TYPES === 'object') {
           try {
             // First try exact match
-            gameTypeDef = Object.values(UNIT_TYPES).find((t: any) => t && String(t.id).toLowerCase() === unitTypeId) || null;
+            gameTypeDef = (Object.values(UNIT_TYPES).find((t: UnitTypeDef) => t && String(t.id).toLowerCase() === unitTypeId) as UnitTypeDef | undefined) || null;
             
             // If not found and ends with 's', try singular form
             if (!gameTypeDef && unitTypeId.endsWith('s')) {
               const singularType = unitTypeId.slice(0, -1);
-              gameTypeDef = Object.values(UNIT_TYPES).find((t: any) => t && String(t.id).toLowerCase() === singularType) || null;
+              gameTypeDef = (Object.values(UNIT_TYPES).find((t: UnitTypeDef) => t && String(t.id).toLowerCase() === singularType) as UnitTypeDef | undefined) || null;
             }
-          } catch (e) {
+          } catch {
             gameTypeDef = null;
           }
         }
 
-        const sightRange = (typeof (unit as any).sightRange === 'number') 
-          ? (unit as any).sightRange 
+        const sightRange = (typeof (unit as { sightRange?: number }).sightRange === 'number') 
+          ? (unit as { sightRange?: number }).sightRange 
           : (gameTypeDef?.sightRange ?? 1); // Default to 1 if not found
 
         if (sightRange > 0) {
@@ -523,11 +543,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         const unitTypeId = u.type ? String(u.type) : null;
 
         // Try to find gameData UNIT_TYPES entry by its inner `id` field
-        let gameTypeDef: any = null;
+        let gameTypeDef: UnitTypeDef | null = null;
         if (unitTypeId && UNIT_TYPES && typeof UNIT_TYPES === 'object') {
           try {
-            gameTypeDef = Object.values(UNIT_TYPES).find((t: any) => t && String(t.id).toLowerCase() === String(unitTypeId).toLowerCase()) || null;
-          } catch (e) {
+            gameTypeDef = (Object.values(UNIT_TYPES).find((t: UnitTypeDef) => t && String(t.id).toLowerCase() === String(unitTypeId).toLowerCase()) as UnitTypeDef | undefined) || null;
+          } catch {
             gameTypeDef = null;
           }
         }
@@ -538,7 +558,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         const icon = u.icon || gameTypeDef?.icon || constDef?.icon || '🔸';
         const attack = (typeof u.attack === 'number') ? u.attack : (gameTypeDef?.attack ?? constDef?.attack ?? 0);
         const defense = (typeof u.defense === 'number') ? u.defense : (gameTypeDef?.defense ?? constDef?.defense ?? 0);
-        const movesRemaining = (typeof u.movesRemaining === 'number') ? u.movesRemaining : (typeof (u as any).movement === 'number' ? (u as any).movement : (constDef?.movement ?? 0));
+        const movesRemaining = (typeof u.movesRemaining === 'number') ? u.movesRemaining : (typeof (u as { movement?: number }).movement === 'number' ? (u as { movement?: number }).movement : (constDef?.movement ?? 0));
         const maxMoves = (typeof u.maxMoves === 'number') ? u.maxMoves : (constDef?.movement ?? gameTypeDef?.movement ?? movesRemaining);
 
         return { ...u, icon, attack, defense, movesRemaining, maxMoves };
@@ -645,12 +665,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     const science = res?.science || 0;
     const gold = res?.gold || 0;
     
-    const cached = (get() as any)._cachedPlayerResources;
+    const cached = (get() as StoreWithInternals)._cachedPlayerResources;
     if (cached.food === food && cached.production === production && cached.trade === trade && cached.science === science && cached.gold === gold) {
       return cached;
     }
     const newRes = { food, production, trade, science, gold };
-    (get() as any)._cachedPlayerResources = newRes;
+    (get() as StoreWithInternals)._cachedPlayerResources = newRes;
     return newRes;
   },
 
@@ -705,12 +725,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     const aliveCivilizations = civilizations.filter(civ => civ.isAlive).length;
     const gameStarted = gameState.isGameStarted;
 
-    const cached = (get() as any)._cachedGameStats;
+    const cached = (get() as StoreWithInternals)._cachedGameStats;
     if (cached.turn === turn && cached.totalCities === totalCities && cached.totalUnits === totalUnits && cached.aliveCivilizations === aliveCivilizations && cached.gameStarted === gameStarted) {
       return cached;
     }
     const newStats = { turn, totalCities, totalUnits, aliveCivilizations, gameStarted };
-    (get() as any)._cachedGameStats = newStats;
+    (get() as StoreWithInternals)._cachedGameStats = newStats;
     return newStats;
   }
 }));

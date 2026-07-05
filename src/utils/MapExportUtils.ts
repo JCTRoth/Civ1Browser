@@ -9,15 +9,33 @@ interface TerrainProps {
   description?: string;
 }
 
+interface MapTile {
+  row?: number;
+  col?: number;
+  type?: string;
+  resource?: string | null;
+  improvement?: string | null;
+  visible?: boolean;
+  explored?: boolean;
+  hasRoad?: boolean;
+  hasRiver?: boolean;
+}
+
+interface ExportMap {
+  width: number;
+  height: number;
+  tiles: MapTile[];
+}
+
 function findResourceByName(name: string) {
   if (!name) return null;
   const lower = name.toLowerCase();
   return SPECIAL_RESOURCES.find(r => r.name.toLowerCase() === lower) || null;
 }
 
-export function enrichMapForExport(originalMap: any) {
+export function enrichMapForExport(originalMap: ExportMap | null | undefined): ExportMap | null | undefined {
   if (!originalMap) return originalMap;
-  const mapCopy: any = {
+  const mapCopy: ExportMap = {
     width: originalMap.width,
     height: originalMap.height,
     tiles: []
@@ -30,7 +48,7 @@ export function enrichMapForExport(originalMap: any) {
     const tileType = t.type || null;
 
     let resourceName: string | null = null;
-    let resourceDef: any = null;
+    let resourceDef: { name: string; food: number; production: number; trade: number; description?: string; terrain?: string; terrains?: string } | null = null;
     let invalidResource = false;
 
     if (t.resource && t.resource !== 'bonus') {
@@ -86,7 +104,7 @@ export function enrichMapForExport(originalMap: any) {
       trade: baseTrade + resTrade
     };
 
-      const outTile: any = {
+      const outTile: MapTile & { resourceInfo?: Record<string, unknown> | null; invalidResource?: boolean; terrainInfo?: Record<string, unknown>; computedYields?: Record<string, number> } = {
       col,
       row,
       type: tileType,

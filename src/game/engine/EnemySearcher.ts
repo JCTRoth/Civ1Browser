@@ -133,8 +133,8 @@ export class EnemySearcher {
     startRow: number,
     mapWidth: number,
     mapHeight: number,
-    getUnitAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
+    getUnitAt: (col: number, row: number) => { id: string; civilizationId: number; col: number; row: number } | null | undefined,
+    getCityAt: (col: number, row: number) => { id: string; civilizationId: number; col: number; row: number } | null | undefined,
     isVisible: (col: number, row: number) => boolean,
     civilizationId: number,
     maxRadius?: number
@@ -259,8 +259,8 @@ export class EnemySearcher {
     startRow: number,
     mapWidth: number,
     mapHeight: number,
-    getUnitAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
+    getUnitAt: (col: number, row: number) => { id: string; civilizationId: number; col: number; row: number } | null | undefined,
+    getCityAt: (col: number, row: number) => { id: string; civilizationId: number; col: number; row: number } | null | undefined,
     isVisible: (col: number, row: number) => boolean,
     civilizationId: number,
     maxRadius: number
@@ -408,7 +408,7 @@ export class EnemySearcher {
   public static hasVisibleEnemyCities(
     mapWidth: number,
     mapHeight: number,
-    getCityAt: (col: number, row: number) => any,
+    getCityAt: (col: number, row: number) => { id: string; civilizationId: number; col: number; row: number } | null | undefined,
     isVisible: (col: number, row: number) => boolean,
     civilizationId: number
   ): boolean {

@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
+import type { Unit } from '@/types/game';
 
 /**
  * AI INTEGRATION TEST
@@ -14,7 +15,7 @@ import GameEngine from '@/game/engine/GameEngine';
  * Since turnManager doesn't have a public setter, we access the private field
  */
 function setCurrentPlayer(engine: GameEngine, civId: number): void {
-  (engine.turnManager as any).currentPlayer = civId;
+  (engine.turnManager as unknown as { currentPlayer: number }).currentPlayer = civId;
 }
 
 describe('AI Integration Tests', () => {
@@ -26,9 +27,9 @@ describe('AI Integration Tests', () => {
 
   afterEach(() => {
     if (engine) {
-      (engine as any).units = [];
-      (engine as any).cities = [];
-      (engine as any).civilizations = [];
+      engine.units = [];
+      engine.cities = [];
+      engine.civilizations = [];
       engine = null;
     }
     if (global.gc) {
@@ -39,7 +40,7 @@ describe('AI Integration Tests', () => {
   describe('AI Turn Processing', () => {
     it('should process AI turn without errors', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -61,7 +62,7 @@ describe('AI Integration Tests', () => {
 
     it('should skip human player turns', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -84,7 +85,7 @@ describe('AI Integration Tests', () => {
 
     it('should not process AI turn outside its turn', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 3,
@@ -112,7 +113,7 @@ describe('AI Integration Tests', () => {
   describe('AI Unit Movement', () => {
     it('should move AI units with remaining moves', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -141,7 +142,7 @@ describe('AI Integration Tests', () => {
 
     it('should skip units with no valid moves', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -170,7 +171,7 @@ describe('AI Integration Tests', () => {
   describe('AI City Founding', () => {
     it('should found cities with settlers', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -182,7 +183,7 @@ describe('AI Integration Tests', () => {
       const initialCityCount = engine.cities.filter(c => c.civilizationId === 1).length;
 
       // Create a settler for AI
-      const settler = {
+      const settler: Unit = {
         id: 'test-settler',
         type: 'settler',
         civilizationId: 1,
@@ -191,9 +192,11 @@ describe('AI Integration Tests', () => {
         movesRemaining: 2,
         attack: 0,
         defense: 1,
-        movement: 2
+        movement: 2,
+        health: 10,
+        icon: 'settler',
       };
-      engine.units.push(settler as any);
+      engine.units.push(settler);
 
       // Ensure the tile is valid for settling
       const tile = engine.getTileAt(10, 10);
@@ -221,7 +224,7 @@ describe('AI Integration Tests', () => {
   describe('AI Combat', () => {
     it('should attack adjacent enemies', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -231,7 +234,7 @@ describe('AI Integration Tests', () => {
       });
 
       // Place AI warrior adjacent to enemy
-      const aiWarrior = {
+      const aiWarrior: Unit = {
         id: 'ai-warrior',
         type: 'warrior',
         civilizationId: 1,
@@ -241,10 +244,11 @@ describe('AI Integration Tests', () => {
         attack: 1,
         defense: 1,
         movement: 1,
-        health: 100
+        health: 100,
+        icon: 'warrior',
       };
       
-      const enemyUnit = {
+      const enemyUnit: Unit = {
         id: 'enemy-unit',
         type: 'warrior',
         civilizationId: 0,
@@ -254,11 +258,12 @@ describe('AI Integration Tests', () => {
         attack: 1,
         defense: 1,
         movement: 1,
-        health: 100
+        health: 100,
+        icon: 'warrior',
       };
 
-      engine.units.push(aiWarrior as any);
-      engine.units.push(enemyUnit as any);
+      engine.units.push(aiWarrior);
+      engine.units.push(enemyUnit);
 
       engine.civilizations[1].isHuman = false;
       engine.civilizations[1].isAI = true;
@@ -282,7 +287,7 @@ describe('AI Integration Tests', () => {
   describe('AI Strategy', () => {
     it('should explore unexplored tiles', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -309,7 +314,7 @@ describe('AI Integration Tests', () => {
         // Reset unit moves for next turn
         engine.units
           .filter(u => u.civilizationId === 1)
-          .forEach(u => { u.movesRemaining = u.movement; });
+          .forEach(u => { u.movesRemaining = (u as Unit & { movement: number }).movement; });
       }
 
       // Should have explored more tiles
@@ -326,7 +331,7 @@ describe('AI Integration Tests', () => {
   describe('AI Performance', () => {
     it('should complete turn processing within time limit', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 4,
@@ -365,7 +370,7 @@ describe('AI Integration Tests', () => {
 
     it('should handle stuck units gracefully', async () => {
       engine = new GameEngine(null);
-      (engine as any).sleep = () => Promise.resolve();
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -375,7 +380,7 @@ describe('AI Integration Tests', () => {
       });
 
       // Create a unit surrounded by impassable terrain
-      const stuckUnit = {
+      const stuckUnit: Unit = {
         id: 'stuck-unit',
         type: 'warrior',
         civilizationId: 1,
@@ -384,9 +389,11 @@ describe('AI Integration Tests', () => {
         movesRemaining: 5, // Many moves
         attack: 1,
         defense: 1,
-        movement: 1
+        movement: 1,
+        health: 100,
+        icon: 'warrior',
       };
-      engine.units.push(stuckUnit as any);
+      engine.units.push(stuckUnit);
 
       // Surround with mountains
       for (let dx = -1; dx <= 1; dx++) {
