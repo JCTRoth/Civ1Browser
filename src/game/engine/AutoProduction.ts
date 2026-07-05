@@ -5,7 +5,7 @@
  */
 
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
-import { BUILDING_PROPERTIES, WONDER_PROPERTIES, BUILDING_PREREQUISITES } from '@/data/BuildingConstants';
+import { BUILDING_PROPERTIES, WONDER_PROPERTIES } from '@/data/BuildingConstants';
 import {
   assessCityThreat,
   calculateDangerThreshold,
@@ -265,20 +265,6 @@ export class AutoProduction {
     return 'warrior';
   }
 
-  private selectDefenderType(currentYear: number): string {
-    const civ = this.findCivForYear(currentYear);
-    // Prefer high-defense units, ordered by strength
-    const defenderPreference = ['riflemen', 'musketeer', 'phalanx', 'archer', 'warrior'];
-
-    for (const unitType of defenderPreference) {
-      if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
-        return unitType;
-      }
-    }
-
-    return 'warrior';
-  }
-
   private shouldSupportOffensivePlan(city: City): boolean {
     const storage = typeof this.gameEngine.getPlayerStorage === 'function'
       ? this.gameEngine.getPlayerStorage(city.civilizationId)
@@ -327,28 +313,7 @@ export class AutoProduction {
     return 'warrior';
   }
 
-  private selectOffensiveUnitType(currentYear: number): string {
-    const civ = this.findCivForYear(currentYear);
-    // Prefer high-attack units, ordered by strength
-    const offensivePreference = ['tank', 'cavalry', 'knights', 'chariot', 'legion', 'archer', 'warrior'];
-
-    for (const unitType of offensivePreference) {
-      if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
-        return unitType;
-      }
-    }
-
-    return 'warrior';
-  }
-
-  /** Helper: find the civ object for tech checks within year-based methods */
-  private findCivForYear(currentYear: number): any {
-    // Try to find the civ from cities currently being processed
-    // This is called from buildDefenderProduction/buildOffensiveProduction which always operate on a city
-    // We use a simple fallback: check all AI civs and return the first one
-    const aiCivs = this.gameEngine.civilizations?.filter((c: any) => !c.isHuman);
-    return aiCivs?.[0] ?? null;
-  }
+  // findCivForYear removed (unused)
 
   /** Build a game state summary for AIBuildingStrategy */
   private buildGameState(civilizationId: number): {

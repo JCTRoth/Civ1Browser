@@ -6,9 +6,6 @@
  * strategy/coordination types.
  */
 
-import type { Unit, City, Civilization } from '../../../types/game';
-import type { EnemyLocation } from './EnemySearcher';
-
 // ---------------------------------------------------------------------------
 // Strategy profiles
 // ---------------------------------------------------------------------------
@@ -39,7 +36,7 @@ export interface Personality {
 // AI State — stored in PlayerTurnStorage.turnData (replacing Record<string,any>)
 // ---------------------------------------------------------------------------
 
-export interface OffensivePlan {
+interface OffensivePlan {
   target: { col: number; row: number };
   targetType: 'city' | 'unit';
   score: number;
@@ -64,7 +61,7 @@ export interface BuildingPlan {
   reason: string;
 }
 
-export interface ResearchPriority {
+interface ResearchPriority {
   techId: string;
   score: number;
   reason: string;
@@ -172,7 +169,7 @@ export const TECH_CATEGORIES: Record<string, TechCategory> = {
 // ---------------------------------------------------------------------------
 
 /** Maps unit types to the technology required to build them */
-export const UNIT_TECH_REQUIREMENTS: Record<string, string | null> = {
+const UNIT_TECH_REQUIREMENTS: Record<string, string | null> = {
   warrior: null,
   scout: null,
   archer: null,
@@ -215,7 +212,7 @@ export const UNIT_TECH_REQUIREMENTS: Record<string, string | null> = {
  * Check if a civilization has researched a specific technology.
  * Handles both Set<string> and string[] formats.
  */
-export function civHasTech(civ: any, techId: string): boolean {
+function civHasTech(civ: any, techId: string): boolean {
   if (!civ || !techId) return false;
   if (civ.technologies instanceof Set) {
     return civ.technologies.has(techId);

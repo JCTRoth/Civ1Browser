@@ -119,4 +119,4 @@ export function enrichMapForExport(originalMap: any) {
   return mapCopy;
 }
 
-export default { enrichMapForExport };
+

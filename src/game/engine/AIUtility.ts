@@ -349,8 +349,8 @@ export class AIUtility {
     col: number,
     row: number,
     getTileAt: (col: number, row: number) => any,
-    civilizationId: number,
-    getCityAt?: (col: number, row: number) => any
+    _civilizationId: number,
+    _getCityAt?: (col: number, row: number) => any
   ): number {
     const tile = getTileAt(col, row);
     if (!tile) return 0;
@@ -385,8 +385,8 @@ export class AIUtility {
    * Find best defensive position within range
    */
   static findBestDefensivePosition(
-    unitCol: number,
-    unitRow: number,
+    _unitCol: number,
+    _unitRow: number,
     neighbors: SquareCoordinate[],
     getTileAt: (col: number, row: number) => any,
     getUnitAt: (col: number, row: number) => any,
@@ -517,7 +517,7 @@ export function scanAreaForEnemies(
  * Evaluate the defensive quality of a tile for positioning.
  * Higher is better. Hills > Forest > Plains.
  */
-export function evaluateDefensiveTerrain(tile: { type?: string; fortress?: boolean; river?: boolean } | null): number {
+function evaluateDefensiveTerrain(tile: { type?: string; fortress?: boolean; river?: boolean } | null): number {
   if (!tile) return 0;
   let score = 0;
   if (tile.type === 'hills') score += 4;

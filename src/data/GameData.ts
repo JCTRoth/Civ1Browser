@@ -21,54 +21,6 @@ export interface Technology {
   description: string;
 }
 
-export interface Wonder {
-  id: string;
-  name: string;
-  cost: number;
-  requires: string;
-  effect: string;
-  description: string;
-}
-
-export interface UnitType {
-  id: string;
-  name: string;
-  cost: number;
-  attack: number;
-  defense: number;
-  movement: number;
-  sightRange: number;
-  icon: string;
-  requires: string | null;
-  description: string;
-}
-
-export interface Building {
-  id: string;
-  name: string;
-  cost: number;
-  maintenance: number;
-  requires: string | null;
-  effect: string;
-  description: string;
-}
-
-export interface Government {
-  id: string;
-  name: string;
-  requires: string | null;
-  corruption: string;
-  unitSupport: string;
-  description: string;
-}
-
-export interface VictoryCondition {
-  id: string;
-  name: string;
-  description: string;
-  requires?: string[];
-}
-
 export interface DifficultyLevel {
   name: string;
   aiBonus: number;
@@ -390,158 +342,16 @@ export const TECHNOLOGIES: Record<string, Technology> = {
   }
 };
 
-// Wonders of the World
-export const WONDERS: Record<string, Wonder> = {
-  PYRAMIDS: {
-    id: 'pyramids',
-    name: 'Pyramids',
-    cost: 200,
-    requires: 'pottery',
-    effect: 'Granary in every city',
-    description: 'Acts as a Granary in every city on the same continent'
-  },
-  HANGING_GARDENS: {
-    id: 'hanging_gardens',
-    name: 'Hanging Gardens',
-    cost: 200,
-    requires: 'pottery',
-    effect: '+1 happy citizen in every city',
-    description: 'Makes 1 content citizen happy in every city'
-  },
-  COLOSSUS: {
-    id: 'colossus',
-    name: 'Colossus',
-    cost: 200,
-    requires: 'bronze_working',
-    effect: '+1 trade in every square',
-    description: '+1 trade in every square producing trade'
-  },
-  LIGHTHOUSE: {
-    id: 'lighthouse',
-    name: 'Lighthouse',
-    cost: 200,
-    requires: 'map_making',
-    effect: 'Trireme movement +1',
-    description: 'Triremes can move safely on sea squares'
-  },
-  GREAT_LIBRARY: {
-    id: 'great_library',
-    name: 'Great Library',
-    cost: 300,
-    requires: 'literacy',
-    effect: 'Free technologies',
-    description: 'Gives you any technology discovered by two other civilizations'
-  },
-  ORACLE: {
-    id: 'oracle',
-    name: 'Oracle',
-    cost: 300,
-    requires: 'mysticism',
-    effect: 'Temple in every city',
-    description: 'Acts as a Temple in every city'
-  },
-  GREAT_WALL: {
-    id: 'great_wall',
-    name: 'Great Wall',
-    cost: 300,
-    requires: 'pottery',
-    effect: 'Defense bonus',
-    description: 'Doubles defense of all cities against barbarians'
-  },
-  COPERNICUS_OBSERVATORY: {
-    id: 'copernicus',
-    name: "Copernicus' Observatory",
-    cost: 300,
-    requires: 'astronomy',
-    effect: '+50% science',
-    description: '+50% science in the city where it is built'
-  },
-  ISAAC_NEWTONS_COLLEGE: {
-    id: 'newtons_college',
-    name: "Isaac Newton's College",
-    cost: 400,
-    requires: 'theory_of_gravity',
-    effect: '+50% science globally',
-    description: 'Doubles science output in the city'
-  },
-  APOLLO_PROGRAM: {
-    id: 'apollo_program',
-    name: 'Apollo Program',
-    cost: 600,
-    requires: 'space_flight',
-    effect: 'Enables spaceship',
-    description: 'Required to build spaceship parts for space race victory'
-  }
-};
+// (Wonders removed - unused)
 
 // Re-export unit data from UnitConstants to avoid duplication
 // UNIT_DATA_MAP provides the GameData-compatible format expected by existing code
 export { UNIT_DATA_MAP as UNIT_TYPES } from './UnitConstants';
 
 
-// Government Types
-export const GOVERNMENTS: Record<string, Government> = {
-  DESPOTISM: {
-    id: 'despotism',
-    name: 'Despotism',
-    requires: null,
-    corruption: 'high',
-    unitSupport: 'free',
-    description: 'Starting government. High corruption, free unit support'
-  },
-  MONARCHY: {
-    id: 'monarchy',
-    name: 'Monarchy',
-    requires: 'monarchy',
-    corruption: 'medium',
-    unitSupport: 'low',
-    description: 'Medium corruption, low unit costs'
-  },
-  REPUBLIC: {
-    id: 'republic',
-    name: 'Republic',
-    requires: 'republic',
-    corruption: 'low',
-    unitSupport: 'medium',
-    description: 'Low corruption, medium unit costs, trade bonus'
-  },
-  DEMOCRACY: {
-    id: 'democracy',
-    name: 'Democracy',
-    requires: 'democracy',
-    corruption: 'minimal',
-    unitSupport: 'high',
-    description: 'Minimal corruption, high unit costs, maximum trade'
-  },
-  COMMUNISM: {
-    id: 'communism',
-    name: 'Communism',
-    requires: 'communism',
-    corruption: 'low',
-    unitSupport: 'medium',
-    description: 'Low corruption, no senate, spies effective'
-  }
-};
+// (Governments removed - unused)
 
-// Victory Conditions
-export const VICTORY_CONDITIONS: Record<string, VictoryCondition> = {
-  CONQUEST: {
-    id: 'conquest',
-    name: 'Conquest Victory',
-    description: 'Eliminate all other civilizations'
-  },
-  SPACE_RACE: {
-    id: 'space_race',
-    name: 'Space Race Victory',
-    description: 'Launch spaceship and reach Alpha Centauri first',
-    requires: ['apollo_program', 'spaceship_parts']
-  },
-  SCORE: {
-    id: 'score',
-    name: 'Score Victory',
-    description: 'Highest civilization score at 2100 AD'
-  }
-};
+// (Victory Conditions removed - unused)
 
 // Game difficulty levels
 export const DIFFICULTY_LEVELS: Record<string, DifficultyLevel> = {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { AIBuildingStrategy } from '@/game/engine/AIBuildingStrategy';
-import type { StrategyProfile, BuildingPlan, Personality } from '@/game/engine/AITypes';
+import type { BuildingPlan, Personality } from '@/game/engine/AITypes';
 
 const makeCity = (overrides: Record<string, unknown> = {}): any => ({
   id: 'city-1',

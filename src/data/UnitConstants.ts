@@ -496,47 +496,6 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
     }
 };
 
-export const UNIT_MAINTENANCE_COSTS = {
-    MILITARY: 1,
-    NAVAL: 2,
-    CIVILIAN: 1
-} as const;
-
-export const UNIT_PRODUCTION_REQUIREMENTS = {
-    [UNIT_TYPES.WARRIOR]: { shields: 10 },
-    [UNIT_TYPES.SCOUT]: { shields: 15 },
-    [UNIT_TYPES.ARCHER]: { shields: 30 },
-    [UNIT_TYPES.PHALANX]: { shields: 50 },
-    [UNIT_TYPES.CHARIOT]: { shields: 40 },
-    [UNIT_TYPES.KNIGHTS]: { shields: 40 },
-    [UNIT_TYPES.LEGION]: { shields: 60 },
-    [UNIT_TYPES.CATAPULT]: { shields: 70 },
-    [UNIT_TYPES.MUSKETEER]: { shields: 80 },
-    [UNIT_TYPES.RIFLEMEN]: { shields: 30 },
-    [UNIT_TYPES.CAVALRY]: { shields: 100 },
-    [UNIT_TYPES.MECH_INF]: { shields: 50 },
-    [UNIT_TYPES.CANNON]: { shields: 120 },
-    [UNIT_TYPES.ARTILLERY]: { shields: 150 },
-    [UNIT_TYPES.TANK]: { shields: 200 },
-    [UNIT_TYPES.SAIL]: { shields: 40 },
-    [UNIT_TYPES.TRIREME]: { shields: 80 },
-    [UNIT_TYPES.CARAVEL]: { shields: 60 },
-    [UNIT_TYPES.FRIGATE]: { shields: 80 },
-    [UNIT_TYPES.IRONCLAD]: { shields: 120 },
-    [UNIT_TYPES.DESTROYER]: { shields: 160 },
-    [UNIT_TYPES.CRUISER]: { shields: 200 },
-    [UNIT_TYPES.BATTLESHIP]: { shields: 280 },
-    [UNIT_TYPES.SUBMARINE]: { shields: 240 },
-    [UNIT_TYPES.CARRIER]: { shields: 160 },
-    [UNIT_TYPES.TRANSPORT]: { shields: 50 },
-    [UNIT_TYPES.SETTLER]: { shields: 40 },
-    [UNIT_TYPES.DIPLOMAT]: { shields: 30 },
-    [UNIT_TYPES.CARAVAN]: { shields: 50 },
-    [UNIT_TYPES.FERRY]: { shields: 30 },
-    [UNIT_TYPES.FIGHTER]: { shields: 60 },
-    [UNIT_TYPES.BOMBER]: { shields: 120 },
-    [UNIT_TYPES.NUCLEAR]: { shields: 160 }
-} as const;
 
 // Create GameData-compatible format: Record<string, UnitDataObject>
 // This provides the format expected by code using Object.values(UNIT_TYPES) from GameData

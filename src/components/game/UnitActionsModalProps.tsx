@@ -1,7 +1,4 @@
-import React from 'react';
-import { TILE_SIZE } from '@/data/TerrainData';
-
-export interface ContextMenuData {
+interface ContextMenuData {
   x: number;
   y: number;
   hex: { col: number; row: number };

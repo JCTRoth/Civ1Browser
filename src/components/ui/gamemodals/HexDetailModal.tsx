@@ -22,7 +22,6 @@ const HexDetailModal: React.FC<HexDetailModalProps> = ({
   if (!selectedHex) return null;
 
   const logic = new HexDetailModalLogic(selectedHex, map, units, cities);
-  const tile = logic.getTile();
   const unitsAtHex = logic.getUnitsAtHex();
   const cityAtHex = logic.getCityAtHex();
 

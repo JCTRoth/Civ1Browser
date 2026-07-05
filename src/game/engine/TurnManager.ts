@@ -588,7 +588,6 @@ export class TurnManager {
 
     // Add production
     if (city.currentProduction) {
-      const before = city.productionStored;
       city.productionStored += city.yields.production;
       city.productionProgress = city.productionStored;
 

@@ -8,21 +8,10 @@ import {MathUtils} from "@/utils/MathUtils";
 
 // Type definitions
 
-interface BuildingEffects {
-    foodBonus?: number;
-    productionBonus?: number;
-    tradeBonus?: number;
-    goldBonus?: number;
-    scienceBonus?: number;
-    foodStorage?: number;
-    unitExperience?: number;
-    happiness?: number;
-    defense?: number;
-    maxPopulation?: number;
-}
+// BuildingEffects interface removed (unused)
 
 // Provide a CITY_NAMES export for legacy modules. Prefer names from `CIVILIZATIONS` data if present.
-export const CITY_NAMES: Record<string, string[]> = (() => {
+const CITY_NAMES: Record<string, string[]> = (() => {
     const mapping: Record<string, string[]> = {};
     try {
         if (Array.isArray(CIVILIZATIONS) && CIVILIZATIONS.length > 0) {
@@ -40,12 +29,7 @@ export const CITY_NAMES: Record<string, string[]> = (() => {
     return mapping;
 })();
 
-interface Building {
-    name: string;
-    cost: number;
-    maintenance: number;
-    effects: BuildingEffects;
-}
+// Building interface removed (unused)
 
 interface ProductionItem {
     type: 'unit' | 'building';
@@ -932,7 +916,7 @@ export class City {
     }
 
     // Get score for tile by key
-    getTileScoreByKey(tileKey: string): number {
+    getTileScoreByKey(_tileKey: string): number {
         // This would need gameMap parameter
         return 0;
     }
@@ -1009,11 +993,7 @@ export class City {
 }
 
 
-// City Manager - handles collections of cities
-export class CityManager {
-    private cities: Map<string, City>;
-    private citiesByPosition: Map<string, City>;
-    private citiesByCivilization: Map<string, City[]>;
+// CityManager class removed (unused)
     public onStateChange: ((eventType: string, data: any) => void) | null;
 
     constructor() {

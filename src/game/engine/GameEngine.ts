@@ -1,14 +1,12 @@
 import { SquareGrid } from '../HexGrid';
 import { Constants, TERRAIN_PROPS, UNIT_PROPS } from '@/utils/Constants';
 import { CIVILIZATIONS, TECHNOLOGIES } from '@/data/GameData';
-import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, IMPROVEMENT_REQUIREMENTS } from '@/data/TileImprovementConstants';
+import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_REQUIREMENTS } from '@/data/TileImprovementConstants';
 import { ProductionManager } from './ProductionManager';
 import { AutoProduction } from './AutoProduction';
-import { AIUtility } from './AIUtility';
 import { UnitActionManager } from './UnitActionManager';
 import { TurnManager } from './TurnManager';
 import { VictoryManager } from './VictoryManager';
-import { SettlementEvaluator } from './SettlementEvaluator';
 import { EnemySearcher, EnemyLocation } from './EnemySearcher';
 import { ScoutMemory } from './ScoutMemory';
 import { GoToManager } from './GoToManager';
@@ -360,9 +358,6 @@ export default class GameEngine {
   }
 
   // Small helper: sleep for ms milliseconds
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
 
   /**
    * Check and update the areTurnsDone flag for a unit
@@ -387,91 +382,11 @@ export default class GameEngine {
    * Record enemy location in player's intelligence storage
    * Allows AI to make coordinated decisions based on known enemy positions
    * 
+   * Record enemy location in player's intelligence storage
    * @param civilizationId Civilization recording the location
    * @param enemy Enemy search result from EnemySearcher
    */
-  private recordEnemyLocation(civilizationId: number, enemy: any): void {
-    const storage = this.getPlayerStorage(civilizationId);
-    if (!storage) return;
-
-    const round = this.roundManager.getRoundNumber();
-    
-    // Phase 3.1: Update scout memory with current round
-    this.scoutMemory.setCurrentRound(round);
-    const location: EnemyLocation = {
-      col: enemy.col,
-      row: enemy.row,
-      type: enemy.targetType,
-      id: enemy.targetId,
-      discoveredRound: round,
-      lastSeenRound: round
-    };
-
-    // Get enemy civilization ID from the actual unit/city
-    let enemyCivId = -1;
-    if (enemy.targetType === 'unit') {
-      const unit = this.getUnitAt(enemy.col, enemy.row);
-      if (unit) enemyCivId = unit.civilizationId;
-    } else if (enemy.targetType === 'city') {
-      const city = this.getCityAt(enemy.col, enemy.row);
-      if (city) enemyCivId = city.civilizationId;
-    }
-
-    if (enemyCivId < 0) return;
-
-    // Initialize enemy list if needed
-    if (!storage.enemyLocations.has(enemyCivId)) {
-      storage.enemyLocations.set(enemyCivId, []);
-    }
-
-    // Get list of known enemy locations for this civ
-    const enemyList = storage.enemyLocations.get(enemyCivId)!;
-
-    // Cleanup: if there's an entry with this ID but the entity no longer exists at that position, remove it
-    const idxById = enemyList.findIndex(e => e.id === enemy.targetId);
-    if (idxById >= 0) {
-      const stored = enemyList[idxById];
-      let existsNow = false;
-      if (stored.type === 'unit') {
-        const u = this.getUnitAt(stored.col, stored.row);
-        existsNow = !!u && u.id === stored.id;
-      } else if (stored.type === 'city') {
-        const c = this.getCityAt(stored.col, stored.row);
-        existsNow = !!c && c.id === stored.id;
-      }
-
-      if (!existsNow) {
-        console.log(`[AI] Removing stale entry for id=${stored.id} at (${stored.col},${stored.row}) because entity no longer exists`);
-        enemyList.splice(idxById, 1);
-        this.scoutMemory.removeDiscovery(enemyCivId, stored.col, stored.row, stored.type);
-      }
-    }
-    const existingIdx = enemyList.findIndex(e => e.id === enemy.targetId);
-
-    if (existingIdx >= 0) {
-      // Update last seen
-      enemyList[existingIdx].lastSeenRound = round;
-    } else {
-      // Before adding a new location, check if there's a stale record at the same coords
-      const staleIdx = enemyList.findIndex(e => e.col === location.col && e.row === location.row && e.type === location.type);
-      if (staleIdx >= 0) {
-        // If IDs differ (e.g., city destroyed and another created), remove stale record first
-        const stale = enemyList[staleIdx];
-        console.log(`[AI] Removing stale stored enemy at (${stale.col}, ${stale.row}) for civ ${enemyCivId} (stored id=${stale.id}, new id=${location.id})`);
-        enemyList.splice(staleIdx, 1);
-        // Also remove from scout memory if present
-        this.scoutMemory.removeDiscovery(enemyCivId, stale.col, stale.row, stale.type);
-      }
-
-      // Add new location
-      enemyList.push(location);
-    }
-
-    console.log(`[AI] Recorded ${enemy.targetType} at (${enemy.col}, ${enemy.row}) for civ ${civilizationId}`);
-    
-    // Phase 3.1: Also record in scout memory for persistence
-    this.scoutMemory.recordDiscovery(enemyCivId, location);
-  }
+  // recordEnemyLocation removed (unused)
 
   /**
    * Get known enemy locations for a civilization
@@ -835,8 +750,6 @@ export default class GameEngine {
    */
   private createStartingUnits(civId: number, startPos: { col: number; row: number }, mapType: string) {
     console.log(`[UNITS] createStartingUnits called for civId ${civId}, mapType: ${mapType}, position: (${startPos.col},${startPos.row})`);
-    const militaryUnits = ['warriors', 'phalanx', 'legion', 'musketeers', 'riflemen'];
-    
     switch (mapType) {
       case 'ALL_UNITS':
         // Create every single unit type on the board
@@ -1419,7 +1332,6 @@ export default class GameEngine {
     }
 
     // Move the unit
-    const distance = this.squareGrid.chebyshevDistance(unit.col, unit.row, targetCol, targetRow);
     const moveCost = Math.max(1, TERRAIN_PROPS[targetTile.type]?.movement || 1);
 
     // Require that unit has enough remaining moves to cover the move cost

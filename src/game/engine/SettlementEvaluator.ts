@@ -319,7 +319,7 @@ export class SettlementEvaluator {
     weights: SettlementWeights,
     minDistanceFromOtherCities: number = 3,
     currentCivilizationId?: number,
-    getVisibilityAt?: (col: number, row: number) => boolean,
+    _getVisibilityAt?: (col: number, row: number) => boolean,
     canReach?: (fromCol: number, fromRow: number, toCol: number, toRow: number) => boolean
   ): SettlementScore | null {
     console.log(`[SettlementEvaluator] findBestSettlementLocation: Starting search from (${centerCol}, ${centerRow})`);

@@ -220,14 +220,12 @@ describe('DiplomacyManager', () => {
       // Force acceptance by making the target civ very diplomatic
       ge.civilizations[1].personality = { aggression: 1, diplomacy: 9, military: 1, expansion: 5, science: 5, economy: 5 };
       // Try many times since it's RNG-based
-      let transferred = false;
       for (let i = 0; i < 50; i++) {
         ge.civilizations[1].resources.gold = 100;
         ge.civilizations[0].resources.gold = 200;
         const result = dm.processProposal({ fromCivId: 0, toCivId: 1, action: 'demand_tribute', goldAmount: 30 });
         if (result.accepted) {
           expect(result.goldTransferred).toBeDefined();
-          transferred = true;
           break;
         }
       }
@@ -491,7 +489,6 @@ describe('DiplomacyManager', () => {
   describe('counter-proposals', () => {
     it('should sometimes return counter-proposal on rejection', () => {
       // Run many proposals to statistically get at least one counter
-      let gotCounter = false;
       for (let i = 0; i < 50; i++) {
         // Reset relation status to peace for each attempt
         dm.makePeace(0, 1);
@@ -501,7 +498,6 @@ describe('DiplomacyManager', () => {
           action: 'propose_alliance',
         });
         if (!result.accepted && result.counterProposal) {
-          gotCounter = true;
           expect(result.counterProposal.fromCivId).toBe(1);
           expect(result.counterProposal.toCivId).toBe(0);
           break;

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { EnemySearcher, SearchResult, EnemyLocation } from '@/game/engine/EnemySearcher';
+import { EnemySearcher } from '@/game/engine/EnemySearcher';
 
 describe('EnemySearcher', () => {
   const mapWidth = 20;

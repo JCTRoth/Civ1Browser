@@ -284,7 +284,7 @@ export class SquareGrid {
 }
 
 // Utility functions for square operations
-export const SquareUtils = {
+const SquareUtils = {
     // Create square key from coordinates
     makeKey: (col: number, row: number): string => `${col},${row}`,
 
@@ -307,4 +307,3 @@ export const SquareUtils = {
     })
 };
 
-export default SquareGrid;

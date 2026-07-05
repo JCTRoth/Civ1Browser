@@ -8,7 +8,6 @@ import { UNIT_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
 import { DomUtils } from '@/utils/DomUtils';
 import { enrichMapForExport } from '@/utils/MapExportUtils';
-import { getTerrainInfo } from '@/data/TerrainData';
 import '../../styles/gameModals.css';
 import '../../styles/diplomacyModal.css';
 import LeaderPortrait from './LeaderPortrait';
@@ -49,15 +48,6 @@ const GameModals = ({ gameEngine }) => {
     if (typeof city?.production === 'number') return city.production;
     if (typeof city?.output?.production === 'number') return city.output.production;
     return 0;
-  };
-
-  const getProductionProgressValue = (city: any): number => {
-  if (!city) return 0;
-  // Prefer productionStored for progress
-  if (typeof city?.productionStored === 'number') return city.productionStored;
-  if (typeof city?.productionProgress === 'number') return city.productionProgress;
-  if (typeof city?.shields === 'number') return city.shields;
-  return 0;
   };
 
   const getProductionCost = (item: any): number => {
@@ -258,13 +248,7 @@ const GameModals = ({ gameEngine }) => {
     }, 1000);
   };
 
-  const handleResearchTechnology = (techId) => {
-    console.log(`[CLICK] Research technology: ${techId}`);
-    if (gameEngine && currentPlayer) {
-      gameEngine.setResearch(currentPlayer.id, techId);
-    }
-    handleCloseDialog();
-  };
+  // handleResearchTechnology removed (unused)
 
   // Helpers: compute prerequisite depth (used to infer era) and group by era
   const getPrerequisiteDepth = (techId: string, visited = new Set()): number => {
@@ -276,24 +260,7 @@ const GameModals = ({ gameEngine }) => {
     return Math.max(...depths) + 1;
   };
 
-  const eraFromDepth = (depth: number) => {
-    if (depth === 0) return 'Ancient';
-    if (depth === 1) return 'Classical';
-    if (depth === 2) return 'Medieval';
-    if (depth === 3) return 'Renaissance';
-    return 'Industrial';
-  };
-
-  const groupByEra = (list) => {
-    const groups: Record<string, typeof list> = {};
-    (list || []).forEach(tech => {
-      const depth = getPrerequisiteDepth(tech.id);
-      const era = eraFromDepth(depth);
-      if (!groups[era]) groups[era] = [];
-      groups[era].push(tech);
-    });
-    return groups;
-  };
+  // eraFromDepth + groupByEra removed (unused)
 
   // Game Menu Modal
   const renderGameMenu = () => (
@@ -1207,90 +1174,9 @@ const GameModals = ({ gameEngine }) => {
     </Modal>
   );
 
-  // City Production Modal
-  const handleStartProduction = (unitKey: string) => {
-    if (!selectedCity) return;
-    const unitDef = UNIT_PROPS[unitKey];
-    if (!unitDef) return;
+  // handleStartProduction removed (unused)
 
-    const item = {
-      type: 'unit',
-      itemType: unitKey,
-      name: unitDef.name,
-      cost: unitDef.cost
-    };
-
-    if (gameEngine && typeof gameEngine.setCityProduction === 'function') {
-      gameEngine.setCityProduction(selectedCity.id, item, false);
-      actions.addNotification({ type: 'success', message: `Started production: ${item.name}` });
-    }
-
-    // Close dialog after selecting
-    actions.hideDialog();
-  };
-
-  const handleQueueProduction = (unitKey: string) => {
-    if (!selectedCity) {
-      console.warn('[GameModals] handleQueueProduction: No city selected');
-      return;
-    }
-    const unitDef = UNIT_PROPS[unitKey];
-    if (!unitDef) {
-      console.warn('[GameModals] handleQueueProduction: Invalid unit key', unitKey);
-      return;
-    }
-
-    const item = {
-      type: 'unit',
-      itemType: unitKey,
-      name: unitDef.name,
-      cost: unitDef.cost
-    };
-
-    console.log('[GameModals] handleQueueProduction: gameEngine object', gameEngine);
-    if (gameEngine && typeof gameEngine.getAllCities === 'function') {
-      console.log('[GameModals] handleQueueProduction: gameEngine.getAllCities()', gameEngine.getAllCities());
-    }
-
-    if (gameEngine) {
-      const hasMethod = typeof (gameEngine as any).setCityProduction === 'function';
-      console.log('[GameModals] handleQueueProduction: engine method present?', { hasMethod });
-      let ok: any = null;
-      try {
-        if (hasMethod) ok = (gameEngine as any).setCityProduction(selectedCity.id, item, true);
-        else console.warn('[GameModals] handleQueueProduction: setCityProduction not available on engine');
-      } catch (e) {
-        console.error('[GameModals] handleQueueProduction: exception calling setCityProduction', e);
-      }
-
-      console.log('[GameModals] handleQueueProduction: setCityProduction returned', ok);
-
-      // Always try to inspect engine city list for debugging
-      try {
-        if ((gameEngine as any).getAllCities) {
-          const allCities = (gameEngine as any).getAllCities();
-          console.log('[GameModals] handleQueueProduction: engine.getAllCities()', allCities.map(c => ({ id: c.id, buildQueue: c.buildQueue })));
-          actions.updateCities(allCities);
-          const updated = allCities.find((c: any) => c.id === selectedCity.id);
-          console.log('[GameModals] handleQueueProduction: updated selectedCity from engine', { id: updated?.id, buildQueue: updated?.buildQueue });
-        }
-      } catch (e) {
-        console.error('[GameModals] handleQueueProduction: error reading engine cities', e);
-      }
-
-      const success = ok && (ok.success === true || ok === true);
-      if (success) {
-        actions.addNotification({ type: 'info', message: `Queued production: ${item.name}` });
-      } else {
-        actions.addNotification({ type: 'warning', message: `Failed to queue: ${item.name}` });
-      }
-    }
-
-    console.log('[GameModals] handleQueueProduction: After queue', {
-      cityId: selectedCity.id,
-      buildQueue: selectedCity.buildQueue
-    });
-  };
+  // handleQueueProduction removed (unused)
 
   // New: track a single selected production item for the select box
   const [selectedProductionKey, setSelectedProductionKey] = useState<string | null>(null);

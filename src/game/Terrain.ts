@@ -295,8 +295,6 @@ export class Tile {
         }
 
         // Store old terrain for potential resource loss
-        const oldTerrain = this.terrain;
-
         // Convert terrain
         this.terrain = newTerrainType;
 
@@ -391,19 +389,6 @@ export class Tile {
 }
 
 // Resource types and properties
-export const RESOURCE_TYPES = {
-    WHEAT: 'wheat',
-    CATTLE: 'cattle',
-    FISH: 'fish',
-    COAL: 'coal',
-    IRON: 'iron',
-    GOLD: 'gold',
-    GEMS: 'gems',
-    SILK: 'silk',
-    SPICES: 'spices',
-    WHALES: 'whales'
-};
-
 export const RESOURCE_PROPS: Record<string, Resource> = {
     wheat: { food: 1, production: 0, trade: 0, terrain: ['grassland', 'plains'] },
     cattle: { food: 1, production: 0, trade: 0, terrain: ['grassland', 'plains'] },
@@ -417,21 +402,7 @@ export const RESOURCE_PROPS: Record<string, Resource> = {
     whales: { food: 1, production: 0, trade: 2, terrain: ['ocean'] }
 };
 
-// Improvement types
-export const IMPROVEMENT_TYPES = {
-    ROAD: 'road',
-    RAILROAD: 'railroad',
-    IRRIGATION: 'irrigation',
-    MINE: 'mine',
-    FORTRESS: 'fortress',
-    AIRBASE: 'airbase'
-};
-
-// Terrain Generator
-export class TerrainGenerator {
-    private width: number;
-    private height: number;
-    private seed: number;
+// TerrainGenerator class removed (unused)
     private noise: SimplexNoise;
 
     constructor(width: number, height: number, seed: number | null = null) {
@@ -579,7 +550,7 @@ export class TerrainGenerator {
         }
     }
 
-    private generateRiver(tiles: Tile[][], startCol: number, startRow: number): void {
+    private generateRiver(_tiles: Tile[][], _startCol: number, _startRow: number): void {
         // Simple river generation - not implemented in detail for this demo
         // Would involve pathfinding toward lower elevation or ocean
     }
@@ -623,7 +594,7 @@ class SimplexNoise {
     private p: number[];
     private perm: number[];
 
-    constructor(seed: number) {
+    constructor(_seed: number) {
         this.p = [];
         this.perm = [];
 
@@ -659,9 +630,7 @@ class SimplexNoise {
         return MathUtils.lerp(x1, x2, v);
     }
 
-    private fade(t: number): number {
-        return t * t * t * (t * (t * 6 - 15) + 10);
-    }
+    // fade method removed (unused)
 
     private grad(hash: number, x: number, y: number): number {
         const h = hash & 15;

@@ -7,13 +7,11 @@ import {CityUtils} from "@/utils/CityUtils";
 export class CityModalLogic {
   private readonly city: any;
   private readonly gameEngine: any;
-  private actions: any;
   private readonly currentPlayer: any;
 
-  constructor(city: any, gameEngine: any, actions: any, currentPlayer: any) {
+  constructor(city: any, gameEngine: any, _actions: any, currentPlayer: any) {
     this.city = city;
     this.gameEngine = gameEngine;
-    this.actions = actions;
     this.currentPlayer = currentPlayer;
   }
 

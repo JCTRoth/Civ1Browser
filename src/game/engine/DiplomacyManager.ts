@@ -39,7 +39,6 @@ const REPUTATION_RECOVERY_PER_TURN = 1;
 /** Base gold cost to bribe a unit (multiplied by unit attack+defense) */
 const BRIBE_UNIT_BASE_COST = 25;
 /** Base gold cost to bribe a city (multiplied by city population) */
-const BRIBE_CITY_BASE_COST = 100;
 /** How many turns before AI re-evaluates diplomatic stance */
 const AI_DIPLOMACY_INTERVAL = 5;
 
@@ -590,7 +589,7 @@ export class DiplomacyManager {
   // ─── Turn processing ───────────────────────────────────────────────
 
   /** Called once per round to recover reputation and handle AI decisions */
-  processTurn(roundNumber: number): void {
+  processTurn(_roundNumber: number): void {
     // Recover reputation toward 0
     for (const rel of this.relations.values()) {
       if (rel.reputationModifier < 0) {

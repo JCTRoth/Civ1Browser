@@ -2,7 +2,7 @@
 // Uses Noto Color Emoji font for consistent emoji rendering
 
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
-import { getUnitSvgPath, hasUnitSvgOverride } from '@/data/UnitIconConfig';
+import { getUnitSvgPath } from '@/data/UnitIconConfig';
 
 const iconCache = new Map<string, HTMLImageElement | string>(); // HTMLImageElement for SVG, string for emoji
 const loadingPromises = new Map<string, Promise<HTMLImageElement | string>>();
@@ -14,7 +14,7 @@ const loadingPromises = new Map<string, Promise<HTMLImageElement | string>>();
  * SVG icons are loaded from src/assets/units/ based on UnitIconConfig
  * Emoji icons use Noto Color Emoji font for consistent rendering
  */
-export async function loadUnitIcon(unitType: string): Promise<HTMLImageElement | string> {
+async function loadUnitIcon(unitType: string): Promise<HTMLImageElement | string> {
   // Check cache first
   if (iconCache.has(unitType)) {
     return iconCache.get(unitType)!;
@@ -26,7 +26,7 @@ export async function loadUnitIcon(unitType: string): Promise<HTMLImageElement |
   }
 
   // Start loading
-  const promise = new Promise<HTMLImageElement | string>((resolve, reject) => {
+  const promise = new Promise<HTMLImageElement | string>((resolve, _reject) => {
     // Check if this unit has an SVG override
     const svgPath = getUnitSvgPath(unitType);
     
@@ -90,7 +90,4 @@ export async function preloadAllUnitIcons(): Promise<void> {
 /**
  * Clear icon cache (useful for hot reload during development)
  */
-export function clearIconCache(): void {
-  iconCache.clear();
-  loadingPromises.clear();
-}
+// clearIconCache removed (unused)

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { useShallow } from 'zustand/react/shallow';
 import { TILE_SIZE } from '@/data/TerrainData';
@@ -51,8 +51,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const [unitPaths, setUnitPaths] = useState<Map<string, UnitPathStep[]>>(new Map());
   const [reachableTiles, setReachableTiles] = useState<Map<string, number>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
-  const renderTimeoutRef = useRef<number | null>(null);
-  const lastRenderTime = useRef<number>(0);
   const needsRender = useRef<boolean>(true);
   const lastGameState = useRef<any>(null);
   const animationCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1036,7 +1034,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
                       goToManager.executePathWithAnimation(
                         selectedUnit.id,
                         300,
-                        (remainingSteps: number) => {
+                        (_remainingSteps: number) => {
                           // Update UI after each step
                           const path = goToManager.getUnitPath(selectedUnit.id);
                           setUnitPaths(prev => {
@@ -1530,8 +1528,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         // Log FPS every 5 seconds
         frameCount++;
         if (currentTime - lastFPSLog > 5000) {
-          const actualFPS = frameCount / 5;
-          // console.log(`[GameCanvas] Animation FPS: ${actualFPS.toFixed(1)} (target: ${animFPS})`);
           frameCount = 0;
           lastFPSLog = currentTime;
         }

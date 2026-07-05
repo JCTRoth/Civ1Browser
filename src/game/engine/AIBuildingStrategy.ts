@@ -12,7 +12,6 @@ import {
   type Personality,
   type BuildingPlan,
   canBuildBuilding,
-  civHasTech,
 } from './AITypes';
 
 // ---------------------------------------------------------------------------
@@ -247,7 +246,7 @@ export class AIBuildingStrategy {
    */
   static evaluateWonders(
     city: any,
-    civ: any,
+    _civ: any,
     strategy: StrategyProfile,
     gameState: { currentYear: number; isUnderThreat: boolean; builtWonders: string[] }
   ): BuildingPlan[] {

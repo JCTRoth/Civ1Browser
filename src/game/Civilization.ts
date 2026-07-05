@@ -1,8 +1,7 @@
 // Civilization System - Refactored to remove EventEmitter pattern
 
 import { Constants } from '@/utils/Constants';
-import { CITY_NAMES } from './City';
-import {MathUtils} from "@/utils/MathUtils";
+import { MathUtils } from "@/utils/MathUtils";
 
 // Type definitions
 interface Personality {
@@ -28,14 +27,6 @@ interface Technology {
     prerequisites: string[];
     category: string;
     effects: any;
-}
-
-interface CivilizationTemplate {
-    name: string;
-    leaderName: string;
-    color: string;
-    cityNames: string[];
-    bonuses: Record<string, number>;
 }
 
 interface CivilizationInfo {
@@ -194,7 +185,7 @@ export class Civilization {
     }
 
     // Calculate resources from all cities
-    calculateResources(gameMap: any): void {
+    calculateResources(_gameMap: any): void {
         let totalGold = 0;
         let totalScience = 0;
 
@@ -397,7 +388,7 @@ export class Civilization {
 }
 
 // Technology Tree
-export const TECHNOLOGY_TREE: Record<string, Technology> = {
+const TECHNOLOGY_TREE: Record<string, Technology> = {
     // Ancient Era
     pottery: {
         name: 'Pottery',
@@ -486,47 +477,4 @@ export const TECHNOLOGY_TREE: Record<string, Technology> = {
 };
 
 // Civilization Templates
-export const CIVILIZATION_TEMPLATES: Record<string, CivilizationTemplate> = {
-    romans: {
-        name: 'Romans',
-        leaderName: 'Caesar',
-        color: Constants.COLORS.PLAYER,
-        cityNames: CITY_NAMES.romans,
-        bonuses: { military: 1, construction: 1 }
-    },
-    babylonians: {
-        name: 'Babylonians',
-        leaderName: 'Hammurabi',
-        color: Constants.COLORS.AI_1,
-        cityNames: CITY_NAMES.babylonians,
-        bonuses: { science: 1, agriculture: 1 }
-    },
-    germans: {
-        name: 'Germans',
-        leaderName: 'Frederick',
-        color: Constants.COLORS.AI_2,
-        cityNames: CITY_NAMES.germans,
-        bonuses: { production: 1, military: 1 }
-    },
-    egyptians: {
-        name: 'Egyptians',
-        leaderName: 'Cleopatra',
-        color: Constants.COLORS.AI_3,
-        cityNames: CITY_NAMES.egyptians,
-        bonuses: { construction: 1, trade: 1 }
-    },
-    americans: {
-        name: 'Americans',
-        leaderName: 'Lincoln',
-        color: Constants.COLORS.AI_4,
-        cityNames: CITY_NAMES.americans,
-        bonuses: { expansion: 1, democracy: 1 }
-    },
-    greeks: {
-        name: 'Greeks',
-        leaderName: 'Alexander',
-        color: Constants.COLORS.AI_5,
-        cityNames: CITY_NAMES.greeks,
-        bonuses: { military: 1, philosophy: 1 }
-    }
-};
+// CIVILIZATION_TEMPLATES removed (unused)

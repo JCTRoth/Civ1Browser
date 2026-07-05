@@ -88,9 +88,7 @@ interface WorkData {
     turns?: number;
 }
 
-interface DestroyData {
-    unit: Unit;
-}
+// DestroyData interface removed (unused)
 
 interface PromotionData {
     unit: Unit;
@@ -105,7 +103,7 @@ interface TurnData {
 }
 
 // Unit System
-export class Unit {
+class Unit {
     public id: string;
     public type: string;
     public civilization: Civilization;
@@ -499,47 +497,7 @@ export class Unit {
         return distance <= 1;
     }
 
-    // Resolve combat against a defending unit (used during city attack)
-    private resolveCombat(target: Unit, gameMap: any): CombatResult {
-        let attackStrength = this.attackPoints;
-        let defenseStrength = target.defensePoints;
-
-        // Apply veteran bonuses
-        if (this.veteran) attackStrength = Math.floor(attackStrength * 1.5);
-        if (target.veteran) defenseStrength = Math.floor(defenseStrength * 1.5);
-
-        // Apply terrain defense bonus
-        const targetTile = gameMap.getTile(target.col, target.row);
-        const terrainBonus = targetTile.getDefenseBonus();
-        defenseStrength += terrainBonus;
-
-        // Apply city defense bonus
-        const city = gameMap.getCityAt(target.col, target.row);
-        if (city) {
-            const cityDefense = city.population >= 8 ? 2.7 : 1.8;
-            defenseStrength += cityDefense;
-        }
-
-        // Apply fortification bonus
-        if (target.fortified) {
-            defenseStrength = Math.floor(defenseStrength * 1.5);
-        }
-
-        // Calculate combat odds
-        const totalStrength = attackStrength + defenseStrength;
-        const attackerWinChance = attackStrength / totalStrength;
-
-        // Determine winner
-        const random = Math.random();
-        const attackerWins = random < attackerWinChance;
-
-        return {
-            attackerWins,
-            attackStrength,
-            defenseStrength,
-            attackerWinChance
-        };
-    }
+    // resolveCombat removed (unused)
 
     // Settle a city (for settler units)
     settle(gameMap: any): any {
@@ -772,7 +730,7 @@ export class Unit {
 }
 
 // Unit Manager - handles collections of units
-export class UnitManager {
+class UnitManager {
     private units: Map<string, Unit>;
     private unitsByPosition: Map<string, Unit[]>;
     private unitsByCivilization: Map<string, Unit[]>;

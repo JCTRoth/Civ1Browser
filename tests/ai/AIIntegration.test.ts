@@ -8,15 +8,6 @@ import GameEngine from '@/game/engine/GameEngine';
  * can properly explore, settle, build units, and engage enemies.
  */
 
-interface AIMetrics {
-  citiesFounded: number;
-  unitsProduced: number;
-  tilesExplored: number;
-  combatsInitiated: number;
-  settlersMoved: number;
-  scoutsDeployed: number;
-  enemiesDiscovered: number;
-}
 
 /**
  * Helper function to set current player for testing
@@ -134,8 +125,8 @@ describe('AI Integration Tests', () => {
       const aiUnit = engine.units.find(u => u.civilizationId === 1 && (u.movesRemaining || 0) > 0);
       
       if (aiUnit) {
-        const initialCol = aiUnit.col;
-        const initialRow = aiUnit.row;
+        void aiUnit.col;
+        void aiUnit.row;
 
         engine.civilizations[1].isHuman = false;
         engine.civilizations[1].isAI = true;
@@ -273,15 +264,15 @@ describe('AI Integration Tests', () => {
       engine.civilizations[1].isAI = true;
       setCurrentPlayer(engine, 1);
 
-      const initialEnemyHealth = enemyUnit.health;
-      const initialUnitCount = engine.units.length;
+      void enemyUnit.health;
+      void engine.units.length;
 
       await engine.aiManager.processAITurn(1);
 
       // Either enemy was damaged, killed, AI moved closer, or AI chose another strategy
       // The key is that the AI processed the turn without errors
-      const enemyStillExists = engine.units.find(u => u.id === 'enemy-unit');
-      const aiStillExists = engine.units.find(u => u.id === 'ai-warrior');
+      void engine.units.find(u => u.id === 'enemy-unit');
+      void engine.units.find(u => u.id === 'ai-warrior');
       
       // At minimum, verify the turn completed - AI made some decision
       expect(true).toBe(true);

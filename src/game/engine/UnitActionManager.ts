@@ -136,11 +136,4 @@ export class UnitActionManager {
   }
 }
 
-/**
- * Extended Unit type with action properties
- */
-export interface UnitWithActions extends Unit {
-  isSkipped?: boolean;
-  isSleeping?: boolean;
-  isFortified?: boolean;
-}
+// UnitWithActions interface removed (unused)

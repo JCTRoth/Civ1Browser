@@ -15,13 +15,6 @@ function GameSetupModal({ show, onStart }) {
 
   const totalSteps = 2;
   const isFinalStep = currentStep === totalSteps;
-  // Keep step keys for internal logic but remove visible labels
-  const steps = useMemo(() => (
-    [
-      { key: 1, label: '' },
-      { key: 2, label: '' }
-    ]
-  ), []);
 
   const difficultyOptions = useMemo<Array<{ id: string; label: string }>>(() => (
     Object.entries(DIFFICULTY_LEVELS).map(([id, data]) => ({ id, label: data.name }))
@@ -102,7 +95,7 @@ function GameSetupModal({ show, onStart }) {
           {currentStep === 1 && (
             <section className="setup-section" aria-labelledby="setup-step-civilization">
               <div className="setup-civ-list" role="list">
-                {sortedCivilizations.map((civ, idx) => {
+                {sortedCivilizations.map((civ, _idx) => {
                   // Map sorted item back to original index so selection maps to CIVILIZATIONS[] indexes
                   const originalIndex = CIVILIZATIONS.findIndex(orig => orig.name === civ.name);
                   const isSelected = selectedCiv === originalIndex;

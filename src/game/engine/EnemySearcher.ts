@@ -1,5 +1,3 @@
-import { Constants, TERRAIN_PROPS } from '@/utils/Constants';
-
 export interface SearchResult {
   col: number;
   row: number;
@@ -20,68 +18,6 @@ export interface EnemyLocation {
 
 /**
  * Min-heap for efficient enemy prioritization
- */
-class PriorityQueue<T> {
-  private items: T[] = [];
-  private compareFn: (a: T, b: T) => number;
-
-  constructor(compareFn: (a: T, b: T) => number) {
-    this.compareFn = compareFn;
-  }
-
-  push(item: T): void {
-    this.items.push(item);
-    this.bubbleUp(this.items.length - 1);
-  }
-
-  pop(): T | undefined {
-    if (this.items.length === 0) return undefined;
-    const result = this.items[0];
-    const last = this.items.pop();
-    if (this.items.length > 0 && last !== undefined) {
-      this.items[0] = last;
-      this.bubbleDown(0);
-    }
-    return result;
-  }
-
-  peek(): T | undefined {
-    return this.items[0];
-  }
-
-  get length(): number {
-    return this.items.length;
-  }
-
-  private bubbleUp(index: number): void {
-    while (index > 0) {
-      const parentIndex = (index - 1) >> 1;
-      if (this.compareFn(this.items[index], this.items[parentIndex]) >= 0) break;
-      [this.items[index], this.items[parentIndex]] = [this.items[parentIndex], this.items[index]];
-      index = parentIndex;
-    }
-  }
-
-  private bubbleDown(index: number): void {
-    const length = this.items.length;
-    while (true) {
-      const leftChild = (index << 1) + 1;
-      const rightChild = leftChild + 1;
-      let smallest = index;
-
-      if (leftChild < length && this.compareFn(this.items[leftChild], this.items[smallest]) < 0) {
-        smallest = leftChild;
-      }
-      if (rightChild < length && this.compareFn(this.items[rightChild], this.items[smallest]) < 0) {
-        smallest = rightChild;
-      }
-      if (smallest === index) break;
-      [this.items[index], this.items[smallest]] = [this.items[smallest], this.items[index]];
-      index = smallest;
-    }
-  }
-}
-
 /**
  * Enemy Searcher - Finds enemy units and cities using Archimedean spiral
  * 
@@ -96,42 +32,7 @@ export class EnemySearcher {
   // Control verbosity of logging
   private static VERBOSE_LOGGING = false;
 
-  /**
-   * Check if a tile contains an enemy unit or city
-   */
-  private static isEnemyAt(
-    col: number,
-    row: number,
-    getUnitAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
-    civilizationId: number
-  ): SearchResult | null {
-    // Check for enemy unit
-    const unit = getUnitAt(col, row);
-    if (unit && unit.civilizationId !== civilizationId) {
-      return {
-        col,
-        row,
-        distance: 0, // Will be calculated by caller
-        targetType: 'unit',
-        targetId: unit.id
-      };
-    }
-
-    // Check for enemy city
-    const city = getCityAt(col, row);
-    if (city && city.civilizationId !== civilizationId) {
-      return {
-        col,
-        row,
-        distance: 0,
-        targetType: 'city',
-        targetId: city.id
-      };
-    }
-
-    return null;
-  }
+  // _isEnemyAt removed (unused)
 
   /**
    * Check if a tile is visible (explored by the searching civilization)

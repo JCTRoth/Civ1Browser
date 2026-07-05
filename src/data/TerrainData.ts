@@ -38,8 +38,4 @@ export function getTerrainInfo(type?: string | null): TerrainInfo | null {
   return found || null;
 }
 
-export default {
-  TILE_SIZE,
-  TERRAIN_TYPES,
-  getTerrainInfo
-};
+

@@ -16,10 +16,6 @@
 
 import type { Unit } from '../../../types/game';
 
-export interface QueuedUnit {
-  unitId: string;
-  processed: boolean; // Has this unit been given a turn this cycle?
-}
 
 export class UnitTurnQueue {
   private gameEngine: any;

@@ -28,7 +28,7 @@ const CityModal: React.FC<CityModalProps> = ({
   const [selectedProductionKey, setSelectedProductionKey] = useState<string | null>(null);
   const [selectedQueueIndex, setSelectedQueueIndex] = useState<number | null>(null);
   const [showProductionModal, setShowProductionModal] = useState<boolean>(false);
-  const [autoQueueOnSelect, setAutoQueueOnSelect] = useState<boolean>(false);
+  const [, setAutoQueueOnSelect] = useState<boolean>(false);
   const [autoProduction, setAutoProduction] = useState<boolean>((selectedCity as any)?.autoProduction || false);
 
   // Sync local state when selectedCity changes
@@ -71,37 +71,7 @@ const CityModal: React.FC<CityModalProps> = ({
     console.warn('Unknown production type:', itemType);
   };
 
-  const handleBuyNow = (itemType: string) => {
-    // Check if it's a unit
-    const unitDef = UNIT_PROPS[itemType];
-    if (unitDef) {
-      const item = {
-        type: 'unit',
-        itemType,
-        name: unitDef.name,
-        cost: unitDef.cost
-      };
-      logic.purchaseProduction(item);
-      return;
-    }
-
-    // Check if it's a building
-    const buildingDef = BUILDING_PROPS[itemType];
-    if (buildingDef) {
-      const item = {
-        type: 'building',
-        itemType,
-        name: buildingDef.name,
-        cost: buildingDef.cost
-      };
-      logic.purchaseProduction(item);
-      return;
-    }
-
-    console.warn('Unknown production type:', itemType);
-  };
-
-  const availableProductionKeys = ['warrior']; // Placeholder
+  // handleBuyNow removed (unused)
 
   const getSelectedProductionCost = (key: string | null): number => {
     if (!key) return 0;

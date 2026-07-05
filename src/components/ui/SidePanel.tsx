@@ -1,7 +1,7 @@
 import React from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { CIVILIZATIONS } from '@/data/GameData';
-import { TERRAIN_TYPES, TILE_SIZE } from '@/data/TerrainData';
+import { TILE_SIZE } from '@/data/TerrainData';
 import { TERRAIN_PROPERTIES } from '@/data/TerrainConstants';
 import MiniMap from './MiniMap';
 import '../../styles/sidePanel.css';
@@ -46,8 +46,6 @@ const SidePanel: React.FC<{ gameEngine?: any }> = ({ gameEngine }) => {
     const tile = map.tiles[tileIndex];
     
     if (!tile) return null;
-    
-    const terrainProps = TERRAIN_TYPES[tile.type] || {} as any;
     
     // Check visibility and exploration from the map arrays
     const isVisible = map.visibility?.[tileIndex] ?? false;

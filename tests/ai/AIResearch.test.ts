@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { AIResearch } from '@/game/engine/AIResearch';
 import { TECHNOLOGIES_DATA } from '@/data/TechnologyData';
-import type { StrategyProfile, Personality } from '@/game/engine/AITypes';
+import type { Personality } from '@/game/engine/AITypes';
 
 const baseCiv = (overrides: Record<string, unknown> = {}): any => ({
   id: 1,

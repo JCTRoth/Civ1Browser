@@ -1,4 +1,3 @@
-import React from 'react';
 import { Modal } from 'react-bootstrap';
 import { TERRAIN_TYPES } from '@/data/TerrainData';
 import { IMPROVEMENT_TYPES } from '@/data/TileImprovementConstants';

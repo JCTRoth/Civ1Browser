@@ -17,7 +17,6 @@
 import { Constants } from '@/utils/Constants';
 import { TILE_SIZE, getTerrainInfo, TERRAIN_TYPES } from '@/data/TerrainData';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, ImprovementDisplayConfig } from '@/data/TileImprovementConstants';
-import { UNIT_TYPES } from '@/data/GameData';
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
 import type { MapState, CameraState, Unit, City, GameState, Civilization } from '../../../types/game';
@@ -750,7 +749,6 @@ export class MapRenderer {
       civilizations,
       currentTime,
       cameraZoom,
-      hasOffscreen,
       squareToScreen,
       reachableTiles
     } = params;
@@ -765,7 +763,7 @@ export class MapRenderer {
       const selectedUnit = selectedUnitId ? units.find(u => u.id === selectedUnitId) : null;
       const isNaval = selectedUnit && UNIT_PROPERTIES[selectedUnit.type]?.naval;
       
-      reachableTiles.forEach((cost, key) => {
+      reachableTiles.forEach((_cost, key) => {
         const [col, row] = key.split(',').map(Number);
         
         // Check if tile is visible (not in fog of war)

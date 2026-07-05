@@ -40,7 +40,7 @@ export const DomUtils = {
      * @param className - CSS class to add
      * @param duration - Animation duration in milliseconds
      */
-    addClassWithAnimation: (element: HTMLElement, className: string, duration: number = 300): void => {
+    addClassWithAnimation: (element: HTMLElement, className: string, _duration: number = 300): void => {
         element.classList.add(className);
         setTimeout(() => {
             element.classList.add('fade-in');

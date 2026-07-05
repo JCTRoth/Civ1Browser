@@ -5,7 +5,7 @@ import { Constants } from '../utils/Constants';
 import { SquareGrid } from '../game/HexGrid';
 import { UNIT_TYPES } from '../data/GameData';
 import { UNIT_PROPERTIES } from '../data/UnitConstants';
-import type { GameStoreState, GameState, MapState, CameraState, Unit, City, Civilization, UIState, Settings, Technology, GameActions, GameResult } from '../../types/game';
+import type { GameStoreState, GameState, MapState, CameraState, UIState, GameResult } from '../../types/game';
 
 const createInitialGameState = (): GameState => ({
   isLoading: false,
@@ -363,7 +363,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         newMap.tiles = mapUpdate.tiles.map(tile => ({ ...tile }));
       }
       // For development-only forced fog disable, read from env (Vite exposes VITE_* vars)
-      const disableFog = typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_DISABLE_FOG === 'true';
+      // disableFog check removed (unused)
       const tilesArray = Array.isArray(mapUpdate.tiles) && mapUpdate.tiles.length > 0
         ? mapUpdate.tiles
         : Array.isArray(newMap.tiles) ? newMap.tiles : [];
@@ -516,7 +516,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       };
     }),
 
-    updateUnits: (units) => set(state => {
+    updateUnits: (units) => set(_state => {
       // Enrich units with canonical data (icon, attack, defense, movement) when engine
       // provides only a minimal unit object. Prefer engine values when present.
       const enriched = (units || []).map(u => {
@@ -548,7 +548,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     updateCities: (cities) => set({ cities }),
 
-    updateCivilizations: (civilizations) => set({ civilizations }),
+    updateCivilizations: (civilizations) => set(_state => ({ civilizations })),
 
     updateTechnologies: (technologies) => set({ technologies }),
 
@@ -583,7 +583,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       }
     })),
 
-    resetGameState: () => set(state => ({
+    resetGameState: () => set(_state => ({
       gameState: createInitialGameState(),
       map: createInitialMapState(),
       camera: createInitialCameraState(),
@@ -679,7 +679,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   },
 
   get visibleTiles() {
-    const { map, camera } = get();
+    const { map } = get();
 
     // Calculate which tiles are visible based on camera position and zoom
     const viewportTiles = [];

@@ -1,6 +1,5 @@
 import React from 'react';
-import { TILE_SIZE } from '@/data/TerrainData';
-import { UnitActionsModalProps, ContextMenuData } from './UnitActionsModalProps';
+import { UnitActionsModalProps } from './UnitActionsModalProps';
 
 const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
   contextMenu,

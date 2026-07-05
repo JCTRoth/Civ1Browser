@@ -12,7 +12,7 @@
 
 import { UNIT_PROPERTIES } from './UnitConstants';
 
-export interface UnitIconOverride {
+interface UnitIconOverride {
   unitType: string;
   svgPath: string;
   fallbackEmoji?: string;
@@ -25,7 +25,7 @@ export interface UnitIconOverride {
  * The loader will attempt to load the SVG, and fall back to the emoji
  * defined in UnitConstants.ts if the SVG is not available.
  */
-export const UNIT_ICON_OVERRIDES: UnitIconOverride[] = [
+const UNIT_ICON_OVERRIDES: UnitIconOverride[] = [
   {
     unitType: 'warrior',
     svgPath: 'worrier.svg',
@@ -88,15 +88,6 @@ export function getUnitSvgPath(unitType: string): string | null {
 }
 
 /**
- * Check if a unit has an SVG override
- */
-export function hasUnitSvgOverride(unitType: string): boolean {
-  return UNIT_ICON_OVERRIDES.some(o => o.unitType === unitType);
-}
-
-/**
  * Get all unit types that have SVG overrides
  */
-export function getUnitsWithSvgOverrides(): string[] {
-  return UNIT_ICON_OVERRIDES.map(o => o.unitType);
-}
+// getUnitsWithSvgOverrides removed (unused)

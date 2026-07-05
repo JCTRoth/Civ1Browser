@@ -5,7 +5,7 @@
  * army coordination, building production, and unit targeting.
  */
 
-import { AIUtility, scanAreaForEnemies, evaluateDefensiveTerrain, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
+import { AIUtility, scanAreaForEnemies, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
 import { SettlementEvaluator } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
@@ -13,7 +13,6 @@ import { AICoordinator } from './AICoordinator';
 import { AIResearch } from './AIResearch';
 import {
   createDefaultAIState,
-  canBuildUnit,
   type AIState,
   type StrategyProfile,
 } from './AITypes';
@@ -23,8 +22,7 @@ import {
   collectCityThreatSamples,
   computeCityGarrisonStrength,
   scoreEnemyTarget,
-  type CityThreatAssessment,
-  type CityThreatSample
+  type CityThreatAssessment
 } from './AIStrategy';
 import type { Unit, City } from '../../../types/game';
 
@@ -1191,7 +1189,7 @@ export class AIManager {
 
   /** Get known enemy targets from player storage for army group formation */
   private getKnownEnemyTargets(
-    civilizationId: number,
+    _civilizationId: number,
     storage: any
   ): Array<{ col: number; row: number; type: 'city' | 'unit'; estimatedStrength: number }> {
     const targets: Array<{ col: number; row: number; type: 'city' | 'unit'; estimatedStrength: number }> = [];
@@ -1241,7 +1239,7 @@ export class AIManager {
   // ──────────────────────────────────────────────────────────────────────
 
   /** Store a threat alert in player storage so other units can respond */
-  private broadcastThreatAlert(civilizationId: number, col: number, row: number, enemyStrength: number, storage: any): void {
+  private broadcastThreatAlert(_civilizationId: number, col: number, row: number, enemyStrength: number, storage: any): void {
     if (!storage) return;
     storage.turnData = storage.turnData || {};
     if (!storage.turnData.threatAlerts) {

@@ -66,7 +66,6 @@ export const Constants = {
 export const TERRAIN_PROPS = T_PROPS;
 export const UNIT_PROPS = U_PROPS;
 export const BUILDING_PROPS = B_PROPS;
-export const IMPROVEMENT_PROPS = I_PROPS;
+// IMPROVEMENT_PROPS removed (unused)
+// const _IMPROVEMENT_PROPS = I_PROPS;
 
-// Legacy exports for backward compatibility
-export { Constants as default };
