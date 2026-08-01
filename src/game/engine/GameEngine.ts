@@ -936,7 +936,9 @@ export default class GameEngine {
       }
     }
     
-    if (this.storeActions) {
+    // Only update the store (UI visibility) for the human player.
+    // AI exploration is kept in per-player storage and must not leak to the minimap.
+    if (this.storeActions && this.activePlayer === 0) {
       this.storeActions.revealArea(centerCol, centerRow, radius);
     }
   }

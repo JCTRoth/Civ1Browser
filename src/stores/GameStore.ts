@@ -67,7 +67,9 @@ const createInitialUIState = (): UIState => ({
   showDiplomacy: false,
   showGameMenu: false,
   activeDialog: null,
-  sidebarCollapsed: false,
+  // Mobile-first: drawer starts closed on small screens so the map is
+  // immediately visible; static sidebar stays open on desktop.
+  sidebarCollapsed: typeof window !== 'undefined' && window.innerWidth < 768,
   notifications: [],
   goToMode: false,
   goToUnit: '',

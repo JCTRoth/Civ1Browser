@@ -4,10 +4,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1rem;
+  padding-top: calc(1rem + var(--safe-top, 0px));
+  padding-bottom: calc(1rem + var(--safe-bottom, 0px));
   background: rgba(10, 10, 15, 0.85);
   backdrop-filter: blur(6px);
-  z-index: 5000;
+  z-index: var(--z-overlay, 5000);
   color: #f8f9fa;
   font-family: 'Orbitron', 'Segoe UI', sans-serif;
 }
@@ -16,11 +18,14 @@
   max-width: 520px;
   width: 100%;
   border-radius: 16px;
-  padding: 2.5rem 2rem;
+  padding: 2rem 1.5rem;
   text-align: center;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: linear-gradient(165deg, rgba(30, 35, 60, 0.95) 0%, rgba(10, 12, 22, 0.95) 100%);
+  max-height: calc(100dvh - 2rem - var(--safe-top, 0px) - var(--safe-bottom, 0px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .game-result-overlay.victory .game-result-panel {
@@ -35,21 +40,21 @@
 
 .game-result-header h1 {
   margin-bottom: 0.5rem;
-  font-size: 2.5rem;
+  font-size: clamp(1.75rem, 6vw, 2.5rem);
   letter-spacing: 0.08em;
 }
 
 .game-result-header .game-result-subtitle {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: clamp(0.95rem, 3vw, 1.1rem);
   color: rgba(255, 255, 255, 0.8);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 
 .game-result-body {
-  margin: 2rem 0;
-  font-size: 1.1rem;
+  margin: 1.5rem 0;
+  font-size: clamp(1rem, 3.5vw, 1.1rem);
   line-height: 1.6;
 }
 
@@ -68,7 +73,8 @@
 
 .gr-btn {
   min-width: 120px;
-  padding: 0.65rem 1.4rem;
+  min-height: 48px; /* touch-friendly */
+  padding: 0.75rem 1.5rem;
   border: none;
   border-radius: 999px;
   font-weight: 600;
@@ -80,6 +86,10 @@
 .gr-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+.gr-btn:active {
+  transform: scale(0.97);
 }
 
 .gr-btn.primary {
@@ -97,7 +107,20 @@
   color: #fff;
 }
 
-.gr-btn:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.45);
+.gr-btn:focus-visible {
+  outline: 3px solid rgba(66, 153, 225, 0.6);
+  outline-offset: 2px;
+}
+
+/* Full-width stacked buttons on small screens (one-handed use) */
+@media (max-width: 575.98px) {
+  .game-result-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .gr-btn {
+    width: 100%;
+    min-width: 0;
+  }
 }

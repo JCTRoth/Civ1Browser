@@ -56,6 +56,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const animationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticRenderedRef = useRef<boolean>(false);
 
+  // ---- Touch / gesture state (mobile support) ----
+  const touchStartRef = useRef<{ x: number; y: number; id: number } | null>(null);
+  const touchMovedRef = useRef<boolean>(false);
+  const pinchStartRef = useRef<{ distance: number; zoom: number } | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const lastTouchEndRef = useRef<number>(0);
+  const TOUCH_TAP_SLOP = 10;
+  const LONG_PRESS_MS = 500;
+  const DOUBLE_TAP_MS = 300;
+
   // Trigger re-render when game state changes (turn-based optimization)
   const triggerRender = useCallback(() => {
     needsRender.current = true;
@@ -857,7 +867,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
          try {
            unitAt = getUnitAtFromEngine(hex.col, hex.row);
            cityAt = getCityAtFromEngine(hex.col, hex.row);
-         } catch (e) {
+         } catch {
           unitAt = null;
           cityAt = undefined;
          }
@@ -1137,7 +1147,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     let cityAtHex = null;
     try {
       cityAtHex = getCityAtFromEngine(hex.col, hex.row);
-    } catch (e) {
+    } catch {
       // City not found, that's OK
     }
 
@@ -1152,6 +1162,146 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       unit: unitAtHex,
       city: cityAtHex
     });
+  };
+
+  // ---- Touch gestures (mobile) ----
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const handleTouchLongPress = (clientX: number, clientY: number) => {
+    // Reuse the right-click context menu flow for long-press
+    handleRightClick({
+      clientX,
+      clientY,
+      preventDefault: () => {},
+    } as React.MouseEvent<HTMLCanvasElement>);
+  };
+
+  const handleDoubleTap = (clientX: number, clientY: number) => {
+    if (gotoMode) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const newZoom = Math.min(camera.zoom * 1.5, 2.5);
+    const worldXBefore = (x / camera.zoom) + camera.x;
+    const worldYBefore = (y / camera.zoom) + camera.y;
+    const worldXAfter = (x / newZoom) + camera.x;
+    const worldYAfter = (y / newZoom) + camera.y;
+    actions.updateCamera({
+      zoom: newZoom,
+      x: camera.x - (worldXAfter - worldXBefore),
+      y: camera.y - (worldYAfter - worldYBefore)
+    });
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touches = e.touches;
+
+    if (touches.length === 1) {
+      const t = touches[0];
+      touchStartRef.current = { x: t.clientX, y: t.clientY, id: t.identifier };
+      touchMovedRef.current = false;
+      pinchStartRef.current = null;
+      clearLongPressTimer();
+
+      // Long-press opens the unit context menu
+      longPressTimerRef.current = window.setTimeout(() => {
+        if (!touchMovedRef.current && touchStartRef.current) {
+          if (navigator.vibrate) {
+            try { navigator.vibrate(20); } catch { /* unsupported */ }
+          }
+          handleTouchLongPress(touchStartRef.current.x, touchStartRef.current.y);
+          touchMovedRef.current = true; // suppress tap on release
+        }
+      }, LONG_PRESS_MS);
+    } else if (touches.length === 2) {
+      // Begin pinch zoom
+      clearLongPressTimer();
+      touchStartRef.current = null;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      pinchStartRef.current = { distance: Math.hypot(dx, dy), zoom: camera.zoom };
+      setIsDragging(false);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    const touches = e.touches;
+
+    if (touches.length === 1 && touchStartRef.current) {
+      const t = touches[0];
+      const dx = t.clientX - touchStartRef.current.x;
+      const dy = t.clientY - touchStartRef.current.y;
+
+      if (Math.abs(dx) > TOUCH_TAP_SLOP || Math.abs(dy) > TOUCH_TAP_SLOP) {
+        touchMovedRef.current = true;
+        clearLongPressTimer();
+      }
+
+      // One-finger pan (skip in Go To mode so taps place the destination)
+      if (touchMovedRef.current && !gotoMode) {
+        actions.updateCamera({
+          x: camera.x - dx / camera.zoom,
+          y: camera.y - dy / camera.zoom
+        });
+        touchStartRef.current = { x: t.clientX, y: t.clientY, id: t.identifier };
+      }
+    } else if (touches.length === 2 && pinchStartRef.current) {
+      clearLongPressTimer();
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
+      const distance = Math.hypot(dx, dy);
+      const scale = distance / pinchStartRef.current.distance;
+      const newZoom = Math.max(0.3, Math.min(2.5, pinchStartRef.current.zoom * scale));
+      actions.updateCamera({ zoom: newZoom });
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    clearLongPressTimer();
+
+    if (e.touches.length === 0) {
+      const now = Date.now();
+      const wasTap = !!touchStartRef.current && !touchMovedRef.current && !pinchStartRef.current;
+
+      if (wasTap && touchStartRef.current) {
+        const { x, y } = touchStartRef.current;
+        // Double-tap zoom, otherwise a plain tap acts like a click
+        if (now - lastTouchEndRef.current < DOUBLE_TAP_MS) {
+          handleDoubleTap(x, y);
+          lastTouchEndRef.current = 0;
+        } else {
+          lastTouchEndRef.current = now;
+          handleClick({
+            clientX: x,
+            clientY: y,
+            preventDefault: () => {},
+          } as React.MouseEvent<HTMLCanvasElement>);
+        }
+      }
+
+      touchStartRef.current = null;
+      pinchStartRef.current = null;
+      touchMovedRef.current = false;
+    } else if (e.touches.length === 1) {
+      // One finger remains after a pinch — reset the pan base
+      const t = e.touches[0];
+      touchStartRef.current = { x: t.clientX, y: t.clientY, id: t.identifier };
+      touchMovedRef.current = false;
+      pinchStartRef.current = null;
+    }
+  };
+
+  const handleTouchCancel = () => {
+    clearLongPressTimer();
+    touchStartRef.current = null;
+    pinchStartRef.current = null;
+    touchMovedRef.current = false;
   };
 
   const executeContextAction = (action: string) => {
@@ -1505,7 +1655,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     // console.log('[GameCanvas] Starting animation loop for pulsing units');
 
     let lastAnimTime = 0;
-    let frameCount = 0;
     let lastFPSLog = 0;
     const animFPS = 5; // 5 FPS for pulsing (turn-based game doesn't need high FPS)
     const animInterval = 1000 / animFPS;
@@ -1524,11 +1673,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       if (elapsed > animInterval) {
         lastAnimTime = currentTime - (elapsed % animInterval);
         renderAnimationLayer(currentTime);
-        
-        // Log FPS every 5 seconds
-        frameCount++;
+
         if (currentTime - lastFPSLog > 5000) {
-          frameCount = 0;
           lastFPSLog = currentTime;
         }
       }
@@ -1570,11 +1716,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     <div className="position-relative w-100 h-100">
       <canvas
         ref={canvasRef}
-        className="w-100 h-100"
+        className="w-100 h-100 game-canvas-input"
         style={{ 
           cursor: minimap ? 'pointer' : 
                   gotoMode ? 'crosshair' : 
-                  (isDragging ? 'grabbing' : 'grab') 
+                  (isDragging ? 'grabbing' : 'grab'),
+          touchAction: 'none',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none'
         }}
         tabIndex={minimap ? -1 : 0}
         onMouseDown={minimap ? null : handleMouseDown}
@@ -1583,6 +1733,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         onClick={handleClick}
         onContextMenu={minimap ? null : handleRightClick}
         onWheel={minimap ? null : handleWheel}
+        onTouchStart={minimap ? null : handleTouchStart}
+        onTouchMove={minimap ? null : handleTouchMove}
+        onTouchEnd={minimap ? null : handleTouchEnd}
+        onTouchCancel={minimap ? null : handleTouchCancel}
       />
       
       {/* Context Menu (not shown on minimap) */}

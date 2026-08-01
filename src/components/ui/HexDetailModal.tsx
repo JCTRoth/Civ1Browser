@@ -1,6 +1,7 @@
 import { Modal } from 'react-bootstrap';
 import { TERRAIN_TYPES } from '@/data/TerrainData';
 import { IMPROVEMENT_TYPES } from '@/data/TileImprovementConstants';
+import '../../styles/hexDetailModal.css';
 
 const HexDetailModal = ({ show, onHide, hex, terrain}) => {
   if (!hex || !terrain) return null;
@@ -53,157 +54,105 @@ const HexDetailModal = ({ show, onHide, hex, terrain}) => {
     { top: '35%', left: '30%', index: 5 },   // Top-left
   ];
 
+  const hasRoad = centerTile.hasRoad || [IMPROVEMENT_TYPES.ROAD, IMPROVEMENT_TYPES.RAILROAD].includes(centerTile.improvement);
+
   return (
     <Modal 
       show={show} 
       onHide={onHide} 
       centered
       size="lg"
+      fullscreen="md-down"
       className="hex-detail-modal"
     >
-      <Modal.Header closeButton className="bg-dark text-white border-light">
-        <Modal.Title style={{ fontFamily: 'monospace', fontSize: '16px' }}>
-          <div className="d-flex justify-content-between align-items-center w-100">
-            <span>TERRAIN VIEW</span>
-            <div style={{ fontSize: '12px' }}>
-              <span className="badge bg-secondary me-2">Hex: {hex.col}, {hex.row}</span>
-              <span className="badge bg-info">{terrainInfo.name}</span>
-            </div>
+      <Modal.Header closeButton className="hex-detail-modal__header">
+        <Modal.Title className="hex-detail-modal__title">
+          <span className="hex-detail-modal__title-text">TERRAIN VIEW</span>
+          <div className="hex-detail-modal__badges">
+            <span className="hex-detail-modal__badge">Hex: {hex.col}, {hex.row}</span>
+            <span className="hex-detail-modal__badge hex-detail-modal__badge--info">{terrainInfo.name}</span>
           </div>
         </Modal.Title>
       </Modal.Header>
       
-      <Modal.Body 
-        className="bg-dark text-white p-0"
-        style={{ 
-          height: '500px',
-          fontFamily: 'monospace',
-          backgroundColor: '#000'
-        }}
-      >
-        <div className="d-flex h-100">
+      <Modal.Body className="hex-detail-modal__body">
+        <div className="hex-detail-layout">
           {/* Left Info Panel */}
-          <div 
-            className="border-end border-light p-2"
-            style={{ 
-              width: '180px',
-              backgroundColor: '#87CEEB',
-              color: '#000',
-              fontSize: '10px',
-              lineHeight: '1.3'
-            }}
-          >
-            <div className="mb-2" style={{ fontSize: '11px' }}>
-              <strong>4000 BC ?</strong><br/>
-              <strong>540 0.5.5</strong><br/>
-              <strong>Indian</strong><br/>
-              <span>Settler: 0</span><br/>
-              <strong>HOME</strong><br/>
+          <div className="hex-detail-sidebar">
+            <div className="hex-detail-sidebar__hero">
+              <strong>4000 BC ?</strong><br />
+              <strong>540 0.5.5</strong><br />
+              <strong>Indian</strong><br />
+              <span>Settler: 0</span><br />
+              <strong>HOME</strong><br />
               <strong>{terrainInfo.name}</strong>
             </div>
 
-            <div className="border-top border-dark pt-2 mt-2" style={{ fontSize: '9px' }}>
+            <div className="hex-detail-sidebar__section">
               {centerTile.unit && (
                 <>
                   <div className="mb-2">
-                    <strong style={{ fontSize: '10px' }}>Active Unit</strong><br/>
-                    <span>{centerTile.unit.type}</span><br/>
+                    <strong>Active Unit</strong><br />
+                    <span>{centerTile.unit.type}</span><br />
                     <span>Moves: {centerTile.unit.moves}/1</span>
                   </div>
-                  <div className="border-top border-dark pt-1 mt-1"></div>
+                  <div className="hex-detail-sidebar__divider" />
                 </>
               )}
               
               <div className="mt-1">
-                <strong>Movement:</strong> 1/3 MP<br/>
-                <strong>Defense:</strong> +50%<br/>
-              </div>
-              
-              <div className="mt-2">
-                <strong>Resources:</strong><br/>
-                <span>Food: 2 🌾</span><br/>
-                <span>Prod: 1 ⚒️</span><br/>
-                <span>Trade: 1 💰</span>
+                <strong>Movement:</strong> 1/3 MP<br />
+                <strong>Defense:</strong> +50%<br />
               </div>
             </div>
 
-            <div className="border-top border-dark pt-2 mt-2" style={{ fontSize: '9px' }}>
-              <strong>Features:</strong><br/>
-              {centerTile.hasRiver && <span>• River<br/></span>}
-              {(centerTile.hasRoad || [IMPROVEMENT_TYPES.ROAD, IMPROVEMENT_TYPES.RAILROAD].includes(centerTile.improvement)) && <span>• Road<br/></span>}
-              {centerTile.improvement && <span>• {centerTile.improvement}<br/></span>}
-              {!centerTile.hasRiver && !(centerTile.hasRoad || [IMPROVEMENT_TYPES.ROAD, IMPROVEMENT_TYPES.RAILROAD].includes(centerTile.improvement)) && !centerTile.improvement && <span>• None<br/></span>}
+            <div className="hex-detail-sidebar__section">
+              <strong>Resources:</strong><br />
+              <span>Food: 2 🌾</span><br />
+              <span>Prod: 1 ⚒️</span><br />
+              <span>Trade: 1 💰</span>
+            </div>
+
+            <div className="hex-detail-sidebar__section">
+              <strong>Features:</strong><br />
+              {centerTile.hasRiver && <span>• River<br /></span>}
+              {hasRoad && <span>• Road<br /></span>}
+              {centerTile.improvement && <span>• {centerTile.improvement}<br /></span>}
+              {!centerTile.hasRiver && !hasRoad && !centerTile.improvement && <span>• None<br /></span>}
             </div>
 
             {centerTile.city && (
-              <div className="border-top border-dark pt-2 mt-2" style={{ fontSize: '9px' }}>
-                <strong>City:</strong><br/>
-                <span>{centerTile.city.name}</span><br/>
+              <div className="hex-detail-sidebar__section">
+                <strong>City:</strong><br />
+                <span>{centerTile.city.name}</span><br />
                 <span>Size: {centerTile.city.population || 1}</span>
               </div>
             )}
           </div>
 
           {/* Center Hex Display */}
-          <div 
-            className="flex-grow-1 position-relative"
-            style={{ backgroundColor: '#000' }}
-          >
+          <div className="hex-detail-map">
             {/* Title Bar */}
-            <div 
-              className="d-flex justify-content-between align-items-center border-bottom border-light px-3 py-1"
-              style={{ 
-                backgroundColor: '#4682B4',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                color: '#FFF'
-              }}
-            >
+            <div className="hex-detail-map__titlebar">
               <span>☰ Menu Bar</span>
               <span>🗺️ Map Window</span>
             </div>
 
             {/* Hex Grid Visual */}
-            <div className="position-relative h-100">
+            <div className="hex-detail-map__grid">
               {/* Center hex */}
-              <div
-                className="position-absolute"
-                style={{
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: '120px',
-                  height: '120px',
-                }}
-              >
+              <div className="hex-detail-map__center">
                 <div
-                  className="d-flex align-items-center justify-content-center"
+                  className="hex-detail-map__hex hex-detail-map__hex--center"
                   style={{
-                    width: '100%',
-                    height: '100%',
                     backgroundColor: terrainInfo.color,
-                    border: '3px solid #FFF',
-                    clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)',
-                    fontSize: '48px'
+                    borderColor: '#FFF'
                   }}
                 >
                   {terrainInfo.char}
                 </div>
                 {centerTile.unit && (
-                  <div 
-                    className="position-absolute text-center text-white"
-                    style={{ 
-                      fontSize: '10px', 
-                      fontWeight: 'bold',
-                      bottom: '-40px',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      backgroundColor: 'rgba(0,0,0,0.7)',
-                      padding: '4px 8px',
-                      borderRadius: '3px',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
+                  <div className="hex-detail-map__unit-label">
                     Active Unit
                   </div>
                 )}
@@ -217,38 +166,23 @@ const HexDetailModal = ({ show, onHide, hex, terrain}) => {
                 return (
                   <div
                     key={idx}
-                    className="position-absolute"
+                    className="hex-detail-map__adjacent"
                     style={{
                       top: pos.top,
                       left: pos.left,
-                      transform: 'translate(-50%, -50%)',
                     }}
                   >
                     <div
-                      className="d-flex align-items-center justify-content-center"
+                      className="hex-detail-map__hex"
                       style={{
-                        width: '80px',
-                        height: '80px',
                         backgroundColor: adjHex.terrainType.color,
-                        border: '2px solid #888',
-                        clipPath: 'polygon(30% 0%, 70% 0%, 100% 50%, 70% 100%, 30% 100%, 0% 50%)',
-                        fontSize: '24px',
+                        borderColor: '#888',
                         opacity: 0.9
                       }}
                     >
                       {adjHex.terrainType.char}
                     </div>
-                    <div 
-                      className="text-center mt-1"
-                      style={{ 
-                        fontSize: '10px',
-                        backgroundColor: 'rgba(0,0,0,0.7)',
-                        color: '#FFF',
-                        padding: '2px 6px',
-                        borderRadius: '3px',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
+                    <div className="hex-detail-map__adjacent-label">
                       {adjHex.terrainType.name}
                     </div>
                   </div>
@@ -257,14 +191,8 @@ const HexDetailModal = ({ show, onHide, hex, terrain}) => {
 
               {/* Connection lines */}
               <svg 
-                className="position-absolute"
-                style={{ 
-                  top: 0, 
-                  left: 0, 
-                  width: '100%', 
-                  height: '100%',
-                  pointerEvents: 'none'
-                }}
+                className="hex-detail-map__lines"
+                aria-hidden="true"
               >
                 {hexPositions.map((pos, idx) => (
                   <line
@@ -284,17 +212,14 @@ const HexDetailModal = ({ show, onHide, hex, terrain}) => {
         </div>
       </Modal.Body>
       
-      <Modal.Footer className="bg-dark border-light">
-        <button className="btn btn-secondary btn-sm" onClick={() => {
-          console.log('[CLICK] HexDetailModal close button');
-          onHide();
-        }}>
+      <Modal.Footer className="hex-detail-modal__footer">
+        <button className="touch-btn touch-btn--ghost" onClick={onHide}>
           Close
         </button>
-        <button className="btn btn-primary btn-sm" onClick={() => console.log('[CLICK] HexDetailModal center view button (not implemented)')}>
+        <button className="touch-btn touch-btn--primary" onClick={() => console.log('[CLICK] HexDetailModal center view button (not implemented)')}>
           Center View
         </button>
-        <button className="btn btn-info btn-sm" onClick={() => console.log('[CLICK] HexDetailModal move unit here button (not implemented)')}>
+        <button className="touch-btn touch-btn--primary" onClick={() => console.log('[CLICK] HexDetailModal move unit here button (not implemented)')}>
           Move Unit Here
         </button>
       </Modal.Footer>

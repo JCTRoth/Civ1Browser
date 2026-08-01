@@ -1,5 +1,6 @@
 import { Modal, Button, Form } from 'react-bootstrap';
 import {useGameStore} from "@/stores/GameStore";
+import '../../styles/settingsModal.css';
 
 function SettingsModal({ show, onHide }) {
   const settings = useGameStore(state => state.settings);
@@ -22,105 +23,96 @@ function SettingsModal({ show, onHide }) {
     });
   };
 
+  const renderSlider = (label: string, value: number, min: number, max: number, step: number, key: string, hint: string, format: (v: number) => string) => (
+    <div className="settings-control">
+      <div className="settings-control__header">
+        <Form.Label className="settings-control__label">{label}</Form.Label>
+        <strong className="settings-control__value">{format(value)}</strong>
+      </div>
+      <Form.Range
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => handleChange(key, e.target.value)}
+        className="settings-control__range"
+      />
+      <Form.Text className="settings-control__hint">{hint}</Form.Text>
+    </div>
+  );
+
   return (
-    <Modal show={show} onHide={onHide} centered size="lg">
-      <Modal.Header closeButton style={{ backgroundColor: '#2c3e50', color: 'white' }}>
-        <Modal.Title>⚙️ Settings</Modal.Title>
+    <Modal
+      show={show}
+      onHide={onHide}
+      centered
+      size="lg"
+      fullscreen="sm-down"
+      dialogClassName="settings-modal"
+    >
+      <Modal.Header closeButton className="settings-modal__header">
+        <Modal.Title className="settings-modal__title">
+          <span aria-hidden="true">⚙️</span> Settings
+        </Modal.Title>
       </Modal.Header>
-      <Modal.Body style={{ backgroundColor: '#34495e', color: 'white' }}>
+      <Modal.Body className="settings-modal__body">
         <Form>
-          {/* UI Scale */}
-          <Form.Group className="mb-3">
-            <Form.Label>
-              Overall UI Scale: <strong>{settings.uiScale.toFixed(2)}x</strong>
-            </Form.Label>
-            <Form.Range
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={settings.uiScale}
-              onChange={(e) => handleChange('uiScale', e.target.value)}
-            />
-            <Form.Text className="text-light">
-              Scales all UI elements proportionally (0.5x to 2.0x)
-            </Form.Text>
-          </Form.Group>
+          {renderSlider(
+            'Overall UI Scale',
+            settings.uiScale,
+            0.5, 2.0, 0.1,
+            'uiScale',
+            'Scales all UI elements proportionally (0.5x to 2.0x)',
+            (v) => `${v.toFixed(2)}x`
+          )}
 
-          {/* Menu Font Size */}
-          <Form.Group className="mb-3">
-            <Form.Label>
-              Top Menu Font Size: <strong>{settings.menuFontSize}px</strong>
-            </Form.Label>
-            <Form.Range
-              min="8"
-              max="20"
-              step="1"
-              value={settings.menuFontSize}
-              onChange={(e) => handleChange('menuFontSize', e.target.value)}
-            />
-            <Form.Text className="text-light">
-              Font size for GAME, ORDERS, ADVISORS menu (8px to 20px)
-            </Form.Text>
-          </Form.Group>
+          {renderSlider(
+            'Top Menu Font Size',
+            settings.menuFontSize,
+            8, 20, 1,
+            'menuFontSize',
+            'Font size for GAME, WORLD, INFO menu (8px to 20px)',
+            (v) => `${v}px`
+          )}
 
-          {/* Sidebar Width */}
-          <Form.Group className="mb-3">
-            <Form.Label>
-              Sidebar Width: <strong>{settings.sidebarWidth}px</strong>
-            </Form.Label>
-            <Form.Range
-              min="100"
-              max="300"
-              step="10"
-              value={settings.sidebarWidth}
-              onChange={(e) => handleChange('sidebarWidth', e.target.value)}
-            />
-            <Form.Text className="text-light">
-              Width of left civilization panel (100px to 300px)
-            </Form.Text>
-          </Form.Group>
+          {renderSlider(
+            'Sidebar Width',
+            settings.sidebarWidth,
+            100, 300, 10,
+            'sidebarWidth',
+            'Width of the info panel on desktop (100px to 300px)',
+            (v) => `${v}px`
+          )}
 
-          {/* Minimap Height */}
-          <Form.Group className="mb-3">
-            <Form.Label>
-              Minimap Height: <strong>{settings.minimapHeight}px</strong>
-            </Form.Label>
-            <Form.Range
-              min="80"
-              max="450"
-              step="10"
-              value={settings.minimapHeight}
-              onChange={(e) => handleChange('minimapHeight', e.target.value)}
-            />
-            <Form.Text className="text-light">
-              Height of minimap display (80px to 250px)
-            </Form.Text>
-          </Form.Group>
+          {renderSlider(
+            'Minimap Height',
+            settings.minimapHeight,
+            80, 450, 10,
+            'minimapHeight',
+            'Height of minimap display (80px to 450px)',
+            (v) => `${v}px`
+          )}
 
-          {/* Civilization List Font Size */}
-          <Form.Group className="mb-3">
-            <Form.Label>
-              Civilization List Font Size: <strong>{settings.civListFontSize}px</strong>
-            </Form.Label>
-            <Form.Range
-              min="8"
-              max="16"
-              step="1"
-              value={settings.civListFontSize}
-              onChange={(e) => handleChange('civListFontSize', e.target.value)}
-            />
-            <Form.Text className="text-light">
-              Font size for civilization names in sidebar (8px to 16px)
-            </Form.Text>
-          </Form.Group>
+          {renderSlider(
+            'Civilization List Font Size',
+            settings.civListFontSize,
+            8, 16, 1,
+            'civListFontSize',
+            'Font size for civilization names in the info panel (8px to 16px)',
+            (v) => `${v}px`
+          )}
         </Form>
       </Modal.Body>
-      <Modal.Footer style={{ backgroundColor: '#2c3e50' }}>
-        <Button variant="warning" onClick={resetDefaults}>
-          🔄 Reset to Defaults
+      <Modal.Footer className="settings-modal__footer">
+        <Button variant="warning" onClick={resetDefaults} className="touch-btn settings-modal__reset">
+          <span aria-hidden="true">🔄</span> Reset to Defaults
         </Button>
-        <Button variant="primary" onClick={() => { console.log('SettingsModal: Apply & Close clicked'); onHide(); }}>
-          ✓ Apply & Close
+        <Button
+          variant="primary"
+          onClick={() => { console.log('SettingsModal: Apply & Close clicked'); onHide(); }}
+          className="touch-btn touch-btn--primary settings-modal__apply"
+        >
+          <span aria-hidden="true">✓</span> Apply & Close
         </Button>
       </Modal.Footer>
     </Modal>

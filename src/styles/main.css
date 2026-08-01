@@ -34,6 +34,12 @@ body {
     height: 100vh;
 }
 
+@supports (height: 100dvh) {
+    #gameContainer, .game-container {
+        height: 100dvh;
+    }
+}
+
 /* Top Bar */
 #topBar, .game-top-bar {
     display: flex;
@@ -82,13 +88,7 @@ body {
     background: var(--game-canvas-bg);
 }
 
-/* Side Panel */
-#sidePanel, .game-side-panel {
-    width: 300px;
-    background: linear-gradient(180deg, var(--side-start) 0%, var(--side-end) 100%);
-    padding: 15px;
-    overflow-y: auto;
-}
+/* Side panel layout is defined in design-system.css (.side-panel-shell) */
 
 .panel {
     background: var(--panel-inner);
@@ -128,28 +128,4 @@ body {
 .terrain-mountains { background-color: #525252; }
 .terrain-forest { background-color: #166534; }
 
-/* Responsive Design */
-@media (max-width: 1400px) {
-    .game-side-panel {
-        width: 250px;
-    }
-    
-    .game-canvas {
-        width: calc(100vw - 250px);
-    }
-}
-
-@media (max-width: 1200px) {
-    .game-top-bar {
-        flex-direction: column;
-        padding: 10px;
-    }
-    
-    .civ-info, .resources, .game-controls {
-        margin: 5px 0;
-    }
-    
-    .game-side-panel {
-        width: 200px;
-    }
-}
+/* Responsive layout is defined in design-system.css (mobile-first). */

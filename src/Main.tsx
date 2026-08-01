@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 // @ts-ignore
 import App from './App.tsx'
+import './styles/design-system.css'
 import './styles/index.css'
 import './styles/main.css'
 import 'bootstrap/dist/css/bootstrap.min.css'

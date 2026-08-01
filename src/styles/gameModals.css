@@ -8,19 +8,24 @@
   max-height: 88vh;
   overflow-y: auto;
   padding: 1.5rem;
+  -webkit-overflow-scrolling: touch;
 }
 
+/* Touch-friendly panning for the tech tree */
 .tech-tree-container {
   height: 80vh;
   overflow: auto;
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .city-detail-modal-body {
   max-height: 70vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .hex-detail-modal {
@@ -38,6 +43,8 @@
   top: 0.5rem;
   right: 0.5rem;
   z-index: 10;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 /* Slightly lighter background for production selection than the city modal */
@@ -53,36 +60,121 @@
   background-color: rgba(28, 30, 32, 0.95);
 }
 
-.hex-detail-modal-body {
-  max-height: 88vh;
-  min-height: 88vh;
-  height: auto;
-  overflow-y: auto;
-}
-
-/* Make city and production modals take more vertical space while staying centered */
+/* Mobile-first: city/production/hex-detail modals fill the viewport on phones */
 .city-details-modal .modal-dialog,
 .production-selection-modal .modal-dialog,
 .hex-detail-modal .modal-dialog {
-  max-height: 100vh;
-  min-height: 88vh;
+  max-height: 100dvh;
   display: flex;
   align-items: center;
+  margin: 0;
 }
 
 .city-details-modal .modal-content,
 .production-selection-modal .modal-content {
-  max-height: 100vh;
-  min-height: 88vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 
 .city-details-modal .modal-body,
 .production-selection-modal .modal-body {
-  max-height: calc(100vh - 120px); /* subtract header/footer approx */
+  max-height: calc(100dvh - 130px); /* subtract header/footer approx */
   overflow-y: auto;
   flex: 1 1 auto; /* allow body to stretch to fill the modal content */
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 768px) {
+  .city-details-modal .modal-dialog,
+  .production-selection-modal .modal-dialog,
+  .hex-detail-modal .modal-dialog {
+    margin: 1.75rem auto;
+    min-height: 0;
+  }
+
+  .city-details-modal .modal-content,
+  .production-selection-modal .modal-content {
+    min-height: 80vh;
+  }
+}
+
+/* Mobile: full-height sheets with safe-area bottom */
+@media (max-width: 767.98px) {
+  .city-details-modal .modal-dialog,
+  .production-selection-modal .modal-dialog,
+  .hex-detail-modal .modal-dialog {
+    height: 100%;
+    max-height: 100%;
+  }
+
+  .city-details-modal .modal-content,
+  .production-selection-modal .modal-content,
+  .hex-detail-modal .modal-content {
+    height: 100%;
+    min-height: 100%;
+    border-radius: 0;
+  }
+
+  .city-details-modal .modal-body,
+  .production-selection-modal .modal-body,
+  .hex-detail-modal-body {
+    max-height: none;
+    min-height: 0;
+    padding-bottom: calc(1rem + var(--safe-bottom, 0px));
+  }
+
+  .hex-detail-modal {
+    max-width: 100vw;
+  }
+}
+
+/* ============================================================================
+   Touch-friendly controls inside city / production modals
+   ========================================================================== */
+
+.city-details-modal .nav-link,
+.production-selection-modal .nav-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+}
+
+.city-details-modal .btn-sm,
+.production-selection-modal .btn-sm {
+  min-height: 40px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.city-details-modal .form-check-input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-accent, #f0c33c);
+}
+
+.city-details-modal .form-check-label {
+  font-size: var(--text-base, 1rem);
+  color: var(--color-text-secondary, #b8c4cf);
+}
+
+.production-selection-modal .table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+
+.production-selection-modal .table td,
+.production-selection-modal .table th {
+  padding: 0.75rem 0.5rem;
+  vertical-align: middle;
+}
+
+@media (max-width: 575.98px) {
+  .production-selection-modal .table {
+    min-width: 560px; /* allow horizontal scroll within the sheet */
+  }
 }
 
 .hex-detail-content {

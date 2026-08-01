@@ -1,54 +1,47 @@
-/* SidePanel styles */
-
-.side-panel {
-  width: 100%;
-  background: #222831;
-  color: #ffffff;
-  min-height: 100vh;
-  box-sizing: border-box;
-  display: grid;
-  grid-template-rows: max-content 1fr 2fr 4fr;
-  grid-template-areas:
-    "minimap"
-    "header"
-    "selection"
-    "details";
-}
+/* ============================================================================
+   SidePanel content styles.
+   Layout/positioning is handled by .side-panel-shell (design-system.css):
+   - static sidebar on desktop, slide-in drawer on mobile.
+   This file only styles the content inside the shell.
+   ========================================================================== */
 
 .side-panel-header {
-  grid-area: header;
-  padding: 10px 12px;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.06);
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .minimap-section {
-  grid-area: minimap;
   padding: 8px;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   overflow: hidden;
-  zoom: 1.2;
+  flex-shrink: 0;
 }
 
 .minimap-container {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 4 / 3;
+  min-height: 110px;
+  max-height: 220px;
+  background-color: #0a0f14;
+  border: 1px solid var(--color-border, #2c3b49);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .selection-section {
-  grid-area: selection;
   padding: 12px;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .details-section {
-  grid-area: details;
   padding: 12px;
-  overflow-y: auto;
 }
 
+/* Muted text — WCAG AA (>= 4.5:1 on panel background) */
 .side-panel-small-muted {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  color: var(--color-text-muted, #8b9aa9);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .header-flex {
@@ -73,19 +66,23 @@
   margin-top: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .unit-action-btn {
-  padding: 8px 12px;
+  min-height: var(--touch-min, 44px);
+  padding: 10px 14px;
   border: none;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
   text-align: left;
   color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .goto-btn {
@@ -131,11 +128,11 @@
 }
 
 .path-info {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
-  padding: 4px 8px;
+  color: var(--color-text-muted, #8b9aa9);
+  font-size: 13px;
+  padding: 6px 10px;
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 3px;
+  border-radius: 6px;
   text-align: center;
 }
 .avatar-div.avatar-two-icons {
@@ -154,7 +151,9 @@
 
 .player-name {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 15px;
+  color: var(--color-text, #e8eef3);
+  overflow-wrap: anywhere;
 }
 
 .player-leader {
@@ -166,14 +165,17 @@
 }
 
 .gold-strong {
-  color: #9be6a8;
+  color: #7fe0a0;
   font-size: 15px;
 }
 
 .selected-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   margin-bottom: 8px;
+  color: var(--color-text, #e8eef3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .unit-name {
@@ -201,18 +203,23 @@
 }
 
 .details-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   margin-bottom: 8px;
+  color: var(--color-text, #e8eef3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .details-content {
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-text-secondary, #b8c4cf);
   font-size: 14px;
+  line-height: 1.55;
 }
 
 .unit-name-details {
   margin-bottom: 6px;
+  color: var(--color-text, #e8eef3);
 }
 
 .location {
@@ -239,7 +246,7 @@
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 6px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text-secondary, #b8c4cf);
 }
 
 .details-separator {
@@ -265,29 +272,43 @@
   font-size: 13px;
 }
 
+/* Larger checkbox (44px touch target) */
 .settings-checkbox-label {
   display: flex;
   align-items: center;
+  gap: 10px;
   cursor: pointer;
   margin-bottom: 4px;
   user-select: none;
+  min-height: var(--touch-min, 44px);
+  padding: 4px 0;
 }
 
 .settings-checkbox-label input[type="checkbox"] {
-  margin-right: 8px;
+  margin: 0;
   cursor: pointer;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  accent-color: var(--color-accent, #f0c33c);
 }
 
 .checkbox-text {
-  font-size: 13px;
+  font-size: 14px;
+  color: var(--color-text-secondary, #b8c4cf);
 }
 
 .settings-hint {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  color: var(--color-text-muted, #8b9aa9);
   margin-top: 4px;
-  margin-left: 24px;
+  margin-left: 30px;
   line-height: 1.3;
+}
+
+/* Defense bonus row */
+.defense-bonus {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
 }

@@ -1,5 +1,14 @@
 /* GameCanvas styles */
 
+/* The game map owns all pointer gestures (pan, pinch, tap, long-press) —
+   prevent the browser from scrolling/zooming on the canvas. */
+.game-canvas-input {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
 .context-menu-coords {
   font-size: 10px;
   opacity: 0.8;

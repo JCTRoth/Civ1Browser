@@ -1,5 +1,6 @@
 import React from 'react';
 import { UnitActionsModalProps } from './UnitActionsModalProps';
+import '../../styles/unitActionsModal.css';
 
 const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
   contextMenu,
@@ -14,251 +15,236 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
     onClose();
   };
 
+  const canAct = (unit: { movesRemaining?: number } | null) => (unit?.movesRemaining ?? 0) > 0;
+
   return (
     <>
-      {/* Backdrop for click-outside functionality */}
+      {/* Backdrop for click-outside / tap-outside dismissal */}
       <div
-        className="position-fixed"
-        style={{
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          zIndex: 999,
-          backgroundColor: 'transparent'
-        }}
+        className="unit-context-backdrop"
         onClick={onClose}
         onContextMenu={(e) => { e.preventDefault(); onClose(); }}
+        aria-hidden="true"
       />
-      
-      {/* Context Menu */}
+
+      {/* Context Menu — bottom sheet on mobile, anchored popover on desktop */}
       <div
-        className="position-fixed bg-dark border border-light text-white"
+        className="unit-context-menu"
+        role="menu"
+        aria-label="Unit actions"
         style={{
-          left: `${Math.min(contextMenu.x, window.innerWidth - 250)}px`,
-          top: `${Math.min(contextMenu.y, window.innerHeight - 400)}px`,
-          zIndex: 1000,
-          minWidth: '180px',
-          fontSize: '12px',
-          fontFamily: 'monospace'
+          left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 280))}px`,
+          top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 420))}px`,
         }}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
       >
-      {/* Header */}
-      <div className="bg-secondary p-2 border-bottom border-light">
-        <strong>
-          {contextMenu.unit ? `${contextMenu.unit.type}` :
-           contextMenu.city ? `${contextMenu.city.name}` :
-           'Menu'}
-        </strong>
-        <div className="context-menu-coords" style={{ fontSize: '10px', color: '#aaa' }}>
-          ({contextMenu.hex.col}, {contextMenu.hex.row})
+        {/* Header */}
+        <div className="unit-context-menu__header">
+          <strong className="unit-context-menu__title">
+            {contextMenu.unit ? `${contextMenu.unit.type}` :
+             contextMenu.city ? `${contextMenu.city.name}` :
+             'Menu'}
+          </strong>
+          <div className="unit-context-menu__coords">
+            ({contextMenu.hex.col}, {contextMenu.hex.row})
+          </div>
+        </div>
+
+        <div className="unit-context-menu__scroll">
+          {/* Unit Actions */}
+          {contextMenu.unit && (
+            <>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('sleep')}
+              >
+                <span aria-hidden="true">{contextMenu.unit.isSleeping ? '🌅' : '😴'}</span>
+                {contextMenu.unit.isSleeping ? 'Wake Up' : 'Sleep'}
+              </button>
+
+              {(contextMenu.unit.type === 'warriors' || contextMenu.unit.type === 'archer' || contextMenu.unit.type === 'chariot') && (
+                <button
+                  type="button"
+                  className="context-menu-item"
+                  disabled={!canAct(contextMenu.unit)}
+                  onClick={() => handleAction('fortify')}
+                >
+                  <span aria-hidden="true">🛡️</span>Fortify
+                </button>
+              )}
+
+              {contextMenu.unit.type === 'settler' && (
+                <>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('found_city')}
+                  >
+                    <span aria-hidden="true">🏛️</span>Found City
+                  </button>
+
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('build_road')}
+                  >
+                    <span aria-hidden="true">🛣️</span>Build Road
+                  </button>
+
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('build_irrigation')}
+                  >
+                    <span aria-hidden="true">🌾</span>Build Irrigation
+                  </button>
+
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('build_mine')}
+                  >
+                    <span aria-hidden="true">⛏️</span>Build Mine
+                  </button>
+
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('build_railroad')}
+                  >
+                    <span aria-hidden="true">🚆</span>Build Railroad
+                  </button>
+                </>
+              )}
+
+              {contextMenu.unit.type === 'diplomat' && (
+                <>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('diplomat_propose_peace')}
+                  >
+                    <span aria-hidden="true">🕊️</span>Propose Peace
+                  </button>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('diplomat_propose_alliance')}
+                  >
+                    <span aria-hidden="true">🤝</span>Propose Alliance
+                  </button>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('diplomat_demand_tribute')}
+                  >
+                    <span aria-hidden="true">💰</span>Demand Tribute
+                  </button>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('diplomat_bribe')}
+                  >
+                    <span aria-hidden="true">🎭</span>Bribe Unit
+                  </button>
+                  <button
+                    type="button"
+                    className="context-menu-item"
+                    disabled={!canAct(contextMenu.unit)}
+                    onClick={() => handleAction('diplomat_gather_intel')}
+                  >
+                    <span aria-hidden="true">🔍</span>Gather Intelligence
+                  </button>
+                </>
+              )}
+
+              <div className="context-menu-label">ORDERS</div>
+
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('patrol')}
+              >
+                <span aria-hidden="true">🔄</span>Patrol
+              </button>
+
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('goto')}
+              >
+                <span aria-hidden="true">📍</span>Go to
+              </button>
+
+              {contextMenu.unit && gameEngine?.goToManager?.getUnitPath(contextMenu.unit.id) && (
+                <button
+                  type="button"
+                  className="context-menu-item context-menu-item--danger"
+                  onClick={() => handleAction('goto_cancel')}
+                >
+                  <span aria-hidden="true">❌</span>GoTo X
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('skip_turn')}
+              >
+                <span aria-hidden="true">⏭️</span>Skip Turn
+              </button>
+            </>
+          )}
+
+          {/* City Actions */}
+          {contextMenu.city && (
+            <>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('viewProduction')}
+              >
+                <span aria-hidden="true">🏭</span>View Production
+              </button>
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('cityInfo')}
+              >
+                <span aria-hidden="true">📊</span>City Info
+              </button>
+            </>
+          )}
+
+          <div className="context-menu-label">GENERAL</div>
+
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => handleAction('centerView')}
+          >
+            <span aria-hidden="true">📍</span>Center View
+          </button>
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={() => handleAction('examineHex')}
+          >
+            <span aria-hidden="true">🔍</span>Examine
+          </button>
         </div>
       </div>
-
-      {/* Unit Actions */}
-      {contextMenu.unit && (
-        <>
-          <button
-            className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-            onClick={() => handleAction('sleep')}
-          >
-            {contextMenu.unit.isSleeping ? '🌅 Wake Up' : '😴 Sleep'}
-          </button>
-
-          {(contextMenu.unit.type === 'warriors' || contextMenu.unit.type === 'archer' || contextMenu.unit.type === 'chariot') && (
-            <button
-              className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-              }`}
-              disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-              onClick={() => handleAction('fortify')}
-            >
-              🛡️ Fortify
-            </button>
-          )}
-
-          {contextMenu.unit.type === 'settler' && (
-            <>
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('found_city')}
-              >
-                🏛️ Found City
-              </button>
-
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('build_road')}
-              >
-                🛣️ Build Road
-              </button>
-
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('build_irrigation')}
-              >
-                🌾 Build Irrigation
-              </button>
-
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('build_mine')}
-              >
-                ⛏️ Build Mine
-              </button>
-
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('build_railroad')}
-              >
-                🚆 Build Railroad
-              </button>
-            </>
-          )}
-
-          {contextMenu.unit.type === 'diplomat' && (
-            <>
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('diplomat_propose_peace')}
-              >
-                🕊️ Propose Peace
-              </button>
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('diplomat_propose_alliance')}
-              >
-                🤝 Propose Alliance
-              </button>
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('diplomat_demand_tribute')}
-              >
-                💰 Demand Tribute
-              </button>
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('diplomat_bribe')}
-              >
-                🎭 Bribe Unit
-              </button>
-              <button
-                className={`btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button ${
-                  (contextMenu.unit.movesRemaining || 0) > 0 ? 'btn-dark text-white' : 'btn-secondary text-muted'
-                }`}
-                disabled={(contextMenu.unit.movesRemaining || 0) <= 0}
-                onClick={() => handleAction('diplomat_gather_intel')}
-              >
-                🔍 Gather Intelligence
-              </button>
-            </>
-          )}
-
-          {/* ORDERS separator */}
-          <hr style={{ margin: '4px 0', borderColor: '#555' }} />
-
-          {/* ORDERS Menu */}
-          <div style={{ fontSize: '11px', color: '#aaa', padding: '4px 8px', fontWeight: 'bold' }}>
-            ORDERS
-          </div>
-
-          <button
-            className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-            onClick={() => handleAction('patrol')}
-          >
-            🔄 Patrol
-          </button>
-
-          <button
-              className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-              onClick={() => handleAction('goto')}
-          >
-            <i className="bi bi-geo-alt-fill">Go to</i>
-          </button>
-
-          {/* Show GoTo X only if unit has a path set */}
-          {contextMenu.unit && gameEngine?.goToManager?.getUnitPath(contextMenu.unit.id) && (
-            <button
-              className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-danger text-white"
-              onClick={() => handleAction('goto_cancel')}
-            >
-              ❌ GoTo X
-            </button>
-          )}
-
-          <hr style={{margin: '4px 0', borderColor: '#555' }} />
-
-          <button
-            className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-            onClick={() => handleAction('skip_turn')}
-          >
-            ⏭️ Skip Turn
-          </button>
-        </>
-      )}
-
-      {/* City Actions */}
-      {contextMenu.city && (
-        <>
-          <button
-            className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-            onClick={() => handleAction('viewProduction')}
-          >
-            🏭 View Production
-          </button>
-          <button
-            className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-            onClick={() => handleAction('cityInfo')}
-          >
-            📊 City Info
-          </button>
-        </>
-      )}
-
-      {/* General Actions */}
-      <hr style={{ margin: '4px 0', borderColor: '#555' }} />
-      <button
-        className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-        onClick={() => handleAction('centerView')}
-      >
-        📍 Center View
-      </button>
-      <button
-        className="btn btn-sm w-100 text-start border-0 rounded-0 context-menu-button btn-dark text-white"
-        onClick={() => handleAction('examineHex')}
-      >
-        🔍 Examine
-      </button>
-    </div>
     </>
   );
 };

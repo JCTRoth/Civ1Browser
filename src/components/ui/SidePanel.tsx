@@ -133,13 +133,8 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
             </div>
           </div>
         )}
-      {/* Mobile backdrop */}
-      <div
-        className={`mobile-menu-backdrop ${!uiState.sidebarCollapsed ? 'show' : ''} d-md-none`}
-        onClick={() => actions.toggleUI('sidebarCollapsed')}
-      />
 
-      <aside className={`game-side-panel side-panel ${!uiState.sidebarCollapsed ? 'show' : ''}`}>
+      <div className="side-panel-scroll">
         {/* Header */}
 
         
@@ -345,7 +340,7 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
             ) : null}
           </div>
         </div>
-      </aside>
+      </div>
     </>
   );
 };

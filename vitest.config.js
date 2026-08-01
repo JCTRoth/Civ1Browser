@@ -13,6 +13,8 @@ export default defineConfig({
     testTimeout: 30000,
     // Configure environment
     environment: 'node',
+    // e2e specs use Playwright's runner — exclude them from vitest
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
   },
   resolve: {
     alias: {

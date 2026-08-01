@@ -11,6 +11,9 @@
 
 .tech-tree-container {
   overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y; /* allow panning without browser zoom interference */
 }
 
 .tech-tree-path {
@@ -22,21 +25,33 @@
 
 .tech-tree-svg {
   background: transparent;
+  display: block;
 }
 
 .tech-tree-node {
   cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tech-tree-node:active {
+  cursor: grabbing;
 }
 
 .tech-tree-node-text {
   fill: #fff;
   font-size: 14px;
   font-weight: 600;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .tech-tree-node-cost {
   fill: #ddd;
   font-size: 12px;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .tech-tree-no-tech {

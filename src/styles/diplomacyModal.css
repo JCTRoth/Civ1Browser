@@ -28,6 +28,8 @@
 
 .diplomacy-header .btn-close {
   filter: invert(1);
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .diplomacy-body {
@@ -35,6 +37,8 @@
   color: #d0d0d0;
   padding: 0;
   min-height: 400px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ─── Layout: left list + right negotiation ────── */
@@ -80,13 +84,14 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 12px;
+  min-height: 48px; /* touch target */
+  padding: 10px 12px;
   border: none;
   border-bottom: 1px solid #222;
   background: transparent;
   color: #d0d0d0;
   font-family: monospace;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   text-align: left;
   transition: background 0.15s;
@@ -94,6 +99,10 @@
 
 .diplomacy-civ-row:hover {
   background: #252545;
+}
+
+.diplomacy-civ-row:active {
+  background: #2d2b55;
 }
 
 .diplomacy-civ-row.selected {
@@ -116,6 +125,52 @@
 .diplomacy-status-icon {
   font-size: 14px;
   flex-shrink: 0;
+}
+
+/* ============================================================================
+   Mobile: stacked layout + full-height sheets
+   ========================================================================== */
+
+@media (max-width: 767.98px) {
+  .diplomacy-modal .modal-content {
+    border: none;
+  }
+
+  .diplomacy-modal .modal-dialog {
+    max-width: 100%;
+  }
+
+  .diplomacy-body {
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .diplomacy-layout {
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  .diplomacy-civ-list {
+    width: 100%;
+    min-width: 0;
+    max-height: 38%;
+    border-right: none;
+    border-bottom: 2px solid #8b7355;
+    flex-shrink: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .diplomacy-negotiation {
+    max-height: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: calc(16px + var(--safe-bottom, 0px));
+  }
 }
 
 /* ─── Leader header ─────────────────────────────── */

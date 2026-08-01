@@ -38,23 +38,23 @@ const EndTurnConfirmModal: React.FC<EndTurnConfirmModalProps> = ({
   };
 
   return (
-    <Modal show={show} onHide={handleCancel} centered>
+    <Modal show={show} onHide={handleCancel} centered fullscreen="sm-down" dialogClassName="end-turn-modal">
       <Modal.Header closeButton className="end-turn-modal-header">
-        <Modal.Title>
-          <i className="bi bi-skip-end-fill me-2"></i>
+        <Modal.Title className="end-turn-modal-title">
+          <i className="bi bi-skip-end-fill me-2" aria-hidden="true"></i>
           End Turn?
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="end-turn-modal-body">
         <div className="text-center mb-3">
-          <h5>{isAutomatic ? 'All Your Units Have Moved!' : 'Are you ready to end your turn?'}</h5>
-          <p className="mb-2">
+          <h5 className="end-turn-modal-heading">{isAutomatic ? 'All Your Units Have Moved!' : 'Are you ready to end your turn?'}</h5>
+          <p className="mb-2 end-turn-modal-meta">
             <strong>Turn {currentTurn}</strong> | <strong>{GameUtils.formatYear(currentYear)}</strong>
           </p>
         </div>
         
-        <div className="alert alert-info mb-0">
-          <i className="bi bi-info-circle me-2"></i>
+        <div className="alert alert-info mb-0 end-turn-modal-alert">
+          <i className="bi bi-info-circle me-2" aria-hidden="true"></i>
           {isAutomatic 
             ? 'All your units have used their movement points. You can end your turn now, or continue planning your next moves.'
             : 'This will allow other civilizations to take their turns.'
@@ -71,16 +71,16 @@ const EndTurnConfirmModal: React.FC<EndTurnConfirmModalProps> = ({
             setSkipNextTime(checked);
             actions.updateSettings({ skipEndTurnConfirmation: checked });
           }}
-          className="mt-2"
+          className="mt-3 end-turn-modal-skip"
         />
       </Modal.Body>
       <Modal.Footer className="end-turn-modal-footer">
-        <Button variant="secondary" onClick={handleCancel}>
-          <i className="bi bi-x-circle me-2"></i>
+        <Button variant="secondary" onClick={handleCancel} className="touch-btn touch-btn--ghost">
+          <i className="bi bi-x-circle me-2" aria-hidden="true"></i>
           Cancel
         </Button>
-        <Button variant="success" onClick={handleConfirm}>
-          <i className="bi bi-check-circle me-2"></i>
+        <Button variant="success" onClick={handleConfirm} className="touch-btn touch-btn--success">
+          <i className="bi bi-check-circle me-2" aria-hidden="true"></i>
           End Turn
         </Button>
       </Modal.Footer>

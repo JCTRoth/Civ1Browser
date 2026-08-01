@@ -8,6 +8,10 @@ import GameSetupModal from './components/ui/GameSetupModal';
 import EndTurnConfirmModal from './components/ui/EndTurnConfirmModal';
 import GameModals from './components/ui/GameModals';
 import GameResultOverlay from './components/ui/GameResultOverlay';
+import TopBar from './components/ui/TopBar';
+import MobileBottomBar from './components/ui/MobileBottomBar';
+import GameMenuSheet, { type GameMenuName } from './components/ui/GameMenuSheet';
+import ConfirmDialog from './components/ui/ConfirmDialog';
 import { useGameEngine } from './hooks/UseGameEngine';
 import SidePanel from './components/ui/SidePanel';
 import {GameUtils} from "@/utils/GameUtils";
@@ -22,18 +26,20 @@ function App() {
   const camera = useGameStore(state => state.camera);
   const gameResult = useGameStore(state => state.gameState.gameResult);
   const setCamera = useGameStore(state => state.actions.updateCamera);
+  const uiState = useGameStore(state => state.uiState);
   const [gameEngine, setGameEngine] = useState(null);
   const [error, setError] = useState(null);
-  const [activeMenu, setActiveMenu] = useState(null);
+  const [activeMenu, setActiveMenu] = useState<GameMenuName | null>(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [showHexDetail, setShowHexDetail] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showGameSetup, setShowGameSetup] = useState(true);
   const [showEndTurnConfirm, setShowEndTurnConfirm] = useState(false);
+  const [confirmNewGame, setConfirmNewGame] = useState(false);
+  const [confirmQuit, setConfirmQuit] = useState(false);
   const [isEndTurnAutomatic, setIsEndTurnAutomatic] = useState(false);
   const [detailHex, setDetailHex] = useState(null);
   const [terrainData, setTerrainData] = useState(null);
-  const menuRefs = React.useRef({});
 
   // Turn flash effect on top bar - direct DOM manipulation for reliability
   const turnFlashTrigger = useGameStore(state => state.uiState.turnFlashTrigger);
@@ -62,30 +68,15 @@ function App() {
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     try {
       const colors: Record<string, string> = {
-        success: '#4caf50',
-        error: '#f44336',
-        warning: '#ff9800',
+        success: 'var(--color-success)',
+        error: 'var(--color-danger)',
+        warning: 'var(--color-warning)',
       };
       const toast = document.createElement('div');
       toast.textContent = message;
-      Object.assign(toast.style, {
-        position: 'fixed',
-        top: '60px',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        background: colors[type] || '#333',
-        color: '#fff',
-        padding: '12px 24px',
-        borderRadius: '4px',
-        zIndex: '99999',
-        fontFamily: 'monospace',
-        fontSize: '14px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-        opacity: '0',
-        transition: 'opacity 0.3s ease',
-        maxWidth: '80vw',
-        textAlign: 'center' as const,
-      });
+      toast.className = 'app-toast';
+      toast.setAttribute('role', 'status');
+      toast.style.background = colors[type] || '#333';
       document.body.appendChild(toast);
       requestAnimationFrame(() => { toast.style.opacity = '1'; });
       setTimeout(() => {
@@ -212,7 +203,7 @@ function App() {
   }, [handleEndTurnConfirm]);
 
   // Handle menu actions
-  const handleMenuClick = (menu: string, event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+  const handleMenuClick = (menu: GameMenuName, event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     console.log(`[CLICK] Menu click: ${menu}`);
     if (activeMenu === menu) {
       setActiveMenu(null);
@@ -222,6 +213,16 @@ function App() {
         top: rect.bottom,
         left: rect.left
       });
+      setActiveMenu(menu);
+    }
+  };
+
+  // Open a menu from the mobile bottom bar (position is irrelevant — CSS renders a bottom sheet)
+  const handleMobileMenuOpen = (menu: GameMenuName) => {
+    if (activeMenu === menu) {
+      setActiveMenu(null);
+    } else {
+      setMenuPosition({ top: window.innerHeight, left: 0 });
       setActiveMenu(menu);
     }
   };
@@ -251,6 +252,97 @@ function App() {
     } catch (e) {
       console.error('handleDownloadMap error', e);
     }
+  };
+
+  // Save game to a downloadable JSON file
+  const handleSaveGame = () => {
+    if (!gameEngine) {
+      setActiveMenu(null);
+      return;
+    }
+    try {
+      // Get save JSON
+      let json: string | null = null;
+      if (typeof gameEngine.getSaveJSON === 'function') {
+        json = gameEngine.getSaveJSON();
+      } else if (typeof gameEngine.saveGame === 'function') {
+        gameEngine.saveGame();
+        json = localStorage.getItem('civ1_savegame');
+      }
+      if (!json) {
+        showToast('Failed to generate save data', 'error');
+        setActiveMenu(null);
+        return;
+      }
+      // Trigger file download
+      const filename = `civ1-save-turn-${gameState.currentTurn}.json`;
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast(`Game saved to ${filename}`, 'success');
+    } catch (e) {
+      console.error('[App] Save failed:', e);
+      showToast('Save failed: ' + (e as Error).message, 'error');
+    }
+    setActiveMenu(null);
+  };
+
+  // Load game from a user-selected JSON file
+  const handleLoadGame = () => {
+    if (!gameEngine || typeof gameEngine.loadGame !== 'function') {
+      showToast('Load not available', 'warning');
+      setActiveMenu(null);
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.style.display = 'none';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) {
+        setActiveMenu(null);
+        return;
+      }
+      try {
+        const text = await file.text();
+        const saveData = JSON.parse(text);
+        if (!saveData || saveData.version !== 1) {
+          showToast('Invalid or incompatible save file.', 'error');
+          setActiveMenu(null);
+          return;
+        }
+        localStorage.setItem('civ1_savegame', text);
+        const success = await gameEngine.loadGame();
+        if (success) {
+          // Force a full store sync
+          actions.updateMap(gameEngine.map);
+          actions.updateUnits(gameEngine.getAllUnits());
+          actions.updateCities(gameEngine.getAllCities());
+          actions.updateCivilizations(gameEngine.civilizations);
+          actions.updateTechnologies(gameEngine.technologies);
+          actions.updateVisibility();
+          showToast(`Game loaded from ${file.name}`, 'success');
+        } else {
+          showToast('Failed to load game state.', 'error');
+        }
+      } catch (e) {
+        console.error('[App] Load failed:', e);
+        showToast('Failed to read save file: ' + (e as Error).message, 'error');
+      }
+      setActiveMenu(null);
+    };
+    document.body.appendChild(input);
+    input.click();
+    setTimeout(() => {
+      if (document.body.contains(input)) document.body.removeChild(input);
+    }, 1000);
   };
 
   const handleResultClose = useCallback(() => {
@@ -296,22 +388,38 @@ function App() {
     setShowHexDetail(true);
   };
 
-  // Handle new game
+  // Handle new game (opens accessible confirmation dialog)
   const handleNewGame = () => {
     console.log(`[CLICK] New game button clicked`);
-    const confirmed = window.confirm(
-      '🏛️ Start a New Game?\n\n' +
-      'Are you sure you want to end the current game and start over?\n\n' +
-      'All progress will be lost.'
-    );
-    
-    if (confirmed) {
-      console.log(`[CLICK] New game confirmed - reloading page`);
-      // Reload the page to start fresh
-      window.location.reload();
-    } else {
-      console.log(`[CLICK] New game cancelled`);
+    setActiveMenu(null);
+    setConfirmNewGame(true);
+  };
+
+  const handleNewGameConfirmed = () => {
+    console.log(`[CLICK] New game confirmed - reloading page`);
+    setConfirmNewGame(false);
+    window.location.reload();
+  };
+
+  // Handle quit to main menu (opens accessible confirmation dialog)
+  const handleQuit = () => {
+    setActiveMenu(null);
+    setConfirmQuit(true);
+  };
+
+  const handleQuitConfirmed = () => {
+    console.log('[App] Quit confirmed - returning to main menu');
+    setConfirmQuit(false);
+    if (gameEngine) {
+      gameEngine.shutdownToMenu();
     }
+    actions.resetGameState();
+    setShowHexDetail(false);
+    setShowSettings(false);
+    setShowEndTurnConfirm(false);
+    setIsEndTurnAutomatic(false);
+    setGameEngine(null);
+    setShowGameSetup(true);
   };
 
   // Handle end turn request - show modal (manual button click)
@@ -667,440 +775,106 @@ function App() {
   }
 
   return (
-    <div 
-      className="game-container vh-100 d-flex flex-column text-white" 
-      style={{ 
-        fontFamily: 'monospace',
+    <div
+      className="app-shell text-white"
+      style={{
         fontSize: `${settings.uiScale}rem`
       }}
     >
-      {/* Top Menu Bar */}
-      <div 
-        ref={topBarRef}
-        className="game-top-bar border-bottom border-light d-flex" 
-        style={{ 
-          height: `${48 * settings.uiScale}px`
-        }}
-      >
-        {/* Menu items */}
-        <div className="d-flex flex-grow-1 h-100 justify-content-center align-items-center">
-          {['GAME', 'WORLD', 'INFO'].map((item) => (
-            <button
-              key={item}
-              ref={(el) => menuRefs.current[item] = el}
-              className={`btn px-4 text-white border-0 rounded-0 position-relative d-flex align-items-center justify-content-center ${
-                activeMenu === item ? '' : ''
-              }`}
-              style={{ 
-                fontSize: `${settings.menuFontSize * 1.4}px`,
-                height: '100%',
-                fontWeight: 'bold',
-                letterSpacing: '1px',
-                background: activeMenu === item 
-                  ? '#333333'
-                  : 'transparent',
-                textShadow: 'none',
-                transition: 'all 0.2s ease',
-                transform: 'none',
-                borderLeft: 'none',
-                borderRight: 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (activeMenu !== item) {
-                  (e.target as HTMLElement).style.background = '#2a2a2a';
-                  (e.target as HTMLElement).style.transform = 'none';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeMenu !== item) {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.transform = 'none';
-                }
-              }}
-              onClick={(e) => handleMenuClick(item, e)}
-            >
-              {item}
-              {activeMenu === item && (
-                <div 
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: '3px',
-                    background: '#ffffff',
-                    boxShadow: 'none'
-                  }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
+      {/* Top navigation bar (mobile-first) */}
+      <TopBar
+        topBarRef={topBarRef}
+        activeMenu={activeMenu}
+        onMenuClick={handleMenuClick}
+        currentTurn={gameState.currentTurn}
+        currentYear={GameUtils.formatYear(gameState.currentYear ?? -4000)}
+        onEndTurn={handleEndTurnRequest}
+        endTurnDisabled={uiState.turnButtonDisabled}
+      />
 
-        {/* Right side - Turn info and End Turn button */}
-        <div className="d-flex align-items-center ms-auto pe-3">
-          <div className="text-white me-3" style={{ fontSize: `${settings.menuFontSize * 1.2}px` }}>
-            <span className="me-2">Turn {gameState.currentTurn}</span>
-            <span className="text-muted">|</span>
-            <span className="ms-2">{GameUtils.formatYear(gameState.currentYear ?? -4000)}</span>
-          </div>
-          <button
-            className="btn btn-success"
-            style={{
-              fontSize: `${settings.menuFontSize * 1.1}px`,
-              padding: '8px 16px',
-              fontWeight: 'bold'
-            }}
-            onClick={handleEndTurnRequest}
-          >
-            <i className="bi bi-skip-end-fill me-1"></i>
-            End Turn
-          </button>
-        </div>
-      </div>
-
-  {/* Main Game Area */}
-  <div className="game-area flex-grow-1 d-flex">
-  {/* Left Sidebar - use centralized SidePanel component */}
-  <div className="game-side-panel" style={{ width: `${settings.sidebarWidth * 2}px` }}>
+      {/* Main Game Area */}
+      <div className="app-main">
+        {/* Info panel: static sidebar on desktop, slide-in drawer on mobile */}
+        <div className={`side-panel-shell mobile-drawer ${!uiState.sidebarCollapsed ? 'is-open' : ''}`}>
           <SidePanel gameEngine={gameEngine} />
         </div>
+        {!uiState.sidebarCollapsed && (
+          <div
+            className="mobile-drawer-backdrop d-md-none"
+            onClick={() => actions.toggleUI('sidebarCollapsed')}
+            aria-hidden="true"
+          />
+        )}
 
-  {/* Main Map Area */}
-  <div className="game-canvas flex-grow-1 position-relative">
+        {/* Main Map Area */}
+        <div className="game-canvas flex-grow-1 position-relative">
           <GameCanvas
-            onExamineHex={handleExamineHex} 
+            onExamineHex={handleExamineHex}
             gameEngine={gameEngine}
           />
         </div>
-  </div>
+      </div>
 
-  {/* Dropdown Menus */}
-      {activeMenu && (
-        <div 
-          className="position-fixed border border-light"
-          style={{ 
-            top: `${menuPosition.top}px`, 
-            left: `${menuPosition.left}px`,
-            zIndex: 1000,
-            minWidth: '220px',
-            background: 'linear-gradient(180deg, #2d3748 0%, #1a202c 100%)',
-            boxShadow: '0 8px 16px rgba(0,0,0,0.4)',
-            borderRadius: '0 0 8px 8px',
-            overflow: 'hidden'
-          }}
-        >
-          {activeMenu === 'GAME' && (
-            <div>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={handleNewGame}
-              >
-                🆕 New Game
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  if (!gameEngine) {
-                    setActiveMenu(null);
-                    return;
-                  }
-                  try {
-                    // Get save JSON
-                    let json: string | null = null;
-                    if (typeof gameEngine.getSaveJSON === 'function') {
-                      json = gameEngine.getSaveJSON();
-                    } else if (typeof gameEngine.saveGame === 'function') {
-                      gameEngine.saveGame();
-                      json = localStorage.getItem('civ1_savegame');
-                    }
-                    if (!json) {
-                      showToast('Failed to generate save data', 'error');
-                      setActiveMenu(null);
-                      return;
-                    }
-                    // Trigger file download
-                    const filename = `civ1-save-turn-${gameState.currentTurn}.json`;
-                    const blob = new Blob([json], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = filename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 5000);
-                    showToast(`Game saved to ${filename}`, 'success');
-                  } catch (e) {
-                    console.error('[App] Save failed:', e);
-                    showToast('Save failed: ' + (e as Error).message, 'error');
-                  }
-                  setActiveMenu(null);
-                }}
-              >
-                💾 Save Game
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  if (!gameEngine || typeof gameEngine.loadGame !== 'function') {
-                    showToast('Load not available', 'warning');
-                    setActiveMenu(null);
-                    return;
-                  }
-                  const input = document.createElement('input');
-                  input.type = 'file';
-                  input.accept = '.json,application/json';
-                  input.style.display = 'none';
-                  input.onchange = async () => {
-                    const file = input.files?.[0];
-                    if (!file) {
-                      setActiveMenu(null);
-                      return;
-                    }
-                    try {
-                      const text = await file.text();
-                      const saveData = JSON.parse(text);
-                      if (!saveData || saveData.version !== 1) {
-                        showToast('Invalid or incompatible save file.', 'error');
-                        setActiveMenu(null);
-                        return;
-                      }
-                      localStorage.setItem('civ1_savegame', text);
-                      const success = await gameEngine.loadGame();
-                      if (success) {
-                        // Force a full store sync
-                        actions.updateMap(gameEngine.map);
-                        actions.updateUnits(gameEngine.getAllUnits());
-                        actions.updateCities(gameEngine.getAllCities());
-                        actions.updateCivilizations(gameEngine.civilizations);
-                        actions.updateTechnologies(gameEngine.technologies);
-                        actions.updateVisibility();
-                        showToast(`Game loaded from ${file.name}`, 'success');
-                      } else {
-                        showToast('Failed to load game state.', 'error');
-                      }
-                    } catch (e) {
-                      console.error('[App] Load failed:', e);
-                      showToast('Failed to read save file: ' + (e as Error).message, 'error');
-                    }
-                    setActiveMenu(null);
-                  };
-                  document.body.appendChild(input);
-                  input.click();
-                  setTimeout(() => {
-                    if (document.body.contains(input)) document.body.removeChild(input);
-                  }, 1000);
-                }}
-              >
-                📁 Load Game
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  console.log('App: Settings button clicked');
-                  setShowSettings(true);
-                  setActiveMenu(null);
-                }}
-              >
-                ⚙️ Settings
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #e53e3e 0%, #c53030 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  const confirmed = window.confirm('Are you sure you want to quit to the main menu?');
-                  if (confirmed && gameEngine) {
-                    gameEngine.shutdownToMenu();
-                    actions.resetGameState();
-                    setActiveMenu(null);
-                    setGameEngine(null);
-                    setShowGameSetup(true);
-                  }
-                }}
-              >
-                🚪 Quit
-              </button>
-            </div>
-          )}
-          {activeMenu === 'INFO' && (
-            <div>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #63b3ed 0%, #4299e1 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  console.log('App: Download Map clicked');
-                  handleDownloadMap();
-                  setActiveMenu(null);
-                }}
-              >
-                🗺️ Download Map
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  actions.showDialog('help');
-                  setActiveMenu(null);
-                }}
-              >
-                ❓ Help
-              </button>
-            </div>
-          )}
-          {activeMenu === 'WORLD' && (
-            <div>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease',
-                  borderBottom: '1px solid rgba(255,255,255,0.1)'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #d69e2e 0%, #b7791f 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  actions.showDialog('diplomacy-report');
-                  setActiveMenu(null);
-                }}
-              >
-                ⚖️ Diplomacy
-              </button>
-              <button 
-                className="btn btn-dark text-start w-100 border-0"
-                style={{
-                  fontSize: `${settings.menuFontSize * 1.1}px`,
-                  padding: '12px 16px',
-                  fontWeight: '600',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  (e.target as HTMLElement).style.background = 'linear-gradient(90deg, #3182ce 0%, #2c5aa0 100%)';
-                  (e.target as HTMLElement).style.paddingLeft = '24px';
-                }}
-                onMouseLeave={(e) => {
-                  (e.target as HTMLElement).style.background = 'transparent';
-                  (e.target as HTMLElement).style.paddingLeft = '16px';
-                }}
-                onClick={() => {
-                  actions.showDialog('tech');
-                  setActiveMenu(null);
-                }}
-              >
-                🌳 Tech Tree
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Game menus (anchored dropdown on desktop, bottom sheet on mobile) */}
+      <GameMenuSheet
+        activeMenu={activeMenu}
+        position={menuPosition}
+        onClose={() => setActiveMenu(null)}
+        onNewGame={handleNewGame}
+        onSaveGame={handleSaveGame}
+        onLoadGame={handleLoadGame}
+        onOpenSettings={() => {
+          setShowSettings(true);
+          setActiveMenu(null);
+        }}
+        onQuit={handleQuit}
+        onDownloadMap={() => {
+          handleDownloadMap();
+          setActiveMenu(null);
+        }}
+        onHelp={() => {
+          actions.showDialog('help');
+          setActiveMenu(null);
+        }}
+        onDiplomacy={() => {
+          actions.showDialog('diplomacy-report');
+          setActiveMenu(null);
+        }}
+        onTechTree={() => {
+          actions.showDialog('tech');
+          setActiveMenu(null);
+        }}
+      />
+
+      {/* Mobile primary action bar (thumb zone) */}
+      <MobileBottomBar
+        activeMenu={activeMenu}
+        onOpenMenu={handleMobileMenuOpen}
+        panelOpen={!uiState.sidebarCollapsed}
+        onTogglePanel={() => actions.toggleUI('sidebarCollapsed')}
+        onEndTurn={handleEndTurnRequest}
+      />
+
+      {/* Confirmation dialogs (replace native window.confirm for consistent mobile UX) */}
+      <ConfirmDialog
+        show={confirmNewGame}
+        title="Start a New Game?"
+        message="Are you sure you want to end the current game and start over?"
+        detail="All progress will be lost."
+        confirmLabel="New Game"
+        variant="danger"
+        onConfirm={handleNewGameConfirmed}
+        onCancel={() => setConfirmNewGame(false)}
+      />
+      <ConfirmDialog
+        show={confirmQuit}
+        title="Quit to Main Menu?"
+        message="Are you sure you want to quit the current game?"
+        confirmLabel="Quit"
+        variant="danger"
+        onConfirm={handleQuitConfirmed}
+        onCancel={() => setConfirmQuit(false)}
+      />
 
       {/* Hex Detail Modal */}
       <HexDetailModal

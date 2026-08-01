@@ -315,7 +315,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <Modal.Body className="bg-dark text-white tech-tree-modal-body">
         <div className="tech-tree-container">
           <React.Suspense fallback={<div className="text-white p-3">Loading tree...</div>}>
-            <TechTreeView technologies={technologies} width={Math.max(window.innerWidth - 200, 800)} />
+            <TechTreeView technologies={technologies} width={Math.max(window.innerWidth - 32, 320)} />
           </React.Suspense>
         </div>
       </Modal.Body>
@@ -484,6 +484,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         onHide={() => { handleCloseDialog(); setSelectedDiploCiv(null); setDiplomacyLog([]); setShowTreatyPanel(false); setCounterProposal(null); }} 
         centered
         size="xl"
+        fullscreen="md-down"
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">
@@ -834,6 +835,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         onHide={handleCloseDialog}
         centered
         size="lg"
+        fullscreen="md-down"
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">

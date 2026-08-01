@@ -1,15 +1,69 @@
 /* EndTurnConfirmModal styles */
 
+.end-turn-modal .modal-content {
+  background: var(--color-bg-elevated, #16202a);
+  color: var(--color-text, #e8eef3);
+  border: 1px solid var(--color-border, #2c3b49);
+}
+
 .end-turn-modal-header {
-  background-color: #2c3e50;
+  background: var(--color-bg-overlay, #1d2935);
   color: white;
+  border-bottom: 1px solid var(--color-border, #2c3b49);
+}
+
+.end-turn-modal-title {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 700;
 }
 
 .end-turn-modal-body {
-  background-color: #34495e;
+  background: var(--color-bg-elevated, #16202a);
   color: white;
 }
 
+.end-turn-modal-heading {
+  font-weight: 700;
+  color: var(--color-text, #e8eef3);
+}
+
+.end-turn-modal-meta {
+  color: var(--color-text-secondary, #b8c4cf);
+}
+
+.end-turn-modal-alert {
+  border-radius: var(--radius-md, 10px);
+  line-height: 1.5;
+}
+
+.end-turn-modal-skip .form-check-input {
+  width: 20px;
+  height: 20px;
+  margin-top: 0.2rem;
+  accent-color: var(--color-accent, #f0c33c);
+}
+
+.end-turn-modal-skip .form-check-label {
+  font-size: var(--text-base, 1rem);
+  color: var(--color-text-secondary, #b8c4cf);
+  line-height: 1.4;
+}
+
 .end-turn-modal-footer {
-  background-color: #2c3e50!important;
+  background: var(--color-bg-overlay, #1d2935) !important;
+  border-top: 1px solid var(--color-border, #2c3b49);
+  display: flex;
+  gap: 12px;
+}
+
+@media (max-width: 575.98px) {
+  .end-turn-modal-footer {
+    flex-direction: column-reverse;
+  }
+
+  .end-turn-modal-footer .btn {
+    width: 100%;
+    min-height: var(--touch-min, 44px);
+    margin: 0;
+  }
 }
