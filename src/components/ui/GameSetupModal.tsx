@@ -1,9 +1,79 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Modal, Button, Form } from 'react-bootstrap';
 import { CIVILIZATIONS, DIFFICULTY_LEVELS } from '@/data/GameData';
 import '../../styles/gameSetupModal.css';
 
 function GameSetupModal({ show, onStart }) {
+  // Drag-to-scroll: when the user presses on an empty area of the page and
+  // drags, scroll the body up/down (and left/right) instead of doing nothing.
+  // Interactive elements (civ cards, buttons, selects, inputs) are left alone.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const isPanningRef = useRef(false);
+  const capturedRef = useRef(false);
+  const panStartRef = useRef<{ x: number; y: number; scrollTop: number; scrollLeft: number } | null>(null);
+  const panDeltaRef = useRef(0);
+
+  const isInteractive = useCallback((target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return true;
+    const tag = target.tagName.toLowerCase();
+    if (['button', 'select', 'input', 'textarea', 'a', 'label', 'option'].includes(tag)) return true;
+    // Treat anything inside a civ card / control card / summary / header as interactive
+    return !!target.closest('.setup-civ-card, .control-card, .setup-summary, .modal-header-custom, .setup-footer');
+  }, []);
+
+  const handleBodyPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // Only pan with primary mouse button / touch / pen, and only from empty areas
+    if (isInteractive(e.target)) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    isPanningRef.current = true;
+    panDeltaRef.current = 0;
+    capturedRef.current = true;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollTop: el.scrollTop,
+      scrollLeft: el.scrollLeft,
+    };
+    // Capture immediately: the gesture started on empty space, so there is no
+    // click to preserve — this keeps pointermove events flowing even when the
+    // pointer leaves the container bounds while dragging.
+    el.classList.add('is-panning');
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // No active pointer (e.g. synthetic events in tests) — pan still works
+      // because the handlers are on the container itself.
+    }
+  }, [isInteractive]);
+
+  const handleBodyPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPanningRef.current || !panStartRef.current) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    panDeltaRef.current = Math.max(panDeltaRef.current, Math.abs(dx), Math.abs(dy));
+    el.scrollTop = panStartRef.current.scrollTop - dy;
+    el.scrollLeft = panStartRef.current.scrollLeft - dx;
+  }, []);
+
+  const handleBodyPointerEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (capturedRef.current) {
+      const el = bodyRef.current;
+      el?.classList.remove('is-panning');
+      try {
+        el?.releasePointerCapture?.(e.pointerId);
+      } catch {
+        // Ignore — no active pointer (e.g. synthetic events).
+      }
+    }
+    isPanningRef.current = false;
+    capturedRef.current = false;
+    panStartRef.current = null;
+  }, []);
+
   const [currentStep, setCurrentStep] = useState(1);
   // Default to Germans (find in original CIVILIZATIONS array)
   const defaultCivIndex = CIVILIZATIONS.findIndex(c => c.name === 'Germans');
@@ -97,7 +167,14 @@ function GameSetupModal({ show, onStart }) {
         </Modal.Title>
       </Modal.Header>
       
-      <Modal.Body className="modal-body-custom">
+      <Modal.Body
+        className="modal-body-custom"
+        ref={bodyRef}
+        onPointerDown={handleBodyPointerDown}
+        onPointerMove={handleBodyPointerMove}
+        onPointerUp={handleBodyPointerEnd}
+        onPointerCancel={handleBodyPointerEnd}
+      >
         <div className="setup-content">
 
           {/* Step 1: Civilization Selection */}

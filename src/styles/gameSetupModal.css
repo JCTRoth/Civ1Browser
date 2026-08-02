@@ -44,6 +44,43 @@
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* Drag-to-scroll on empty areas: show a grab cursor on the page background */
+  cursor: grab;
+  touch-action: pan-x pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.modal-body-custom.is-panning {
+  cursor: grabbing;
+  scroll-behavior: auto;
+}
+
+/* Interactive elements inside the setup page keep their normal cursor and
+   remain text-selectable — the grab cursor only applies to empty space. */
+.modal-body-custom .setup-civ-card,
+.modal-body-custom button,
+.modal-body-custom .form-check,
+.modal-body-custom label {
+  cursor: pointer;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+.modal-body-custom select,
+.modal-body-custom input[type='text'],
+.modal-body-custom textarea {
+  cursor: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+.modal-body-custom .control-card__range,
+.modal-body-custom input[type='range'] {
+  cursor: ew-resize;
+  touch-action: none;
+  user-select: auto;
+  -webkit-user-select: auto;
 }
 
 .setup-content {
@@ -673,7 +710,7 @@
   }
 
   .modal-dialog.game-setup-dialog .modal-body-custom {
-    overflow-y: auto;
+    overflow-y: scroll;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     flex: 1 1 auto;
@@ -689,4 +726,30 @@
   .modal-dialog.game-setup-dialog .setup-civ-list {
     max-height: none;
   }
+}
+
+/* Always show the scrollbar on the intro/setup page so the user knows the
+   wizard can be scrolled. Force it visible in both WebKit/Blink and Firefox. */
+.modal-dialog.game-setup-dialog .modal-body-custom {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 175, 55, 0.55) rgba(255, 255, 255, 0.06);
+}
+
+.modal-dialog.game-setup-dialog .modal-body-custom::-webkit-scrollbar {
+  width: 12px;
+}
+
+.modal-dialog.game-setup-dialog .modal-body-custom::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+}
+
+.modal-dialog.game-setup-dialog .modal-body-custom::-webkit-scrollbar-thumb {
+  background: rgba(212, 175, 55, 0.55);
+  border-radius: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.4);
+}
+
+.modal-dialog.game-setup-dialog .modal-body-custom::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.8);
 }
