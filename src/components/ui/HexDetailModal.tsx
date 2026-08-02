@@ -62,7 +62,7 @@ const HexDetailModal = ({ show, onHide, hex, terrain}) => {
       onHide={onHide} 
       centered
       size="lg"
-      fullscreen="md-down"
+      fullscreen
       className="hex-detail-modal"
     >
       <Modal.Header closeButton className="hex-detail-modal__header">

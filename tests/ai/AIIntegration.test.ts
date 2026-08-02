@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
-import type { Unit } from '@/types/game';
+import type { Unit } from '@/../types/game';
 
 /**
  * AI INTEGRATION TEST

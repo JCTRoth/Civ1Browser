@@ -484,7 +484,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         onHide={() => { handleCloseDialog(); setSelectedDiploCiv(null); setDiplomacyLog([]); setShowTreatyPanel(false); setCounterProposal(null); }} 
         centered
         size="xl"
-        fullscreen="md-down"
+        fullscreen
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">
@@ -835,7 +835,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         onHide={handleCloseDialog}
         centered
         size="lg"
-        fullscreen="md-down"
+        fullscreen
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">

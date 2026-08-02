@@ -18,6 +18,7 @@ import {GameUtils} from "@/utils/GameUtils";
 import { DomUtils } from '@/utils/DomUtils';
 import { enrichMapForExport } from '@/utils/MapExportUtils';
 import { preloadAllUnitIcons } from '@/utils/UnitIconLoader';
+import { centerCameraOnTile, getGameViewport } from '@/utils/CameraUtils';
 
 function App() {
   const gameState = useGameStore(state => state.gameState);
@@ -580,11 +581,17 @@ function App() {
               if (selUnitId && gameEngine) {
                 const selUnit = gameEngine.units.find(u => u.id === selUnitId);
                 if (selUnit) {
-                  const tileSize = 32 * (camera.zoom || 1);
-                  setCamera({
-                    x: selUnit.col * tileSize - window.innerWidth / 2,
-                    y: selUnit.row * tileSize - window.innerHeight / 2,
+                  const viewport = getGameViewport();
+                  const { x, y } = centerCameraOnTile({
+                    col: selUnit.col,
+                    row: selUnit.row,
+                    zoom: camera.zoom || 1,
+                    viewportWidth: viewport.width,
+                    viewportHeight: viewport.height,
+                    mapWidth: gameEngine.map?.width ?? 80,
+                    mapHeight: gameEngine.map?.height ?? 50,
                   });
+                  setCamera({ x, y });
                 }
               }
             }
@@ -800,7 +807,7 @@ function App() {
         </div>
         {!uiState.sidebarCollapsed && (
           <div
-            className="mobile-drawer-backdrop d-md-none"
+            className="mobile-drawer-backdrop"
             onClick={() => actions.toggleUI('sidebarCollapsed')}
             aria-hidden="true"
           />

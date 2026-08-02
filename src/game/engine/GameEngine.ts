@@ -258,10 +258,10 @@ export default class GameEngine {
     const playerUnits = this.units.filter(u => u.civilizationId === civilizationId);
     
     for (const unit of playerUnits) {
-      // Get unit sight range
-      let sightRange = 1; // Default
+      // Get unit sight range (minimum radius 2 so the map isn't a tiny peephole)
+      let sightRange = 2; // Default
       if (UNIT_PROPS && UNIT_PROPS[unit.type]) {
-        sightRange = UNIT_PROPS[unit.type].sightRange || 1;
+        sightRange = Math.max(2, UNIT_PROPS[unit.type].sightRange || 2);
       }
       
       // Reveal tiles around unit
@@ -358,6 +358,9 @@ export default class GameEngine {
   }
 
   // Small helper: sleep for ms milliseconds
+  sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
   /**
    * Check and update the areTurnsDone flag for a unit
@@ -1170,6 +1173,7 @@ export default class GameEngine {
       }
     } catch (e) {
       // fall back
+      console.warn('[GameEngine] getAllUnits fallback triggered due to error:', e);
     }
     return [...this.units];
   }
@@ -1187,7 +1191,7 @@ export default class GameEngine {
         return (this as any).map.getAllCities();
       }
     } catch (e) {
-      // fall back
+      console.warn('[GameEngine] getAllCities fallback triggered due to error:', e);
     }
     return [...this.cities];
   }

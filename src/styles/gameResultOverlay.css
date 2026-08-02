@@ -112,15 +112,13 @@
   outline-offset: 2px;
 }
 
-/* Full-width stacked buttons on small screens (one-handed use) */
-@media (max-width: 575.98px) {
-  .game-result-actions {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
+/* Full-width stacked buttons on all screen sizes (one-handed use) */
+.game-result-actions {
+  flex-direction: column;
+  gap: 0.5rem;
+}
 
-  .gr-btn {
-    width: 100%;
-    min-width: 0;
-  }
+.gr-btn {
+  width: 100%;
+  min-width: 0;
 }

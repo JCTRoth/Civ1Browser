@@ -99,11 +99,11 @@ export class AIManager {
     if (!civ.currentResearch) {
       const techChoice = AIResearch.selectResearch(civ, aiState.strategyProfile, gameState);
       if (techChoice) {
-        console.log(`[AI] Research selected: ${techChoice.techId} (score: ${techChoice.score.toFixed(1)}, reason: ${techChoice.reason})`);
-        aiState.researchPriority = techChoice;
+        console.log(`[AI] Research selected: ${techChoice}`);
+        aiState.researchPriority = { techId: techChoice, score: 0, reason: 'strategy' };
         // Use GameEngine's setResearch to properly set the tech
         if (typeof this.gameEngine.setResearch === 'function') {
-          this.gameEngine.setResearch(civilizationId, techChoice.techId);
+          this.gameEngine.setResearch(civilizationId, techChoice);
         }
       }
     }
@@ -271,7 +271,9 @@ export class AIManager {
 
     console.log(`[AI] Finished all units for civilization ${civilizationId}`);
     // Emit event to clear highlights (UI decides how to handle)
-    this.gameEngine.onStateChange && this.gameEngine.onStateChange('AI_CLEAR_HIGHLIGHTS', { civilizationId });
+    if (this.gameEngine.onStateChange) {
+      this.gameEngine.onStateChange('AI_CLEAR_HIGHLIGHTS', { civilizationId });
+    }
 
     // Process auto-production for AI cities
     console.log(`[AI] Processing auto-production for civilization ${civilizationId}`);
@@ -279,7 +281,9 @@ export class AIManager {
 
     // Signal AI finished (for UI updates)
     console.log(`[AI] AI turn completed for civilization ${civilizationId}`);
-    this.gameEngine.onStateChange && this.gameEngine.onStateChange('AI_FINISHED', { civilizationId });
+    if (this.gameEngine.onStateChange) {
+      this.gameEngine.onStateChange('AI_FINISHED', { civilizationId });
+    }
 
     // RoundManager now responsible for evaluating end-of-turn and timeouts
   }
@@ -1068,7 +1072,9 @@ export class AIManager {
    */
   private highlightAITarget(col: number, row: number, color: string = 'rgba(255,0,0,0.4)') {
     // Emit event for UI layer to handle highlighting
-    this.gameEngine.onStateChange && this.gameEngine.onStateChange('AI_TARGET_HIGHLIGHT', { col, row, color });
+    if (this.gameEngine.onStateChange) {
+      this.gameEngine.onStateChange('AI_TARGET_HIGHLIGHT', { col, row, color });
+    }
   }
 
   // ──────────────────────────────────────────────────────────────────────

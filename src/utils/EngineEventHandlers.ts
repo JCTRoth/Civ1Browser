@@ -1,4 +1,5 @@
 import { useGameStore } from '../stores/GameStore';
+import { centerCameraOnTile, getGameViewport } from './CameraUtils';
 import type { GameEngine } from '../../types/game';
 
 export class EngineEventRouter {
@@ -423,35 +424,28 @@ export class EngineEventRouter {
   }
 
   /**
-   * Focus camera on a specific unit using the same centering logic as focusOnNextUnit
+   * Focus camera on a specific unit, preserving the current zoom and clamping
+   * to the map bounds so the view never lands on empty black space.
    */
   private focusOnUnit(unit: any): void {
-    const TILE_SIZE = 32; // world pixels per tile
-    const zoom = 2.0; // Default zoom level
+    const currentCamera = useGameStore.getState().camera;
+    const map = (this.gameEngine as any)?.map;
+    const mapWidth = map?.width ?? 80;
+    const mapHeight = map?.height ?? 50;
+    const zoom = currentCamera?.zoom ?? 2.0;
+    const viewport = getGameViewport();
 
-    // Safe window dimension access with fallbacks
-    const windowWidth = (typeof window !== 'undefined' && window.innerWidth) || 800;
-    const windowHeight = (typeof window !== 'undefined' && window.innerHeight) || 600;
+    const { x, y } = centerCameraOnTile({
+      col: unit.col,
+      row: unit.row,
+      zoom,
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      mapWidth,
+      mapHeight,
+    });
 
-    const startX = unit.col * TILE_SIZE;
-    const startY = unit.row * TILE_SIZE;
-
-    // Calculate camera position to center the unit
-    const centerOffsetX = windowWidth / 2 / zoom;
-    const centerOffsetY = windowHeight / 2 / zoom;
-
-    const newCameraX = startX - centerOffsetX;
-    const newCameraY = startY - centerOffsetY;
-
-    // Ensure camera position is valid (not NaN or infinite)
-    const safeCameraX = isFinite(newCameraX) ? newCameraX : 0;
-    const safeCameraY = isFinite(newCameraY) ? newCameraY : 0;
-
-    const newCamera = {
-      x: safeCameraX,
-      y: safeCameraY,
-      zoom: zoom
-    };
+    const newCamera = { x, y, zoom };
 
     console.log('[EngineEventRouter] Focusing camera on unit', {
       unitId: unit.id,

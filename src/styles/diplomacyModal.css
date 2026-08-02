@@ -128,49 +128,47 @@
 }
 
 /* ============================================================================
-   Mobile: stacked layout + full-height sheets
+   Stacked layout + full-height sheets (all screen sizes)
    ========================================================================== */
 
-@media (max-width: 767.98px) {
-  .diplomacy-modal .modal-content {
-    border: none;
-  }
+.diplomacy-modal .modal-content {
+  border: none;
+}
 
-  .diplomacy-modal .modal-dialog {
-    max-width: 100%;
-  }
+.diplomacy-modal .modal-dialog {
+  max-width: 100%;
+}
 
-  .diplomacy-body {
-    min-height: 0;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
+.diplomacy-body {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
 
-  .diplomacy-layout {
-    flex-direction: column;
-    min-height: 0;
-    flex: 1 1 auto;
-    overflow: hidden;
-  }
+.diplomacy-layout {
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
 
-  .diplomacy-civ-list {
-    width: 100%;
-    min-width: 0;
-    max-height: 38%;
-    border-right: none;
-    border-bottom: 2px solid #8b7355;
-    flex-shrink: 0;
-    -webkit-overflow-scrolling: touch;
-  }
+.diplomacy-civ-list {
+  width: 100%;
+  min-width: 0;
+  max-height: 38%;
+  border-right: none;
+  border-bottom: 2px solid #8b7355;
+  flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
+}
 
-  .diplomacy-negotiation {
-    max-height: none;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding-bottom: calc(16px + var(--safe-bottom, 0px));
-  }
+.diplomacy-negotiation {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: calc(16px + var(--safe-bottom, 0px));
 }
 
 /* ─── Leader header ─────────────────────────────── */

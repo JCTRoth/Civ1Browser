@@ -1,6 +1,6 @@
 /* ============================================================================
    UnitActionsModal — context menu
-   Bottom sheet on mobile, anchored popover on desktop.
+   Always rendered as a full-width bottom sheet (always-mobile layout).
    ========================================================================== */
 
 .unit-context-backdrop {
@@ -19,17 +19,37 @@
 .unit-context-menu {
   position: fixed;
   z-index: 999;
+  left: 0 !important;
+  right: 0 !important;
+  top: auto !important;
+  bottom: 0 !important;
+  width: 100%;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
-  width: 260px;
-  max-width: calc(100vw - 16px);
   background: var(--color-bg-elevated, #16202a);
-  border: 1px solid var(--color-border-strong, #3d5163);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  border: none;
+  border-top: 1px solid var(--color-border-strong, #3d5163);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.55);
   overflow: hidden;
   color: var(--color-text, #e8eef3);
   font-family: var(--font-mono, monospace);
+  padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 0px));
+  max-height: 75dvh;
+  animation: sheet-up 220ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
+}
+
+/* Grab handle for the bottom sheet */
+.unit-context-menu::before {
+  content: '';
+  display: block;
+  width: 44px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 8px auto 4px;
+  flex-shrink: 0;
 }
 
 .unit-context-menu__header {
@@ -40,6 +60,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .unit-context-menu__title {
@@ -55,7 +76,6 @@
 }
 
 .unit-context-menu__scroll {
-  max-height: 60vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -117,40 +137,6 @@
   letter-spacing: 0.1em;
   color: var(--color-text-muted, #8b9aa9);
   text-transform: uppercase;
-}
-
-/* Mobile: full-width bottom sheet */
-@media (max-width: 767.98px) {
-  .unit-context-menu {
-    left: 0 !important;
-    right: 0 !important;
-    top: auto !important;
-    bottom: 0 !important;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 16px 16px 0 0;
-    border: none;
-    border-top: 1px solid var(--color-border-strong, #3d5163);
-    padding-bottom: var(--safe-bottom, env(safe-area-inset-bottom, 0px));
-    max-height: 75dvh;
-    animation: sheet-up 220ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
-  }
-
-  .unit-context-menu__scroll {
-    max-height: none;
-  }
-
-  /* Show a grab handle for the bottom sheet */
-  .unit-context-menu::before {
-    content: '';
-    display: block;
-    width: 44px;
-    height: 5px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.25);
-    margin: 8px auto 4px;
-    flex-shrink: 0;
-  }
 }
 
 @keyframes sheet-up {

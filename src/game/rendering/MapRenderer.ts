@@ -1410,7 +1410,7 @@ export class MapRenderer {
       ctx.fillStyle = iconColor;
       try {
         ctx.fillText(emoji, centerX, centerY);
-      } catch (err) {
+      } catch {
         const fallback = (unit.type && unit.type[0]?.toUpperCase()) || 'U';
         ctx.fillText(fallback, centerX, centerY);
       }
@@ -1507,7 +1507,7 @@ export class MapRenderer {
       ctx.fillStyle = iconColor;
       try {
         ctx.fillText(emoji, centerX, centerY);
-      } catch (err) {
+      } catch {
         const fallback = (unit.type && unit.type[0]?.toUpperCase()) || 'U';
         ctx.fillText(fallback, centerX, centerY);
       }

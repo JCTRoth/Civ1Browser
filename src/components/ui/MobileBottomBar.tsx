@@ -48,7 +48,7 @@ const MobileBottomBar: React.FC<MobileBottomBarProps> = ({
   onTogglePanel,
   onEndTurn,
 }) => (
-  <nav className="mobile-bottom-bar d-md-none" aria-label="Primary actions">
+  <nav className="mobile-bottom-bar" aria-label="Primary actions">
     <BarButton
       icon="bi bi-list"
       label="Menu"

@@ -545,67 +545,65 @@
 }
 
 /* ============================================================================
-   Mobile refinements (mobile-first additions)
+   Mobile refinements — applied on ALL screen sizes (always-mobile layout)
    ========================================================================== */
 
-@media (max-width: 767.98px) {
-  /* Let the setup content scroll instead of clipping inside the fullscreen modal */
-  .setup-content {
-    max-height: none;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding-bottom: calc(24px + var(--safe-bottom, 0px));
-  }
+/* Let the setup content scroll instead of clipping inside the fullscreen modal */
+.setup-content {
+  max-height: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-bottom: calc(24px + var(--safe-bottom, 0px));
+}
 
-  .setup-civ-list {
-    max-height: none;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 10px;
-    padding-bottom: 8px;
-  }
+.setup-civ-list {
+  max-height: none;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  padding-bottom: 8px;
+}
 
-  /* Civ cards need at least 44px of touch height and a clear selected state */
-  .setup-civ-card {
-    min-height: 120px;
-    padding: 12px 10px;
-    border-radius: 14px;
-  }
+/* Civ cards need at least 44px of touch height and a clear selected state */
+.setup-civ-card {
+  min-height: 120px;
+  padding: 12px 10px;
+  border-radius: 14px;
+}
 
-  .setup-civ-card.is-selected {
-    outline: 3px solid var(--accent, #f0c33c);
-    outline-offset: 2px;
-  }
+.setup-civ-card.is-selected {
+  outline: 3px solid var(--accent, #f0c33c);
+  outline-offset: 2px;
+}
 
-  .setup-civ-card__icon,
-  .civ-icon-egypt,
-  .civ-icon-russia,
-  .civ-icon-zulu {
-    width: 48px !important;
-    height: 48px !important;
-    font-size: 26px !important;
-  }
+.setup-civ-card__icon,
+.civ-icon-egypt,
+.civ-icon-russia,
+.civ-icon-zulu {
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 26px !important;
+}
 
-  .setup-civ-card__name {
-    font-size: 0.95rem;
-  }
+.setup-civ-card__name {
+  font-size: 0.95rem;
+}
 
-  /* Full-width footer buttons in the thumb zone */
-  .setup-footer {
-    padding: 12px 16px calc(12px + var(--safe-bottom, 0px));
-    gap: 10px;
-  }
+/* Full-width footer buttons in the thumb zone */
+.setup-footer {
+  padding: 12px 16px calc(12px + var(--safe-bottom, 0px));
+  gap: 10px;
+}
 
-  .setup-footer__button {
-    flex: 1 1 auto;
-    min-height: 48px;
-    padding: 12px 16px;
-  }
+.setup-footer__button {
+  flex: 1 1 auto;
+  min-height: 48px;
+  padding: 12px 16px;
+}
 
-  .setup-footer__selected {
-    width: 100%;
-    justify-content: center;
-    flex-wrap: wrap;
-    text-align: center;
-  }
+.setup-footer__selected {
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+  text-align: center;
 }

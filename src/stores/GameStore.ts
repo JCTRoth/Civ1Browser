@@ -2,6 +2,7 @@
 
 import { create } from 'zustand';
 import { Constants } from '../utils/Constants';
+import { centerCameraOnTile, getGameViewport } from '../utils/CameraUtils';
 import { SquareGrid } from '../game/HexGrid';
 import { UNIT_TYPES } from '../data/GameData';
 import { UNIT_PROPERTIES } from '../data/UnitConstants';
@@ -67,9 +68,9 @@ const createInitialUIState = (): UIState => ({
   showDiplomacy: false,
   showGameMenu: false,
   activeDialog: null,
-  // Mobile-first: drawer starts closed on small screens so the map is
-  // immediately visible; static sidebar stays open on desktop.
-  sidebarCollapsed: typeof window !== 'undefined' && window.innerWidth < 768,
+  // Mobile-first layout is applied on ALL screen sizes: the info panel is a
+  // drawer that starts closed so the map is immediately visible.
+  sidebarCollapsed: true,
   notifications: [],
   goToMode: false,
   goToUnit: '',
@@ -226,33 +227,24 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       const candidate = state.units.find(u => u.civilizationId === activeId && (u.movesRemaining || 0) > 0 && !u.isSleeping);
 
       if (candidate) {
-        // Focus on the unit
-        const TILE_SIZE = Constants.HEX_SIZE || 32; // world pixels per tile
-        const zoom = Math.max(0.1, state.camera.zoom || 2.0); // Prevent division by zero
-
-
-        // Safe window dimension access with fallbacks
-        const windowWidth = (typeof window !== 'undefined' && window.innerWidth) || 800;
-        const windowHeight = (typeof window !== 'undefined' && window.innerHeight) || 600;
-
-        const startX = candidate.col * TILE_SIZE;
-        const startY = candidate.row * TILE_SIZE;
-
-        // Calculate camera position with bounds checking
-        const centerOffsetX = windowWidth / 2 / zoom;
-        const centerOffsetY = windowHeight / 2 / zoom;
-
-        const newCameraX = startX - centerOffsetX;
-        const newCameraY = startY - centerOffsetY;
-
-        // Ensure camera position is valid (not NaN or infinite)
-        const safeCameraX = isFinite(newCameraX) ? newCameraX : 0;
-        const safeCameraY = isFinite(newCameraY) ? newCameraY : 0;
+        // Focus on the unit: preserve zoom, use the real canvas viewport, and
+        // clamp to the map bounds so the view never lands on empty black space.
+        const zoom = Math.max(0.1, state.camera.zoom || 2.0);
+        const viewport = getGameViewport();
+        const { x, y } = centerCameraOnTile({
+          col: candidate.col,
+          row: candidate.row,
+          zoom,
+          viewportWidth: viewport.width,
+          viewportHeight: viewport.height,
+          mapWidth: state.map?.width ?? 80,
+          mapHeight: state.map?.height ?? 50,
+        });
 
         const newCamera = {
-          x: safeCameraX,
-          y: safeCameraY,
-          zoom: zoom
+          x: isFinite(x) ? x : 0,
+          y: isFinite(y) ? y : 0,
+          zoom,
         };
 
         // Only update the camera position if either the same player retained control or developer mode is enabled
@@ -271,32 +263,22 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         const capitalCity = activeCivilization?.capital;
 
         if (capitalCity) {
-          const TILE_SIZE = Constants.HEX_SIZE || 32; // world pixels per tile
-          const zoom = Math.max(0.1, state.camera.zoom || 2.0); // Prevent division by zero
-
-
-          // Safe window dimension access with fallbacks
-          const windowWidth = (typeof window !== 'undefined' && window.innerWidth) || 800;
-          const windowHeight = (typeof window !== 'undefined' && window.innerHeight) || 600;
-
-          const startX = capitalCity.col * TILE_SIZE;
-          const startY = capitalCity.row * TILE_SIZE;
-
-          // Calculate camera position with bounds checking
-          const centerOffsetX = windowWidth / 2 / zoom;
-          const centerOffsetY = windowHeight / 2 / zoom;
-
-          const newCameraX = startX - centerOffsetX;
-          const newCameraY = startY - centerOffsetY;
-
-          // Ensure camera position is valid (not NaN or infinite)
-          const safeCameraX = isFinite(newCameraX) ? newCameraX : 0;
-          const safeCameraY = isFinite(newCameraY) ? newCameraY : 0;
+          const zoom = Math.max(0.1, state.camera.zoom || 2.0);
+          const viewport = getGameViewport();
+          const { x, y } = centerCameraOnTile({
+            col: capitalCity.col,
+            row: capitalCity.row,
+            zoom,
+            viewportWidth: viewport.width,
+            viewportHeight: viewport.height,
+            mapWidth: state.map?.width ?? 80,
+            mapHeight: state.map?.height ?? 50,
+          });
 
           const newCamera = {
-            x: safeCameraX,
-            y: safeCameraY,
-            zoom: zoom
+            x: isFinite(x) ? x : 0,
+            y: isFinite(y) ? y : 0,
+            zoom,
           };
 
           const lastActive = (state as StoreWithInternals)._lastActivePlayer;
@@ -471,9 +453,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           }
         }
 
-        const sightRange = (typeof (unit as { sightRange?: number }).sightRange === 'number') 
-          ? (unit as { sightRange?: number }).sightRange 
-          : (gameTypeDef?.sightRange ?? 1); // Default to 1 if not found
+        const sightRange = Math.max(2, (typeof (unit as { sightRange?: number }).sightRange === 'number')
+          ? (unit as { sightRange?: number }).sightRange
+          : (gameTypeDef?.sightRange ?? 2)); // Minimum radius 2 so the map isn't a tiny peephole
 
         if (sightRange > 0) {
           setVisibilityAreaInternal(newVisibility, newRevealed, unit.col, unit.row, sightRange, map.width, map.height);

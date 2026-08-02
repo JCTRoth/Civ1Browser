@@ -83,6 +83,7 @@ export interface Unit {
   name?: string;
   isVeteran?: boolean;
   maxMoves?: number;
+  movement?: number;
   attack?: number;
   defense?: number;
   orders?: any;
@@ -301,9 +302,6 @@ export interface GameEngine {
   diplomacyManager: any;
   getAllUnits(): Unit[];
   getAllCities(): City[];
-  calculateUnitPath(unitId: string, targetCol: number, targetRow: number): boolean;
-  clearUnitPath(unitId: string): void;
-  moveUnitAlongPath(unitId: string): boolean;
   restartCurrentGame(): Promise<void>;
   shutdownToMenu(): void;
   isGameOver: boolean;

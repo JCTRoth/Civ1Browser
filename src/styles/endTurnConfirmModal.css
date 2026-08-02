@@ -54,16 +54,11 @@
   border-top: 1px solid var(--color-border, #2c3b49);
   display: flex;
   gap: 12px;
+  flex-direction: column-reverse;
 }
 
-@media (max-width: 575.98px) {
-  .end-turn-modal-footer {
-    flex-direction: column-reverse;
-  }
-
-  .end-turn-modal-footer .btn {
-    width: 100%;
-    min-height: var(--touch-min, 44px);
-    margin: 0;
-  }
+.end-turn-modal-footer .btn {
+  width: 100%;
+  min-height: var(--touch-min, 44px);
+  margin: 0;
 }

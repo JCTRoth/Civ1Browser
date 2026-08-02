@@ -44,18 +44,9 @@
   display: flex;
   gap: 12px;
   justify-content: flex-end;
+  flex-direction: column-reverse;
 }
 
 .confirm-dialog__btn {
-  flex: 1 1 auto;
-}
-
-@media (max-width: 575.98px) {
-  .confirm-dialog__footer {
-    flex-direction: column-reverse;
-  }
-
-  .confirm-dialog__btn {
-    width: 100%;
-  }
+  width: 100%;
 }

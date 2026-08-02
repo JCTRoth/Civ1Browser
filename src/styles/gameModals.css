@@ -60,7 +60,7 @@
   background-color: rgba(28, 30, 32, 0.95);
 }
 
-/* Mobile-first: city/production/hex-detail modals fill the viewport on phones */
+/* Mobile-first (all screens): city/production/hex-detail modals fill the viewport */
 .city-details-modal .modal-dialog,
 .production-selection-modal .modal-dialog,
 .hex-detail-modal .modal-dialog {
@@ -68,6 +68,8 @@
   display: flex;
   align-items: center;
   margin: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 .city-details-modal .modal-content,
@@ -75,6 +77,9 @@
   max-height: 100dvh;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 100%;
+  border-radius: 0;
 }
 
 .city-details-modal .modal-body,
@@ -83,50 +88,13 @@
   overflow-y: auto;
   flex: 1 1 auto; /* allow body to stretch to fill the modal content */
   -webkit-overflow-scrolling: touch;
+  max-height: none;
+  min-height: 0;
+  padding-bottom: calc(1rem + var(--safe-bottom, 0px));
 }
 
-@media (min-width: 768px) {
-  .city-details-modal .modal-dialog,
-  .production-selection-modal .modal-dialog,
-  .hex-detail-modal .modal-dialog {
-    margin: 1.75rem auto;
-    min-height: 0;
-  }
-
-  .city-details-modal .modal-content,
-  .production-selection-modal .modal-content {
-    min-height: 80vh;
-  }
-}
-
-/* Mobile: full-height sheets with safe-area bottom */
-@media (max-width: 767.98px) {
-  .city-details-modal .modal-dialog,
-  .production-selection-modal .modal-dialog,
-  .hex-detail-modal .modal-dialog {
-    height: 100%;
-    max-height: 100%;
-  }
-
-  .city-details-modal .modal-content,
-  .production-selection-modal .modal-content,
-  .hex-detail-modal .modal-content {
-    height: 100%;
-    min-height: 100%;
-    border-radius: 0;
-  }
-
-  .city-details-modal .modal-body,
-  .production-selection-modal .modal-body,
-  .hex-detail-modal-body {
-    max-height: none;
-    min-height: 0;
-    padding-bottom: calc(1rem + var(--safe-bottom, 0px));
-  }
-
-  .hex-detail-modal {
-    max-width: 100vw;
-  }
+.hex-detail-modal {
+  max-width: 100vw;
 }
 
 /* ============================================================================
@@ -171,10 +139,8 @@
   vertical-align: middle;
 }
 
-@media (max-width: 575.98px) {
-  .production-selection-modal .table {
-    min-width: 560px; /* allow horizontal scroll within the sheet */
-  }
+.production-selection-modal .table {
+  min-width: 560px; /* allow horizontal scroll within the sheet */
 }
 
 .hex-detail-content {

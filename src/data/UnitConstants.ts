@@ -401,7 +401,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         attack: 0,
         defense: 0,
         movement: 1,
-        sightRange: 1,
+        sightRange: 3,
         cost: 40,
         maintenance: 1,
         canSettle: true,
