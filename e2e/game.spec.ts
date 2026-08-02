@@ -347,9 +347,6 @@ test.describe('AI Behavior', () => {
     test('AI processes its turn and returns control to player', async ({ page }) => {
       await startGame(page);
 
-      // Capture initial turn info
-      const turnBefore = await page.locator('.game-top-bar').textContent();
-
       await endTurn(page);
 
       // After one full round, the year should have advanced
@@ -514,7 +511,6 @@ test.describe('AI Behavior', () => {
       // Capture initial stats
       await openSidePanel(page);
       const sidePanel = page.locator('.side-panel-shell').first();
-      const initialText = await sidePanel.textContent();
 
       // Advance several turns
       await advanceTurns(page, 3);
@@ -701,7 +697,6 @@ test.describe('AI Behavior', () => {
       await startGame(page);
 
       const topBar = page.locator('.game-top-bar');
-      const initialText = await topBar.textContent();
 
       await endTurn(page);
 

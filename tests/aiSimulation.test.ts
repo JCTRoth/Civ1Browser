@@ -76,7 +76,7 @@ describe('AI scout enemy search integration', () => {
           if (civ.isAI && engine.processAITurn) {
             try {
               await engine.processAITurn(civ.id);
-            } catch (e) {
+            } catch {
               // Ignore errors during AI processing - just continue
             }
           }

@@ -27,6 +27,11 @@ interface UnitIconOverride {
  */
 const UNIT_ICON_OVERRIDES: UnitIconOverride[] = [
   {
+    unitType: 'settler',
+    svgPath: 'settler.png',
+    fallbackEmoji: UNIT_PROPERTIES['settler']?.icon
+  },
+  {
     unitType: 'warrior',
     svgPath: 'worrier.svg',
     fallbackEmoji: UNIT_PROPERTIES['warrior']?.icon
