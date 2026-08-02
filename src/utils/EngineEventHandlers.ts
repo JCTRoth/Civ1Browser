@@ -405,7 +405,15 @@ export class EngineEventRouter {
 
     const settings = useGameStore.getState().settings;
     const queueEmptied = typeof previousLength === 'number' && previousLength > 0 && queueLength === 0;
-    const shouldPrompt = civ?.isHuman && !settings.autoEndTurn && queueEmptied && !this.endTurnPromptShown.has(civilizationId);
+
+    // Only auto-prompt "All Your Units Have Moved!" while the human is in their
+    // UNIT_MOVEMENT phase. The queue is also cleared during END-phase turn
+    // processing (endHumanTurn -> clearQueue), which would otherwise spuriously
+    // re-open the End Turn modal while the AI is still processing.
+    const tm = (this.gameEngine as any).roundManager;
+    const phase = tm?.getPhase?.() ?? null;
+    const inUnitMovement = phase === 'UNIT_MOVEMENT';
+    const shouldPrompt = civ?.isHuman && !settings.autoEndTurn && queueEmptied && !this.endTurnPromptShown.has(civilizationId) && inUnitMovement;
 
     if (shouldPrompt && typeof window !== 'undefined') {
       this.endTurnPromptShown.add(civilizationId);

@@ -239,6 +239,17 @@ test.describe('Help Dialog', () => {
 // ---------------------------------------------------------------------------
 
 /**
+ * Wait for the End Turn modal to fully disappear (including its fade-out
+ * transition). react-bootstrap keeps the closing modal in the DOM for a few
+ * hundred ms, so without this wait the next endTurn call can race with a
+ * modal that is still fading out ("element was detached from the DOM").
+ */
+async function waitForModalClosed(page: Page): Promise<void> {
+  const modal = page.locator('[role="dialog"]').filter({ hasText: 'End Turn?' });
+  await expect(modal).not.toBeVisible({ timeout: 5_000 }).catch(() => {});
+}
+
+/**
  * End the current turn (click End Turn, confirm modal, wait for AI processing).
  * Skips the confirmation modal if `skipEndTurnConfirmation` is enabled.
  */
@@ -260,6 +271,10 @@ async function endTurn(page: Page): Promise<void> {
 
   // Wait until it's the human player's turn again (End Turn button re-enabled)
   await expect(page.locator('.game-top-bar .topbar-endturn')).toBeEnabled({ timeout: 30_000 });
+
+  // Let the confirm modal finish its fade-out before returning, so the next
+  // endTurn call does not race with a detaching modal.
+  await waitForModalClosed(page);
 }
 
 /**
@@ -275,11 +290,25 @@ async function advanceTurns(page: Page, n: number): Promise<void> {
 
 /**
  * Dismiss the "End Turn?" confirmation dialog if it is visible.
+ * Keeps dismissing until it stays closed, because the auto
+ * "All Your Units Have Moved!" dialog can reappear while a GoTo path
+ * animation is still running (each queue change can re-trigger the prompt).
  */
 async function dismissEndTurnDialog(page: Page): Promise<void> {
   const modal = page.locator('[role="dialog"]').filter({ hasText: 'End Turn?' });
-  if (await modal.isVisible({ timeout: 2_000 }).catch(() => false)) {
-    await modal.locator('button').filter({ hasText: 'Cancel' }).click();
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    if (await modal.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      await modal.locator('button').filter({ hasText: 'Cancel' }).click({ timeout: 3_000 });
+      await waitForModalClosed(page);
+    } else {
+      // Modal is closed — wait briefly and confirm it stays closed (the GoTo
+      // animation may still be running and could re-open it).
+      await page.waitForTimeout(500);
+      if (!(await modal.isVisible({ timeout: 500 }).catch(() => false))) {
+        return;
+      }
+    }
   }
 }
 
@@ -333,8 +362,8 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      // The Foreign Advisor modal should show at least one other civilization
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      // The Foreign Advisor (Diplomacy Report) modal should show at least one other civilization
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       // Close the diplomacy report
@@ -359,7 +388,7 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       // The modal should list at least one AI civilization
@@ -387,7 +416,7 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       const civRows = modal.locator('.diplomacy-report-row');
@@ -511,7 +540,10 @@ test.describe('AI Behavior', () => {
       await openSidePanel(page);
       await expect(page.locator('.side-panel-shell').first()).toBeVisible();
 
-      // Canvas should still be interactive (no frozen state)
+      // Close the side panel drawer (its backdrop covers the map), then verify
+      // the canvas is still interactive (no frozen state)
+      await page.locator('.mobile-bottom-bar__btn').nth(3).click();
+      await expect(page.locator('.side-panel-shell')).not.toHaveClass(/is-open/);
       await page.locator('.game-canvas').first().click();
     });
 
@@ -547,7 +579,7 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       // The AI civ should be visible
@@ -595,7 +627,7 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       const civRows = modal.locator('.diplomacy-report-row');
@@ -617,7 +649,7 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       const civRows = modal.locator('.diplomacy-report-row');
@@ -722,11 +754,15 @@ test.describe('AI Behavior', () => {
     test('clicking on settler shows unit info in side panel', async ({ page }) => {
       await startGame(page);
 
-      // Click on the settler unit in the canvas center to select it
+      // The settler is auto-selected at game start (camera centers on it), so
+      // clicking its tile deselects it and empties the unit queue, which
+      // triggers the auto "All Your Units Have Moved!" dialog. Dismiss it so it
+      // does not block the bottom bar.
       const canvas = page.locator('.game-canvas canvas').first();
       await canvas.click();
+      await dismissEndTurnDialog(page);
 
-      // After clicking the settler tile, "Selected Unit" or unit type should appear
+      // After interacting with the settler tile, "Selected Unit" or unit type should appear
       await openSidePanel(page);
       const sidePanel = page.locator('.side-panel-shell').first();
       const selectionSection = sidePanel.locator('.selection-section');
@@ -826,7 +862,7 @@ test.describe('AI Behavior', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', bubbles: true }))
       );
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
       await page.keyboard.press('Escape');
     });
@@ -838,7 +874,7 @@ test.describe('AI Behavior', () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', code: 'F4', bubbles: true }))
       );
 
-      const modal = page.locator('.modal').filter({ hasText: 'Foreign Advisor' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
       await page.keyboard.press('Escape');
     });
