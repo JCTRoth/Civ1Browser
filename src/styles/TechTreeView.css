@@ -13,7 +13,17 @@
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-x pan-y; /* allow panning without browser zoom interference */
+  /* Allow native scrollbar + drag-to-pan: let us capture pointer moves while
+     still letting the container scroll. We manage scrollLeft/Top manually. */
+  touch-action: pan-x pan-y;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.tech-tree-container.is-panning {
+  cursor: grabbing;
+  scroll-behavior: auto;
 }
 
 .tech-tree-path {

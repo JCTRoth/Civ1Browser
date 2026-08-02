@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Technology } from '../../../types/game';
 import { TECHNOLOGIES_DATA } from '@/data/TechnologyData';
 import '../../styles/TechTreeView.css';
@@ -38,7 +38,8 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
     return byDepth;
   }, [techs]);
 
-  // layout positions
+  // layout positions — spread every branch across the full width so the whole
+  // tree is fully expanded end-to-end (no overlapping / collapsed branches)
   const depths = Object.keys(grouped).map(k => parseInt(k, 10)).sort((a, b) => a - b);
   const positions: Record<string, { x: number; y: number }> = {};
 
@@ -48,9 +49,13 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
     const row = grouped[d];
     const totalWidth = row.length * nodeWidth + (row.length - 1) * horizontalSpacing;
     maxRowWidth = Math.max(maxRowWidth, totalWidth);
-    const startX = Math.max(0, (Math.max(width, totalWidth) - totalWidth) / 2);
+    // If the row fits in the available width, spread its nodes evenly across
+    // the full width; otherwise use the row's natural width.
+    const rowSpan = Math.max(width, totalWidth);
     row.forEach((tech, j) => {
-      const x = startX + j * (nodeWidth + horizontalSpacing);
+      // Distribute the row's nodes evenly across the full span
+      const slot = rowSpan / row.length;
+      const x = slot * j + (slot - nodeWidth) / 2;
       const y = 40 + i * (nodeHeight + verticalSpacing);
       positions[tech.id] = { x, y };
     });
@@ -102,6 +107,8 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
   };
 
   const handleNodeClick = (techId: string) => {
+    // Ignore clicks that end a drag-pan gesture (so you can pan by dragging)
+    if (panDeltaRef.current > 5) return;
     const path = findPathTo(techId);
     if (path) setSelectedPath(path);
     else setSelectedPath([techId]);
@@ -116,6 +123,67 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
     setHoveredTech(null);
     setTooltipPosition(null);
   };
+
+  // ---- Click-and-drag panning ----
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isPanningRef = useRef(false);
+  const capturedRef = useRef(false);
+  const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+  const panDeltaRef = useRef(0);
+  const [isPanning, setIsPanning] = useState(false);
+
+  const handlePanStart = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    // Only pan with primary mouse button / touch / pen
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const el = containerRef.current;
+    if (!el) return;
+    isPanningRef.current = true;
+    panDeltaRef.current = 0;
+    capturedRef.current = false;
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: el.scrollLeft,
+      scrollTop: el.scrollTop,
+    };
+  }, []);
+
+  const handlePanMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPanningRef.current || !panStartRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    panDeltaRef.current = Math.max(panDeltaRef.current, Math.abs(dx), Math.abs(dy));
+    // Only capture the pointer once an actual drag starts (beyond a small
+    // threshold). Capturing earlier retargets the final `click` event to the
+    // container, which would break clicking on individual tech nodes.
+    if (!capturedRef.current && panDeltaRef.current > 5) {
+      capturedRef.current = true;
+      setIsPanning(true);
+      el.setPointerCapture?.(e.pointerId);
+    }
+    el.scrollLeft = panStartRef.current.scrollLeft - dx;
+    el.scrollTop = panStartRef.current.scrollTop - dy;
+  }, []);
+
+  const handlePanEnd = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (capturedRef.current) {
+      const el = containerRef.current;
+      el?.releasePointerCapture?.(e.pointerId);
+    }
+    isPanningRef.current = false;
+    capturedRef.current = false;
+    panStartRef.current = null;
+    setIsPanning(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isPanningRef.current = false;
+      panStartRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedPath) {
@@ -139,7 +207,14 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
   };
 
   return (
-    <div className="tech-tree-container">
+    <div
+      ref={containerRef}
+      className={`tech-tree-container${isPanning ? ' is-panning' : ''}`}
+      onPointerDown={handlePanStart}
+      onPointerMove={handlePanMove}
+      onPointerUp={handlePanEnd}
+      onPointerCancel={handlePanEnd}
+    >
       <svg width={svgWidth} height={svgHeight} className="tech-tree-svg">
         <defs>
           <pattern id="unresearchedPattern" patternUnits="userSpaceOnUse" width="10" height="10">

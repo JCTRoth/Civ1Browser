@@ -303,8 +303,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     <Modal 
       show={uiState.activeDialog === 'tech'} 
       onHide={handleCloseDialog} 
-      centered
-      fullscreen="lg-down"
+      fullscreen
       dialogClassName="tech-tree-modal"
     >
       <Modal.Header closeButton className="bg-dark text-white">
@@ -313,11 +312,9 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         </Modal.Title>
       </Modal.Header>
       <Modal.Body className="bg-dark text-white tech-tree-modal-body">
-        <div className="tech-tree-container">
-          <React.Suspense fallback={<div className="text-white p-3">Loading tree...</div>}>
-            <TechTreeView technologies={technologies} width={Math.max(window.innerWidth - 32, 320)} />
-          </React.Suspense>
-        </div>
+        <React.Suspense fallback={<div className="text-white p-3">Loading tree...</div>}>
+          <TechTreeView technologies={technologies} width={Math.max(window.innerWidth - 32, 320)} />
+        </React.Suspense>
       </Modal.Body>
     </Modal>
   );

@@ -4,32 +4,31 @@
   color: #f5f5f5;
 }
 
+/* Tech Tree modal is fullscreen; make the body flex so the tree canvas expands
+   to fill the available window. */
 .tech-tree-modal-body {
-  max-height: 88vh;
-  overflow-y: auto;
-  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 1rem 1.5rem 1.5rem;
   -webkit-overflow-scrolling: touch;
 }
 
-/* Desktop: the tech tree needs a wide dialog */
-@media (min-width: 992px) {
-  .tech-tree-modal .modal-dialog {
-    max-width: 1100px;
-    width: 90vw;
-  }
-
-  .tech-tree-container {
-    height: 70vh;
-  }
+.tech-tree-modal .tech-tree-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
 }
 
 /* Touch-friendly panning for the tech tree */
 .tech-tree-container {
   height: 80vh;
   overflow: auto;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  /* NOT flex: flex-shrink on the SVG would compress the tree so it never
+     overflows and cannot be panned. Block layout lets the SVG keep its full
+     natural size so every branch is fully expanded and scrollable. */
+  display: block;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
