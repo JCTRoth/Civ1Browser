@@ -38,7 +38,7 @@ const EndTurnConfirmModal: React.FC<EndTurnConfirmModalProps> = ({
   };
 
   return (
-    <Modal show={show} onHide={handleCancel} centered fullscreen dialogClassName="end-turn-modal">
+    <Modal show={show} onHide={handleCancel} centered fullscreen="lg-down" dialogClassName="end-turn-modal">
       <Modal.Header closeButton className="end-turn-modal-header">
         <Modal.Title className="end-turn-modal-title">
           <i className="bi bi-skip-end-fill me-2" aria-hidden="true"></i>

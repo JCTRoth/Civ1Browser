@@ -304,7 +304,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       show={uiState.activeDialog === 'tech'} 
       onHide={handleCloseDialog} 
       centered
-      fullscreen={true}
+      fullscreen="lg-down"
       dialogClassName="tech-tree-modal"
     >
       <Modal.Header closeButton className="bg-dark text-white">
@@ -484,7 +484,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         onHide={() => { handleCloseDialog(); setSelectedDiploCiv(null); setDiplomacyLog([]); setShowTreatyPanel(false); setCounterProposal(null); }} 
         centered
         size="xl"
-        fullscreen
+        fullscreen="lg-down"
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">
@@ -835,7 +835,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         onHide={handleCloseDialog}
         centered
         size="lg"
-        fullscreen
+        fullscreen="lg-down"
         dialogClassName="diplomacy-modal"
       >
         <Modal.Header closeButton className="diplomacy-header">

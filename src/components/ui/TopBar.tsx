@@ -58,7 +58,7 @@ const TopBar: React.FC<TopBarProps> = ({
       aria-label="End Turn"
     >
       <i className="bi bi-skip-end-fill" aria-hidden="true"></i>
-      <span className="d-none" aria-hidden="true">End Turn</span>
+      <span className="d-none d-lg-inline" aria-hidden="true">End Turn</span>
     </button>
   </div>
 );

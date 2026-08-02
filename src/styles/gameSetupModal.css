@@ -41,7 +41,9 @@
   background: linear-gradient(180deg, var(--panel-bg) 0%, var(--panel-bg-2) 100%);
   color: #f7f9fc;
   padding: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .setup-content {
@@ -606,4 +608,85 @@
   justify-content: center;
   flex-wrap: wrap;
   text-align: center;
+}
+
+/* Desktop: setup wizard becomes a centered dialog with a right-aligned footer */
+@media (min-width: 992px) {
+  .setup-footer {
+    justify-content: flex-end;
+    padding: 12px 24px;
+  }
+
+  .setup-footer__button {
+    flex: 0 0 auto;
+    min-width: 160px;
+    width: auto;
+  }
+
+  .setup-footer__selected {
+    width: auto;
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
+
+/* ============================================================================
+   Intro menu (game setup screen)
+   ========================================================================== */
+
+/* The intro / setup screen gets a solid black background */
+.game-setup-screen {
+  background: #000 !important;
+}
+
+/* Solid black backdrop behind the setup dialog (rendered via portal to body) */
+.modal-backdrop.game-setup-backdrop {
+  background-color: #000 !important;
+  opacity: 1 !important;
+}
+
+/* Make the setup dialog content read as a dark panel on the black screen */
+.modal-dialog.game-setup-dialog .modal-content {
+  background: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Desktop: expand the setup wizard to fill the viewport height and scroll the
+   body when the content is taller than the available space. */
+@media (min-width: 992px) {
+  .modal-dialog.game-setup-dialog {
+    width: min(1140px, calc(100vw - 48px));
+    margin-top: 24px;
+    margin-bottom: 24px;
+  }
+
+  .modal-dialog.game-setup-dialog .modal-content {
+    max-height: calc(100dvh - 48px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .modal-dialog.game-setup-dialog .modal-header-custom,
+  .modal-dialog.game-setup-dialog .setup-footer {
+    flex-shrink: 0;
+  }
+
+  .modal-dialog.game-setup-dialog .modal-body-custom {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .modal-dialog.game-setup-dialog .setup-content {
+    max-height: none;
+    overflow: visible;
+    padding-bottom: 24px;
+  }
+
+  .modal-dialog.game-setup-dialog .setup-civ-list {
+    max-height: none;
+  }
 }

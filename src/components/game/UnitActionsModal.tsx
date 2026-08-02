@@ -33,9 +33,9 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
         role="menu"
         aria-label="Unit actions"
         style={{
-          left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 280))}px`,
-          top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 420))}px`,
-        }}
+          '--ctx-left': `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 280))}px`,
+          '--ctx-top': `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 420))}px`,
+        } as React.CSSProperties}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
       >

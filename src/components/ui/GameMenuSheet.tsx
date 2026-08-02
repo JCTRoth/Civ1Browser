@@ -74,9 +74,9 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
         role="menu"
         aria-label={`${menuTitle[activeMenu]} menu`}
         style={{
-          top: `${position.top}px`,
-          left: `${position.left}px`,
-        }}
+          '--menu-top': `${position.top}px`,
+          '--menu-left': `${position.left}px`,
+        } as React.CSSProperties}
       >
         <div className="menu-sheet__title">{menuTitle[activeMenu]}</div>
 

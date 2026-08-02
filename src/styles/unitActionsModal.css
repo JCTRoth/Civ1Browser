@@ -1,6 +1,6 @@
 /* ============================================================================
    UnitActionsModal — context menu
-   Always rendered as a full-width bottom sheet (always-mobile layout).
+   Bottom sheet on mobile, cursor-anchored popover on desktop.
    ========================================================================== */
 
 .unit-context-backdrop {
@@ -40,7 +40,7 @@
   animation: sheet-up 220ms var(--ease-out, cubic-bezier(0.22, 1, 0.36, 1));
 }
 
-/* Grab handle for the bottom sheet */
+/* Grab handle for the bottom sheet (mobile only) */
 .unit-context-menu::before {
   content: '';
   display: block;
@@ -142,4 +142,56 @@
 @keyframes sheet-up {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
+}
+
+/* Desktop (>= lg): cursor-anchored popover instead of bottom sheet */
+@media (min-width: 992px) {
+  .unit-context-menu {
+    left: var(--ctx-left) !important;
+    right: auto !important;
+    top: var(--ctx-top) !important;
+    bottom: auto !important;
+    width: auto;
+    min-width: 240px;
+    max-width: 300px;
+    max-height: 70dvh;
+    border: 1px solid var(--color-border-strong, #3d5163);
+    border-radius: var(--radius-md, 10px);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+    padding-bottom: 0.375rem;
+    animation: menu-drop-in 120ms var(--ease-out, ease-out);
+  }
+
+  .unit-context-menu::before {
+    display: none;
+  }
+
+  .unit-context-menu__header {
+    padding: 8px 14px;
+  }
+
+  .unit-context-menu__scroll {
+    padding: 4px;
+  }
+
+  .context-menu-item {
+    min-height: 38px;
+    padding: 7px 10px;
+    font-size: 14px;
+  }
+
+  .unit-context-backdrop {
+    background: transparent;
+  }
+}
+
+@keyframes menu-drop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

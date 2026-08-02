@@ -112,7 +112,7 @@
   outline-offset: 2px;
 }
 
-/* Full-width stacked buttons on all screen sizes (one-handed use) */
+/* Full-width stacked buttons on mobile (one-handed use) */
 .game-result-actions {
   flex-direction: column;
   gap: 0.5rem;
@@ -121,4 +121,18 @@
 .gr-btn {
   width: 100%;
   min-width: 0;
+}
+
+/* Desktop: side-by-side action buttons */
+@media (min-width: 992px) {
+  .game-result-actions {
+    flex-direction: row;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .gr-btn {
+    width: auto;
+    min-width: 160px;
+  }
 }

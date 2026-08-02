@@ -74,7 +74,16 @@ function GameSetupModal({ show, onStart }) {
   };
 
   return (
-    <Modal show={show} centered size="xl" backdrop="static" keyboard={false} fullscreen>
+    <Modal
+      show={show}
+      centered
+      size="xl"
+      backdrop="static"
+      keyboard={false}
+      fullscreen="lg-down"
+      dialogClassName="game-setup-dialog"
+      backdropClassName="game-setup-backdrop"
+    >
       <Modal.Header className="modal-header-custom">
         <Modal.Title className="w-100 text-center">
           <h2 className="modal-title">🏛️ Zivilisation 1</h2>

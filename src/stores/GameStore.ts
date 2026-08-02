@@ -68,9 +68,9 @@ const createInitialUIState = (): UIState => ({
   showDiplomacy: false,
   showGameMenu: false,
   activeDialog: null,
-  // Mobile-first layout is applied on ALL screen sizes: the info panel is a
-  // drawer that starts closed so the map is immediately visible.
-  sidebarCollapsed: true,
+  // The info panel is a slide-in drawer on phones (starts closed so the map
+  // is immediately visible) and a static sidebar on desktop (starts open).
+  sidebarCollapsed: typeof window !== 'undefined' ? window.innerWidth < 992 : true,
   notifications: [],
   goToMode: false,
   goToUnit: '',

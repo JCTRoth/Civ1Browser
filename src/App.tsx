@@ -758,7 +758,7 @@ function App() {
   // Show game setup modal before game engine is created
   if (!gameEngine && showGameSetup) {
     return (
-      <div id="gameContainer" className="vh-100 d-flex align-items-center justify-content-center text-white">
+      <div id="gameContainer" className="game-setup-screen vh-100 d-flex align-items-center justify-content-center text-white">
         <GameSetupModal
           show={showGameSetup}
           onStart={handleGameStart}

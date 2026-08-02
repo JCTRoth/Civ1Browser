@@ -22,13 +22,35 @@ async function startGame(page: Page): Promise<void> {
 }
 
 /**
- * Helper: open the info panel drawer (it starts closed on all screen sizes).
- * The drawer is toggled via the "Panel" button in the bottom action bar.
+ * Helper: open the info panel.
+ * - Desktop (>= 992px): the panel is a static sidebar that starts open.
+ * - Mobile: it is a drawer toggled via the "Panel" button in the bottom bar.
  */
 async function openSidePanel(page: Page): Promise<void> {
-  const panelBtn = page.locator('.mobile-bottom-bar__btn').nth(3);
-  await panelBtn.click();
-  await expect(page.locator('.side-panel-shell')).toHaveClass(/is-open/);
+  const shell = page.locator('.side-panel-shell');
+  // Only toggle via the bottom bar when it's visible (mobile layout).
+  const bottomBar = page.locator('.mobile-bottom-bar');
+  if (await bottomBar.isVisible().catch(() => false)) {
+    if (!(await shell.evaluate((el) => el.classList.contains('is-open')))) {
+      await page.locator('.mobile-bottom-bar__btn').nth(3).click();
+    }
+  }
+  await expect(shell).toHaveClass(/is-open/);
+}
+
+/**
+ * Helper: close the info panel (mobile drawer). No-op on desktop where the
+ * panel is a static sidebar.
+ */
+async function closeSidePanel(page: Page): Promise<void> {
+  const shell = page.locator('.side-panel-shell');
+  const bottomBar = page.locator('.mobile-bottom-bar');
+  if (await bottomBar.isVisible().catch(() => false)) {
+    if (await shell.evaluate((el) => el.classList.contains('is-open'))) {
+      await page.locator('.mobile-bottom-bar__btn').nth(3).click();
+      await expect(shell).not.toHaveClass(/is-open/);
+    }
+  }
 }
 
 /**
@@ -540,10 +562,9 @@ test.describe('AI Behavior', () => {
       await openSidePanel(page);
       await expect(page.locator('.side-panel-shell').first()).toBeVisible();
 
-      // Close the side panel drawer (its backdrop covers the map), then verify
-      // the canvas is still interactive (no frozen state)
-      await page.locator('.mobile-bottom-bar__btn').nth(3).click();
-      await expect(page.locator('.side-panel-shell')).not.toHaveClass(/is-open/);
+      // Close the side panel (drawer on mobile, static sidebar on desktop),
+      // then verify the canvas is still interactive (no frozen state)
+      await closeSidePanel(page);
       await page.locator('.game-canvas').first().click();
     });
 

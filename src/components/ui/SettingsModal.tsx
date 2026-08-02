@@ -47,7 +47,7 @@ function SettingsModal({ show, onHide }) {
       onHide={onHide}
       centered
       size="lg"
-      fullscreen
+      fullscreen="lg-down"
       dialogClassName="settings-modal"
     >
       <Modal.Header closeButton className="settings-modal__header">
