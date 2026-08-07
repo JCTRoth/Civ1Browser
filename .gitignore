@@ -115,6 +115,12 @@ temp/
 storybook-static
 
 # Keep documentation files - they're important!
-*.md
+# (the previous `*.md` rule was removed so Markdown docs such as README.md stay trackable)
 
 test-results/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

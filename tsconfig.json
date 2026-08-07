@@ -16,12 +16,11 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "js", "types", "tests"],
-  "types": ["vite/client"],
+  "include": ["src", "js", "types", "tests", "e2e", "playwright.config.ts"],
+  "types": ["vite/client", "node"],
   "exclude": ["node_modules", "dist"]
 }

@@ -97,6 +97,7 @@ export class AIManager {
 
     // ─── Phase 2: Technology research ──────────────────────────────────
     if (!civ.currentResearch) {
+      // selectResearch returns the chosen techId (string) or null.
       const techChoice = AIResearch.selectResearch(civ, aiState.strategyProfile, gameState);
       if (techChoice) {
         console.log(`[AI] Research selected: ${techChoice}`);

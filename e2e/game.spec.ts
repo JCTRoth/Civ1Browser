@@ -152,6 +152,50 @@ test.describe('Top Menu', () => {
     await expect(page.getByRole('button', { name: /New Game/ })).not.toBeVisible();
   });
 
+  test('right-clicking a unit opens the ORDERS context menu', async ({ page }) => {
+    await startGame(page);
+
+    const canvas = page.locator('.game-canvas canvas').first();
+    await expect(canvas).toBeVisible();
+    const viewport = page.viewportSize()!;
+
+    // On game start the app auto-selects the settler and centres the camera on
+    // it, placing the unit near the viewport centre (offset by half a tile due
+    // to the hex camera math in GameStore.focusOnNextUnit).
+    const tile = 32; // Constants.HEX_SIZE
+    const zoom = 2;  // default store camera zoom
+    const baseX = viewport.width / 2 + 0.5 * tile * zoom;
+    const baseY = viewport.height / 2 + 0.5 * tile * zoom;
+
+    // The first right-click just exits the auto-activated "Go To" mode.
+    await canvas.click({ position: { x: baseX, y: baseY }, button: 'right' });
+    await page.waitForTimeout(200);
+
+    // Scan a small grid around the unit: the context menu (the ORDERS menu)
+    // only opens when right-clicking directly on a player unit.
+    const offsets = [-64, -32, 0, 32, 64];
+    let opened = false;
+    for (const dy of offsets) {
+      for (const dx of offsets) {
+        await canvas.click({
+          position: { x: baseX + dx, y: baseY + dy },
+          button: 'right',
+        });
+        await page.waitForTimeout(150);
+        if (await page.getByRole('button', { name: /Skip Turn/i }).isVisible().catch(() => false)) {
+          opened = true;
+          break;
+        }
+      }
+      if (opened) break;
+    }
+
+    // The ORDERS context menu should be visible with unit order actions.
+    await expect(page.getByText('ORDERS', { exact: true }).first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: /Skip Turn/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Patrol/i })).toBeVisible();
+  });
+
   test('opens WORLD menu', async ({ page }) => {
     await openTopMenu(page, 'WORLD');
     await expect(page.getByRole('button', { name: /Diplomacy/ })).toBeVisible();
