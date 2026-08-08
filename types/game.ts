@@ -51,7 +51,7 @@ export interface MapState {
   revealed: boolean[];
 }
 
-export interface Tile {
+interface Tile {
   terrain: string;
   resource?: string;
   improvement?: string;
@@ -173,13 +173,13 @@ export interface UIState {
   turnFlashTrigger: number; // Incremented on each turn start to trigger top-bar flash animation
 }
 
-export interface Notification {
+interface Notification {
   id: number;
   type: 'info' | 'success' | 'warning' | 'error';
   message: string;
 }
 
-export interface Settings {
+interface Settings {
   uiScale: number;
   menuFontSize: number;
   sidebarWidth: number;
