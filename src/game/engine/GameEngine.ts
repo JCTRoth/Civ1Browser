@@ -7,7 +7,7 @@ import { AutoProduction } from './AutoProduction';
 import { UnitActionManager } from './UnitActionManager';
 import { TurnManager } from './TurnManager';
 import { VictoryManager } from './VictoryManager';
-import { EnemySearcher, EnemyLocation } from './EnemySearcher';
+import { EnemySearcher, EnemyLocation, SearchResult } from './EnemySearcher';
 import { ScoutMemory } from './ScoutMemory';
 import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
@@ -363,6 +363,34 @@ export default class GameEngine {
   }
 
   /**
+   * Execute a function while measuring its duration (used by AI subsystems).
+   * Returns the function result (or null on error) and logs the elapsed ms.
+   */
+  measurePerformance<T>(label: string, fn: () => T): T | null {
+    const start = performance.now();
+    try {
+      const result = fn();
+      const elapsed = Math.round(performance.now() - start);
+      console.log(`[PERF] ${label}: ${elapsed}ms`);
+      return result;
+    } catch (err) {
+      console.warn(`[PERF] ${label} failed:`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Emit a structured log line (category + message + optional detail).
+   * The GameLogger (via onStateChange 'GAME_LOG') persists it to disk.
+   */
+  log(category: string, message: string, detail: Record<string, unknown> = {}): void {
+    console.log(`[${category}] ${message}`);
+    if (this.onStateChange) {
+      this.onStateChange('GAME_LOG', { category, message, ...detail });
+    }
+  }
+
+  /**
    * Check and update the areTurnsDone flag for a unit
    * Sets to true if unit has no moves left OR is fortified OR is sleeping
    */
@@ -384,12 +412,50 @@ export default class GameEngine {
   /**
    * Record enemy location in player's intelligence storage
    * Allows AI to make coordinated decisions based on known enemy positions
-   * 
-   * Record enemy location in player's intelligence storage
+   *
    * @param civilizationId Civilization recording the location
-   * @param enemy Enemy search result from EnemySearcher
+   * @param enemy Search result from EnemySearcher
    */
-  // recordEnemyLocation removed (unused)
+  public recordEnemyLocation(civilizationId: number, enemy: SearchResult): void {
+    const storage = this.getPlayerStorage(civilizationId);
+    if (!storage || !enemy) return;
+
+    const enemyCivId = this.getEnemyCivIdAt(enemy.col, enemy.row, civilizationId);
+    if (enemyCivId < 0) return;
+
+    const round = this.roundManager?.getRoundNumber?.() ?? 0;
+    const location: EnemyLocation = {
+      col: enemy.col,
+      row: enemy.row,
+      type: enemy.targetType,
+      id: enemy.targetId,
+      discoveredRound: round,
+      lastSeenRound: round,
+    };
+
+    const list = storage.enemyLocations.get(enemyCivId) ?? [];
+    const existing = list.find(e => e.id === enemy.targetId);
+    if (existing) {
+      existing.col = enemy.col;
+      existing.row = enemy.row;
+      existing.lastSeenRound = round;
+    } else {
+      list.push(location);
+      storage.enemyLocations.set(enemyCivId, list);
+    }
+  }
+
+  /**
+   * Resolve the civilization id of whatever occupies a square (or -1).
+   * Only returns the id if it differs from the searcher's own civilization.
+   */
+  private getEnemyCivIdAt(col: number, row: number, ownCivId: number): number {
+    const unit = this.getUnitAt(col, row);
+    if (unit && unit.civilizationId !== ownCivId) return unit.civilizationId;
+    const city = this.getCityAt(col, row);
+    if (city && city.civilizationId !== ownCivId) return city.civilizationId;
+    return -1;
+  }
 
   /**
    * Get known enemy locations for a civilization
@@ -531,6 +597,10 @@ export default class GameEngine {
       mapWidth = 20;
       mapHeight = 20;
       console.log(`[GameEngine] Using small map size for ${mapType}: ${mapWidth}x${mapHeight}`);
+    } else if (mapType === 'AI_VS_AI') {
+      mapWidth = 40;
+      mapHeight = 40;
+      console.log(`[GameEngine] Using medium map size for ${mapType}: ${mapWidth}x${mapHeight}`);
     }
     
     // Create hex grid system with appropriate size
@@ -661,7 +731,8 @@ export default class GameEngine {
     for (let i = 0; i < selectedCivs.length; i++) {
       const civData = selectedCivs[i];
       
-      const isHuman = i === 0;
+      // In AI_VS_AI mode every civilization is AI-controlled (no human player).
+      const isHuman = i === 0 && mapType !== 'AI_VS_AI';
       const civ = {
         id: i,
         name: civData.name,
@@ -778,6 +849,7 @@ export default class GameEngine {
         
       case 'NORMAL_SKIRMISH':
       case 'CLOSEUP_1V1':
+      case 'AI_VS_AI':
       case 'TECH_LEVEL_10':
         // Standard: 1 settler
         console.log(`[UNITS] Creating 1 settler for civ ${civId}`);
@@ -1149,6 +1221,22 @@ export default class GameEngine {
   }
 
   /**
+   * Whether a tile is passable for land units (used by AI pathfinding).
+   * Ocean and other impassable terrain return false.
+   */
+  isTilePassable(col: number, row: number): boolean {
+    if (!this.squareGrid || !this.squareGrid.isValidSquare(col, row)) return false;
+    const tile = this.getTileAt(col, row);
+    if (!tile) return false;
+    return TERRAIN_PROPS[tile.type]?.passable !== false;
+  }
+
+  /** Passability callback for terrain-aware pathfinding (land units). */
+  getPassabilityFilter(): (col: number, row: number) => boolean {
+    return (col: number, row: number) => this.isTilePassable(col, row);
+  }
+
+  /**
    * Get unit at coordinates
    */
   getUnitAt(col: number, row: number) {
@@ -1298,43 +1386,44 @@ export default class GameEngine {
           return { success: false, reason: 'not_at_war' };
         }
       }
-      // City attack logic - use unit's attackCity method
-      const cityCombatResult = (unit as any).attackCity(targetCity, this);
-      if (!cityCombatResult) {
-        return { success: false, reason: 'cannot_attack_city' };
-      }
-      // If city was destroyed, the unit might move there
-      if (cityCombatResult.cityDestroyed) {
-        // Transfer city to attacker
-        targetCity.civilizationId = unit.civilizationId;
-        // Reset city HP as it changes hands
-        (targetCity as any).resetHitPoints?.();
-        
+      // City combat (native engine logic — the legacy Unit.attackCity API
+      // is incompatible with engine plain-object units).
+      const result = this.resolveCityCombat(unit, targetCity);
+      if (result === 'captured') {
         // Remove unit (sacrificed in capture)
         this.units = this.units.filter(u => u.id !== unitId);
-        
         if (this.onStateChange) {
-          this.onStateChange('CITY_CAPTURED', { 
-            city: targetCity, 
+          this.onStateChange('CITY_CAPTURED', {
+            city: targetCity,
             capturedBy: unit.civilizationId,
-            originalCiv: targetCity.civilizationId 
+            originalCiv: targetCity.civilizationId,
           });
         }
         return { success: true, reason: 'city_captured' };
-      } else if (cityCombatResult.cityHit) {
-        // City took damage but not captured
+      }
+      if (result === 'hit') {
         if (this.onStateChange) {
-          this.onStateChange('CITY_ATTACKED', { 
-            city: targetCity, 
+          this.onStateChange('CITY_ATTACKED', {
+            city: targetCity,
             attacker: unit,
-            result: cityCombatResult 
+            result: { cityHit: true },
           });
         }
         return { success: true, reason: 'city_damaged' };
-      } else {
-        // Attacker was destroyed
-        return { success: false, reason: 'attack_failed' };
       }
+      // Attacker destroyed (or city was destroyed by attacker — treat as captured)
+      if (result === 'city_destroyed') {
+        this.units = this.units.filter(u => u.id !== unitId);
+        if (this.onStateChange) {
+          this.onStateChange('CITY_CAPTURED', {
+            city: targetCity,
+            capturedBy: unit.civilizationId,
+            originalCiv: targetCity.civilizationId,
+          });
+        }
+        return { success: true, reason: 'city_captured' };
+      }
+      return { success: false, reason: 'attack_failed' };
     }
 
     // Move the unit
@@ -1511,6 +1600,65 @@ export default class GameEngine {
       
       return false;
     }
+  }
+
+  /**
+   * Resolve an attack against an enemy city (native engine logic).
+   * Returns 'captured' | 'hit' | 'city_destroyed' | 'defended'.
+   * - The attacker's attack vs the city's defense (population, doubled with
+   *   city walls). On success the attacker is removed and the city changes
+   *   hands (or is destroyed if it had only 1 population).
+   */
+  private resolveCityCombat(attacker: any, city: any): 'captured' | 'hit' | 'city_destroyed' | 'defended' {
+    const attackerStrength = (attacker.attack || 1) * (attacker.health != null ? attacker.health / 100 : 1);
+
+    // City defense: base = population; walls double it.
+    let defense = Math.max(1, city.population || 1);
+    if (city.buildings?.includes('city_walls') || city.buildings?.includes('walls')) {
+      defense *= 2;
+    }
+
+    const total = attackerStrength + defense;
+    const attackerWins = Math.random() * total < attackerStrength;
+
+    // Spend the attacker's remaining movement either way.
+    attacker.movesRemaining = 0;
+    this.updateUnitTurnsDoneFlag(attacker);
+
+    if (attackerWins) {
+      const oldCiv = city.civilizationId;
+      if ((city.population || 1) <= 1) {
+        // City is destroyed rather than captured.
+        this.cities = this.cities.filter(c => c.id !== city.id);
+        console.log(`[COMBAT] City ${city.name} (civ ${oldCiv}) destroyed by ${attacker.type}`);
+        if (this.onStateChange) {
+          this.onStateChange('CITY_DESTROYED', { city, attacker });
+        }
+        return 'city_destroyed';
+      }
+
+      // Population drop and capture.
+      city.population -= 1;
+      city.civilizationId = attacker.civilizationId;
+      city.buildings = city.buildings ?? [];
+      console.log(`[COMBAT] City ${city.name} captured by civ ${attacker.civilizationId} (pop ${city.population})`);
+      return 'captured';
+    }
+
+    // Attacker defeated — damage or destroy it.
+    attacker.health = Math.max(0, (attacker.health ?? 100) - 25);
+    if (attacker.health <= 0) {
+      (attacker as any).isDefeated = true;
+      (attacker as any).defeatTimestamp = Date.now();
+      if (this.onStateChange) {
+        this.onStateChange('UNIT_DEFEATED', { unit: attacker });
+      }
+      setTimeout(() => {
+        this.units = this.units.filter(u => u.id !== attacker.id);
+      }, 5000);
+      console.log(`[COMBAT] ${attacker.type} destroyed attacking city ${city.name}`);
+    }
+    return 'defended';
   }
 
   /**

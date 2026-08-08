@@ -19,6 +19,7 @@ import { DomUtils } from '@/utils/DomUtils';
 import { enrichMapForExport } from '@/utils/MapExportUtils';
 import { preloadAllUnitIcons } from '@/utils/UnitIconLoader';
 import { centerCameraOnTile, getGameViewport } from '@/utils/CameraUtils';
+import { gameLogger } from '@/utils/GameLogger';
 
 function App() {
   const gameState = useGameStore(state => state.gameState);
@@ -105,10 +106,23 @@ function App() {
       console.log('Starting new game with settings:', gameSettings);
       setShowGameSetup(false);
 
+      // Start a named game-log session for every game. AI vs AI sessions get
+      // a dedicated timestamped session id; others share a per-run id.
+      const logSessionId = gameSettings.mapType === 'AI_VS_AI'
+        ? `aivsai-${new Date().toISOString().replace(/[:.]/g, '-')}`
+        : `game-${Date.now()}`;
+      gameLogger.setSession(logSessionId);
+      gameLogger.log('app', `Game started — mapType=${gameSettings.mapType}, civs=${gameSettings.numberOfCivilizations}, difficulty=${gameSettings.difficulty}`, gameSettings);
+
       // Update devMode setting if provided
       if (typeof gameSettings.devMode === 'boolean') {
         actions.updateSettings({ devMode: gameSettings.devMode });
         console.log('[App] Developer mode:', gameSettings.devMode);
+      }
+
+      // AI vs AI sessions auto-enable dev mode so the whole map is observable.
+      if (gameSettings.mapType === 'AI_VS_AI') {
+        actions.updateSettings({ devMode: true });
       }
 
       const engine = new GameEngine(actions);

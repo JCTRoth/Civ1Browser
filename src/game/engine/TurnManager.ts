@@ -444,6 +444,7 @@ export class TurnManager {
       console.log(`[TurnManager] ═══════════════════════════════════════════════`);
       console.log(`[TurnManager] NEW ROUND ${this.roundNumber} | Year: ${this.formatYear(this.gameEngine.currentYear)}`);
       console.log(`[TurnManager] ═══════════════════════════════════════════════`);
+      this.gameEngine.log?.('turn', `ROUND ${this.roundNumber} | Year: ${this.formatYear(this.gameEngine.currentYear)}`);
       
       // Sync turn and year to the store
       if (this.gameEngine.storeActions) {
@@ -618,9 +619,13 @@ export class TurnManager {
   }
 
   private createProducedUnit(city: any, unitType: string): void {
-    const UNIT_PROPS = (this.gameEngine.constructor as any).UNIT_PROPS || (globalThis as any).UNIT_PROPS;
-    const unitProps = UNIT_PROPS?.[unitType] || { movement: 1 };
-    
+    const unitProps = (this.gameEngine.constructor as any).UNIT_PROPS?.[unitType]
+      ?? { movement: 1, attack: 0, defense: 1 };
+
+    // Mirror GameEngine.createUnit so produced units have full combat stats
+    // (attack/defense/maxMoves). Previously these were missing, which made
+    // `attacker.attack` undefined → NaN strength → produced units ALWAYS
+    // lost combat.
     const unit = {
       id: 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
       type: unitType,
@@ -630,6 +635,12 @@ export class TurnManager {
       health: 100,
       movement: unitProps.movement,
       movesRemaining: unitProps.movement,
+      maxMoves: unitProps.movement,
+      isVeteran: false,
+      attack: unitProps.attack || 0,
+      defense: unitProps.defense || 1,
+      icon: unitProps.icon || '⚔️',
+      orders: null,
       homeCityId: city.id
     };
 

@@ -280,6 +280,7 @@ function GameSetupModal({ show, onStart }) {
                     <option value="MANY_CITIES">Many Cities · 4 cities with infrastructure</option>
                     <option value="TECH_LEVEL_10">Tech. Level 10 · All technologies researched</option>
                     <option value="ALL_UNITS">All Units Showcase · Every unit type on the board</option>
+                    <option value="AI_VS_AI">Computer vs Computer · Auto-playing AI duel</option>
                   </Form.Select>
                 </div>
               </div>
@@ -387,6 +388,14 @@ function GameSetupModal({ show, onStart }) {
                       <span className="hint-icon">🎮</span>
                       <span>Every single unit type spawned on the board. Perfect for testing and showcasing all units.</span>
                     </div>
+                  )}
+                  {mapType === 'AI_VS_AI' && (
+                    <ul>
+                      <li>Map: <strong>40x40 tiles</strong></li>
+                      <li>Players: <strong>All civilizations are AI</strong></li>
+                      <li>Mode: <strong>Fully automatic — no human input</strong></li>
+                      <li>Log: <strong>Every move is written to a log file</strong></li>
+                    </ul>
                   )}
                 </div>
               </div>

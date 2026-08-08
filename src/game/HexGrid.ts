@@ -106,13 +106,21 @@ export class SquareGrid {
     }
 
     // A* pathfinding algorithm for squares
-    findPath(startCol: number, startRow: number, endCol: number, endRow: number, obstacles: Set<string> = new Set()): SquareCoordinate[] {
+    // `isPassable` optionally restricts which tiles the path may traverse
+    // (e.g. land units cannot cross ocean). When omitted, all valid squares
+    // are considered passable (previous behaviour).
+    findPath(startCol: number, startRow: number, endCol: number, endRow: number, obstacles: Set<string> = new Set(), isPassable?: (col: number, row: number) => boolean): SquareCoordinate[] {
         if (!this.isValidSquare(startCol, startRow) || !this.isValidSquare(endCol, endRow)) {
             return [];
         }
 
         if (startCol === endCol && startRow === endRow) {
             return [{ col: startCol, row: startRow }];
+        }
+
+        // If the target itself is impassable, no valid path exists.
+        if (isPassable && !isPassable(endCol, endRow)) {
+            return [];
         }
 
         const openSet = new Set<string>();
@@ -166,6 +174,11 @@ export class SquareGrid {
                 const neighborKey = `${neighbor.col},${neighbor.row}`;
 
                 if (closedSet.has(neighborKey) || obstacles.has(neighborKey)) {
+                    continue;
+                }
+
+                // Skip impassable terrain when a passability filter is supplied.
+                if (isPassable && !isPassable(neighbor.col, neighbor.row)) {
                     continue;
                 }
 

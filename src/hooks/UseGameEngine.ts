@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useGameStore } from '../stores/GameStore';
 import type { GameEngine } from '../../types/game';
 import { EngineEventRouter } from '../utils/EngineEventHandlers';
+import { gameLogger } from '../utils/GameLogger';
 
 /**
  * Custom hook to integrate GameEngine with Zustand state
@@ -12,9 +13,19 @@ export const useGameEngine = (gameEngine: GameEngine | null) => {
   useEffect(() => {
     if (!gameEngine) return;
 
-    // Set up state change callback via router
+    // Keep the logger's context (round/player) in sync with the live engine.
+    gameLogger.setContext(() => ({
+      round: (gameEngine as any).currentTurn ?? 0,
+      player: (gameEngine as any).activePlayer ?? 0,
+    }));
+
+    // Set up state change callback via router, tapping every event into the
+    // game log first so moves/combat/turns are recorded in detail.
     const router = new EngineEventRouter(gameEngine as GameEngine);
-    gameEngine.onStateChange = (eventType, eventData) => router.handle(eventType, eventData);
+    gameEngine.onStateChange = (eventType, eventData) => {
+      gameLogger.record(eventType, eventData);
+      router.handle(eventType, eventData);
+    };
 
     // Initial state sync
     if (gameEngine.isInitialized) {
@@ -54,6 +65,8 @@ export const useGameEngine = (gameEngine: GameEngine | null) => {
       if (gameEngine) {
         gameEngine.onStateChange = null;
       }
+      // Flush any buffered log lines (best-effort) before the hook unmounts.
+      gameLogger.flushNow().catch(() => undefined);
     };
   }, [gameEngine, actions]);
 };
