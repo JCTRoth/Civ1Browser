@@ -648,8 +648,8 @@ function App() {
             break;
           case 'd':
           case 'D':
-            // Open diplomacy interface
-            actions.showDialog('diplomacy');
+            // Open diplomacy report (Foreign Advisor)
+            actions.showDialog('diplomacy-report');
             break;
           // 'a' key not bound
           case 'w':
@@ -728,8 +728,8 @@ function App() {
             setShowSettings(true);
             break;
           case 'F4':
-            // Open diplomacy interface
-            actions.showDialog('diplomacy');
+            // Open diplomacy report (Foreign Advisor)
+            actions.showDialog('diplomacy-report');
             break;
           case 'F11':
             // Toggle fullscreen
@@ -894,7 +894,7 @@ function App() {
           setActiveMenu(null);
         }}
         onDiplomacy={() => {
-          actions.showDialog('diplomacy');
+          actions.showDialog('diplomacy-report');
           setActiveMenu(null);
         }}
         onTechTree={() => {
