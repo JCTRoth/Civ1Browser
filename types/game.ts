@@ -232,8 +232,35 @@ export interface GameStoreState {
     aliveCivilizations: number;
     gameStarted: boolean;
   };
+  /** Active combat animations (cloud + unit hide/fade effects). */
+  combatAnimations: CombatAnimation[];
   // Internal state for preventing rapid focus calls
   _lastFocusCall?: number;
+}
+
+/**
+ * A combat animation: during its window the two involved units are hidden and
+ * a cloud emoji is drawn at the defender's tile; afterwards the surviving unit
+ * fades back in and the destroyed unit stays hidden.
+ */
+export interface CombatAnimation {
+  id: string;
+  attackerId: string;
+  defenderId: string;
+  /** Attacker's tile at the moment combat started. */
+  attackerCol: number;
+  attackerRow: number;
+  /** Defender's tile (where the cloud is drawn). */
+  defenderCol: number;
+  defenderRow: number;
+  /** True when the attacker survived (won) the fight. */
+  attackerSurvived: boolean;
+  /** True when the defender survived the fight. */
+  defenderSurvived: boolean;
+  /** performance.now() timestamp when the animation started. */
+  startTime: number;
+  /** Cloud duration in ms (units stay hidden this long). */
+  duration: number;
 }
 
 export interface GameActions {
@@ -267,6 +294,8 @@ export interface GameActions {
   resetFogOfWar: () => void;
   setTurnButtonDisabled: (disabled: boolean) => void;
   incrementTurnFlash: () => void;
+  addCombatAnimation: (animation: CombatAnimation) => void;
+  removeCombatAnimation: (id: string) => void;
 }
 
 export interface GameEngine {

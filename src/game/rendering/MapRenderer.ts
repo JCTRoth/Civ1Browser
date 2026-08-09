@@ -19,7 +19,7 @@ import { TILE_SIZE, getTerrainInfo, TERRAIN_TYPES } from '@/data/TerrainData';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, ImprovementDisplayConfig } from '@/data/TileImprovementConstants';
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
-import type { MapState, CameraState, Unit, City, GameState, Civilization } from '../../../types/game';
+import type { MapState, CameraState, Unit, City, GameState, Civilization, CombatAnimation } from '../../../types/game';
 
 
 /**
@@ -107,6 +107,8 @@ export interface RenderFrameParams {
   cameraZoom: number;
   /** Reachable tiles for movement range indicator */
   reachableTiles?: Map<string, number>;
+  /** Active combat animations (hide units + draw cloud) */
+  combatAnimations?: CombatAnimation[];
 }
 
 /**
@@ -143,6 +145,8 @@ export interface RenderStaticFrameParams {
   cameraZoom: number;
   /** Reachable tiles for movement range indicator */
   reachableTiles?: Map<string, number>;
+  /** Active combat animations (hide units + draw cloud) */
+  combatAnimations?: CombatAnimation[];
 }
 
 /**
@@ -167,6 +171,8 @@ export interface RenderPulsingUnitsParams {
   cameraZoom: number;
   /** ID of the current unit in the turn queue (only this unit should pulse) */
   currentQueueUnitId?: string | null;
+  /** Active combat animations (hide units + apply survivor fade) */
+  combatAnimations?: CombatAnimation[];
 }
 
 /**
@@ -273,6 +279,8 @@ interface DynamicContentParams {
   squareToScreen: (col: number, row: number) => { x: number; y: number };
   /** Reachable tiles for movement range indicator */
   reachableTiles?: Map<string, number>;
+  /** Active combat animations (hide units + draw cloud) */
+  combatAnimations?: CombatAnimation[];
 }
 
 /**
@@ -444,7 +452,8 @@ export class MapRenderer {
       cameraZoom,
       hasOffscreen,
       squareToScreen,
-      reachableTiles
+      reachableTiles,
+      combatAnimations: params.combatAnimations
     });
 
     this.drawUnitPaths(ctx, unitPaths, units, gameState, squareToScreen);
@@ -472,7 +481,8 @@ export class MapRenderer {
       offscreenCanvas,
       squareToScreen,
       cameraZoom,
-      reachableTiles
+      reachableTiles,
+      combatAnimations
     } = params;
 
     const canvasSize = this.ensureCanvasSize(canvas);
@@ -506,7 +516,8 @@ export class MapRenderer {
       cameraZoom,
       hasOffscreen,
       squareToScreen,
-      reachableTiles
+      reachableTiles,
+      combatAnimations
     });
 
     this.drawUnitPaths(ctx, unitPaths, units, gameState, squareToScreen);
@@ -557,12 +568,19 @@ export class MapRenderer {
     const pulseValue = (sine + 1) / 2;
 
     unitsToPulse.forEach(unit => {
+      // Combat animation: hide units during the cloud window and apply the
+      // survivor fade — the pulsing layer must never redraw a hidden unit on top.
+      const combat = this.getCombatRenderState(unit, params.combatAnimations);
+      if (combat.hidden) {
+        return;
+      }
+
       const tileIndex = unit.row * map.width + unit.col;
       const isVisible = map.visibility?.[tileIndex] ?? true;
       
       if (isVisible) {
         const { x, y } = squareToScreen(unit.col, unit.row);
-        this.drawUnitWithPulse(ctx, x, y, unit, pulseValue, cameraZoom, civilizations);
+        this.drawUnitWithPulse(ctx, x, y, unit, pulseValue, cameraZoom, civilizations, combat.alpha);
       }
     });
   }
@@ -717,7 +735,8 @@ export class MapRenderer {
       currentTime,
       cameraZoom,
       squareToScreen,
-      reachableTiles
+      reachableTiles,
+      combatAnimations
     } = params;
 
     const margin = this.tileSize * 2;
@@ -836,6 +855,12 @@ export class MapRenderer {
           }
           
           if (shouldDrawUnit) {
+            // Killed units (marked isDefeated) are never drawn again — the
+            // combat animation replaces the old "black X" death marker.
+            if ((unit as any).isDefeated) {
+              continue;
+            }
+
             const hasMoves = (unit.movesRemaining || 0) > 0;
             let alpha = 1;
             // Only apply pulsing animation if currentTime > 0 (animated mode)
@@ -845,6 +870,15 @@ export class MapRenderer {
               const sine = Math.sin(t * Math.PI * 4);
               alpha = 0.675 + 0.325 * (sine + 1) * 10;
             }
+
+            // Combat animation: hide both units while the cloud is shown, then
+            // fade the survivor back in. The destroyed unit stays hidden.
+            const combat = this.getCombatRenderState(unit, combatAnimations);
+            if (combat.hidden) {
+              continue;
+            }
+            alpha *= combat.alpha;
+
             this.drawUnit(ctx, x, y, unit, alpha, cameraZoom, civilizations);
           }
         }
@@ -867,6 +901,92 @@ export class MapRenderer {
           ctx.fillText(`${col},${row}`, x, y + scaledTileSize * 0.3);
         }
       }
+    }
+
+    // Draw combat clouds (on top of terrain/units).
+    if (combatAnimations && combatAnimations.length > 0) {
+      this.drawCombatClouds(ctx, combatAnimations, squareToScreen, cameraZoom, canvasSize);
+    }
+  }
+
+  /**
+   * Determine how a unit should render given the active combat animations.
+   * During an animation window both participants are hidden; afterwards the
+   * survivor fades back in while the destroyed unit stays hidden.
+   */
+  private getCombatRenderState(
+    unit: Unit,
+    combatAnimations?: CombatAnimation[]
+  ): { hidden: boolean; alpha: number } {
+    if (!combatAnimations || combatAnimations.length === 0) {
+      return { hidden: false, alpha: 1 };
+    }
+
+    const now = performance.now();
+    for (const anim of combatAnimations) {
+      const isAttacker = unit.id === anim.attackerId;
+      const isDefender = unit.id === anim.defenderId;
+      if (!isAttacker && !isDefender) continue;
+
+      const elapsed = now - anim.startTime;
+      if (elapsed < anim.duration) {
+        // Both units hidden while the cloud is visible.
+        return { hidden: true, alpha: 0 };
+      }
+
+      const survived = isAttacker ? anim.attackerSurvived : anim.defenderSurvived;
+      if (!survived) {
+        // Destroyed unit: never shown again.
+        return { hidden: true, alpha: 0 };
+      }
+
+      // Fade the survivor back in over 400ms after the cloud disappears.
+      const fadeEnd = anim.duration + 400;
+      if (elapsed >= fadeEnd) {
+        return { hidden: false, alpha: 1 };
+      }
+      const fadeProgress = (elapsed - anim.duration) / 400;
+      return { hidden: false, alpha: Math.max(0, Math.min(1, fadeProgress)) };
+    }
+
+    return { hidden: false, alpha: 1 };
+  }
+
+  /**
+   * Draw a cloud emoji (🫯, Noto Color Emoji) at each active combat's defender
+   * tile while its animation is running.
+   */
+  private drawCombatClouds(
+    ctx: CanvasRenderingContext2D,
+    combatAnimations: CombatAnimation[],
+    squareToScreen: (col: number, row: number) => { x: number; y: number },
+    cameraZoom: number,
+    canvasSize: CanvasSize
+  ): void {
+    const now = performance.now();
+    const margin = this.tileSize * 2;
+
+    for (const anim of combatAnimations) {
+      const elapsed = now - anim.startTime;
+      if (elapsed >= anim.duration) continue;
+
+      const { x, y } = squareToScreen(anim.defenderCol, anim.defenderRow);
+      if (this.isOutsideViewport(x, y, canvasSize.width, canvasSize.height, margin)) {
+        continue;
+      }
+
+      // Fade the cloud in quickly and keep it fully opaque until it ends.
+      const fadeIn = Math.min(1, elapsed / 150);
+      ctx.save();
+      ctx.globalAlpha = fadeIn;
+
+      const size = Math.round(this.tileSize * cameraZoom * 1.6);
+      ctx.font = `${size}px "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🫯', x, y);
+
+      ctx.restore();
     }
   }
 
@@ -1345,9 +1465,13 @@ export class MapRenderer {
     unit: Unit,
     pulseValue: number,
     cameraZoom: number,
-    civilizations: Civilization[]
+    civilizations: Civilization[],
+    alpha = 1
   ): void {
     ctx.save();
+    if (alpha < 1) {
+      ctx.globalAlpha = alpha;
+    }
 
     const zoomFactor = typeof cameraZoom === 'number' ? Math.min(Math.max(cameraZoom, 0.5), 1.5) : 1;
     const radius = Math.round(20 * zoomFactor);

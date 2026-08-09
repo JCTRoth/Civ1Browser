@@ -123,6 +123,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   // UI State
   uiState: createInitialUIState(),
 
+  // Combat animations (cloud + hide/fade effects)
+  combatAnimations: [],
+
   // Settings
   settings: {
     uiScale: 1.0,        // Overall UI scale multiplier (0.5 to 2.0)
@@ -317,6 +320,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     incrementTurnFlash: () => set(state => ({
       uiState: { ...state.uiState, turnFlashTrigger: state.uiState.turnFlashTrigger + 1 }
+    })),
+
+    addCombatAnimation: (animation) => set(state => ({
+      combatAnimations: [...state.combatAnimations, animation]
+    })),
+
+    removeCombatAnimation: (id) => set(state => ({
+      combatAnimations: state.combatAnimations.filter(a => a.id !== id)
     })),
 
     showDialog: (dialog) => set(state => ({
@@ -595,7 +606,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       cities: [],
       civilizations: [],
       technologies: [],
-      uiState: createInitialUIState()
+      uiState: createInitialUIState(),
+      combatAnimations: []
     })),
 
     resetFogOfWar: () => set(state => {
@@ -718,3 +730,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     return newStats;
   }
 }));
+
+// Dev-only test hook: expose the store so Playwright/console can drive and
+// inspect game state (combat animations, units, camera, etc.).
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as any).__gameStore = useGameStore;
+}

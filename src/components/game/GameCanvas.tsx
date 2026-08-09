@@ -39,6 +39,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const currentPlayer = useGameStore(state => state.civilizations[state.gameState.activePlayer] || null);
   const civilizations = useGameStore(state => state.civilizations);
   const currentQueueUnitId = useGameStore(state => state.uiState.currentQueueUnitId);
+  const combatAnimations = useGameStore(state => state.combatAnimations);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [selectedHex, setSelectedHex] = useState<HexCoordinates>({ col: 5, row: 5 });
@@ -595,7 +596,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       offscreenCanvas: terrainCanvasRef.current,
       squareToScreen,
       cameraZoom: camera.zoom,
-      reachableTiles
+      reachableTiles,
+      combatAnimations
     });
 
     // Save the static content to animation canvas for efficient restoration
@@ -614,7 +616,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
     staticRenderedRef.current = true;
     // console.log('[GameCanvas] Static content rendered and saved');
-  }, [camera, canvasRef, civilizations, cities, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units]);
+  }, [camera, canvasRef, civilizations, cities, combatAnimations, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units]);
 
   const renderAnimationLayer = useCallback((currentTime: number) => {
     if (!canvasRef.current || !animationCanvasRef.current) return;
@@ -662,9 +664,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       currentTime,
       squareToScreen,
       cameraZoom: camera.zoom,
-      currentQueueUnitId: currentQueueUnitId ?? undefined
+      currentQueueUnitId: currentQueueUnitId ?? undefined,
+      combatAnimations
     });
-  }, [camera.zoom, civilizations, currentQueueUnitId, gameState, mapData, squareToScreen, units]);
+  }, [camera.zoom, civilizations, combatAnimations, currentQueueUnitId, gameState, mapData, squareToScreen, units]);
 
   // Handle mouse events
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1689,6 +1692,35 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       }
     };
   }, [minimap, gameState.isGameStarted, gameState.activePlayer, units, hasGameStateChanged, renderStaticContent, renderAnimationLayer]);
+
+  // Combat animation loop: while combat animations are active, re-render the
+  // static frame at a modest FPS so the cloud shows and the survivor fades in.
+  useEffect(() => {
+    if (minimap || !gameState.isGameStarted) return;
+    if (!combatAnimations || combatAnimations.length === 0) return;
+
+    let raf = 0;
+    let last = 0;
+    const fps = 30;
+    const interval = 1000 / fps;
+
+    const loop = (currentTime: number) => {
+      raf = requestAnimationFrame(loop);
+      if (currentTime - last < interval) return;
+      last = currentTime;
+      renderStaticContent();
+
+      // Stop once every animation has fully finished (duration + fade).
+      const now = performance.now();
+      const anyActive = (combatAnimations ?? []).some(a => now - a.startTime < a.duration + 400);
+      if (!anyActive) {
+        cancelAnimationFrame(raf);
+      }
+    };
+
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [minimap, gameState.isGameStarted, combatAnimations, renderStaticContent]);
 
   // Trigger render when camera changes (pan/zoom)
   useEffect(() => {

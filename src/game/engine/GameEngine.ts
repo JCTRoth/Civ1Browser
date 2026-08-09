@@ -1599,7 +1599,14 @@ export default class GameEngine {
       }, 5000);
 
       if (this.onStateChange) {
-        this.onStateChange('COMBAT_VICTORY', { attacker, defender });
+        this.onStateChange('COMBAT_VICTORY', {
+          attacker,
+          defender,
+          attackerFromCol: fromCol,
+          attackerFromRow: fromRow,
+          attackerSurvived: true,
+          defenderSurvived: false,
+        });
       }
 
       // Check if turn should end automatically
@@ -1633,7 +1640,14 @@ export default class GameEngine {
       }
       
       if (this.onStateChange) {
-        this.onStateChange('COMBAT_DEFEAT', { attacker, defender });
+        this.onStateChange('COMBAT_DEFEAT', {
+          attacker,
+          defender,
+          attackerFromCol: attacker.col,
+          attackerFromRow: attacker.row,
+          attackerSurvived: attacker.health > 0,
+          defenderSurvived: true,
+        });
       }
 
       // Check if turn should end automatically

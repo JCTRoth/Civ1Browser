@@ -123,6 +123,19 @@ export class VictoryManager {
       return null;
     }
 
+    // A rival that still has a settler can refound a city, so the game is not
+    // decided yet — this prevents a premature win at turn 1 while rivals are
+    // still on their starting settlers. Stray military units (no settler, no
+    // city) cannot rebuild, so domination is decisive in that case.
+    const rivalHasSettler = survivingCivs.some((civ) =>
+      (this.gameEngine.units || []).some(
+        (u) => u.civilizationId === civ.id && u.type === 'settler'
+      )
+    );
+    if (rivalHasSettler) {
+      return null;
+    }
+
     for (const civ of survivingCivs) {
       const ownsAll = cities.every((city) => city.civilizationId === civ.id);
       if (ownsAll) {

@@ -62,7 +62,7 @@ export const CIVILIZATIONS: Civilization[] = [
     leader: 'Ramesses II',
     color: '#ffbb00ff', // Yellow - Egyptian gold/sand
     cityNames: ['Thebes', 'Memphis', 'Heliopolis', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Karnak'],
-    icon: '𓂀'
+    icon: '🐪'
   },
   {
     name: 'English',

@@ -28,7 +28,7 @@ export class EngineEventRouter {
         break;
       case 'COMBAT_VICTORY':
       case 'COMBAT_DEFEAT':
-        this.onCombat(eventType);
+        this.onCombat(eventType, eventData);
         break;
       case 'UNIT_PRODUCED':
       case 'UNIT_PURCHASED':
@@ -169,13 +169,40 @@ export class EngineEventRouter {
     }
   }
 
-  private onCombat(eventType: string) {
+  private onCombat(eventType: string, eventData: any) {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     this.actions.addNotification({
       type: eventType === 'COMBAT_VICTORY' ? 'success' : 'warning',
       message: eventType === 'COMBAT_VICTORY' ? 'Victory in combat!' : 'Unit defeated in combat!'
     });
+
+    // Record a combat animation: both units vanish, a cloud appears at the
+    // defender's tile, then the survivor fades back in (2 seconds total).
+    const attacker = eventData?.attacker;
+    const defender = eventData?.defender;
+    if (attacker && defender) {
+      const id = `combat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const animation = {
+        id,
+        attackerId: attacker.id,
+        defenderId: defender.id,
+        attackerCol: eventData.attackerFromCol ?? attacker.col,
+        attackerRow: eventData.attackerFromRow ?? attacker.row,
+        defenderCol: defender.col,
+        defenderRow: defender.row,
+        attackerSurvived: !!eventData.attackerSurvived,
+        defenderSurvived: !!eventData.defenderSurvived,
+        startTime: performance.now(),
+        duration: 2000,
+      };
+      this.actions.addCombatAnimation(animation);
+
+      // Remove the animation once it has fully played out.
+      setTimeout(() => {
+        this.actions.removeCombatAnimation(id);
+      }, animation.duration + 400);
+    }
   }
 
   private onUnitCreated(eventData: any) {
