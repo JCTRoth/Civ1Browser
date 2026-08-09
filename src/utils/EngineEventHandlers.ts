@@ -198,9 +198,14 @@ export class EngineEventRouter {
       };
       this.actions.addCombatAnimation(animation);
 
-      // Remove the animation once it has fully played out.
+      // Remove the animation once it has fully played out, then re-check
+      // auto-end-turn: combat may have been the last pending action, but the
+      // turn must only end after the cloud animation is no longer on screen.
       setTimeout(() => {
         this.actions.removeCombatAnimation(id);
+        if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
+          this.gameEngine.checkAndEndTurnIfNoMoves();
+        }
       }, animation.duration + 400);
     }
   }
@@ -277,21 +282,42 @@ export class EngineEventRouter {
   }
 
   private onCheckAutoEndTurn() {
-    const settings = useGameStore.getState().settings;
+    const state = useGameStore.getState();
+    const settings = state.settings;
     console.log('[EngineEventRouter] Checking auto end turn. Setting enabled:', settings.autoEndTurn);
-    
-    if (settings.autoEndTurn) {
-      console.log('[EngineEventRouter] Auto-ending turn...');
-      // Trigger proper turn ending through TurnManager (advances through all phases)
-      const tm = (this.gameEngine as any).roundManager;
-      if (tm && typeof tm.endHumanTurn === 'function') {
-        tm.endHumanTurn();
-      } else {
-        console.error('[EngineEventRouter] TurnManager not available for auto-end turn');
-      }
-    } else {
-      // Auto end turn disabled - do nothing, user must manually end turn
+
+    if (!settings.autoEndTurn) {
       console.log('[EngineEventRouter] Auto end turn disabled, waiting for manual turn end');
+      return;
+    }
+
+    // Do not auto-end the turn while the player is managing a city (city
+    // details / production / purchase / citizens screens) or while a combat
+    // animation is still playing. The check is re-run when the city screen
+    // closes (see GameModals.handleCloseDialog) or the combat animation ends
+    // (see onCombat), so the turn is only ended when nothing is on screen.
+    // Other dialogs (WORLD menu, tech tree, diplomacy, …) do not block auto-end.
+    const activeDialog = state.uiState?.activeDialog;
+    const cityScreenOpen = activeDialog !== null &&
+      activeDialog !== 'game-menu' &&
+      activeDialog !== 'help' &&
+      activeDialog !== 'tech' &&
+      activeDialog !== 'diplomacy' &&
+      activeDialog !== 'diplomacy-report' &&
+      activeDialog !== 'hex-details';
+    const combatActive = (state.combatAnimations ?? []).length > 0;
+    if (cityScreenOpen || combatActive) {
+      console.log(`[EngineEventRouter] Auto end turn deferred (dialog: ${activeDialog ?? 'none'}, combat: ${combatActive})`);
+      return;
+    }
+
+    console.log('[EngineEventRouter] Auto-ending turn...');
+    // Trigger proper turn ending through TurnManager (advances through all phases)
+    const tm = (this.gameEngine as any).roundManager;
+    if (tm && typeof tm.endHumanTurn === 'function') {
+      tm.endHumanTurn();
+    } else {
+      console.error('[EngineEventRouter] TurnManager not available for auto-end turn');
     }
   }
 

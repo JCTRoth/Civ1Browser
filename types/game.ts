@@ -310,6 +310,8 @@ export interface GameEngine {
   processTurn(): void;
   moveUnit(unitId: string, col: number, row: number): { success: boolean; reason?: string };
   canUnitMoveTo: (unitId: string, col: number, row: number) => boolean;
+  /** End the current player's turn automatically if every unit is done/skipped. */
+  checkAndEndTurnIfNoMoves(): void;
   foundCity(col: number, row: number, civilizationId: number, customName?: string | null): any;
   foundCityWithSettler(settlerId: string): boolean;
   setResearch(civId: number, techId: string): void;

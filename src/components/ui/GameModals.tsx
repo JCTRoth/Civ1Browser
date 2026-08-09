@@ -95,8 +95,20 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     return 'Unknown';
   };
 
+  const CITY_MANAGEMENT_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens'];
+
   const handleCloseDialog = () => {
+    const closing = useGameStore.getState().uiState.activeDialog;
     actions.hideDialog();
+    // Re-check auto-end turn only after a city-management screen closes. Those
+    // screens defer auto-end while open; once closed, end the turn if every
+    // unit is done and auto-end is enabled. Other dialogs (WORLD menu, tech,
+    // diplomacy, …) do not block auto-end and must not trigger a re-check,
+    // otherwise closing them could prematurely end the turn.
+    if (CITY_MANAGEMENT_DIALOGS.includes(closing) &&
+        gameEngine && typeof gameEngine.checkAndEndTurnIfNoMoves === 'function') {
+      gameEngine.checkAndEndTurnIfNoMoves();
+    }
   };
 
   const handleNewGame = () => {
