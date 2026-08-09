@@ -28,12 +28,6 @@ import type { Unit, City } from '../../../types/game';
 
 export class AIManager {
   private gameEngine: any;
-  /**
-   * Targets that a unit recently failed to reach. Prevents the AI from
-   * re-picking the same unreachable square every turn (which caused huge
-   * "No path"/"Move failed" counts and skipped units).
-   */
-  private avoidTargets: Map<string, { col: number; row: number; untilRound: number }> = new Map();
 
   constructor(gameEngine: any) {
     this.gameEngine = gameEngine;
@@ -79,7 +73,7 @@ export class AIManager {
     this.gameEngine.log('ai', `🤖 AI turn start — ${civ.name} (civ ${civilizationId})`);
 
     // Small delay before AI starts so player can observe
-    await this.gameEngine.sleep(this.gameEngine.getAITurnStartDelay?.() ?? 250);
+    await this.gameEngine.sleep(250);
 
     // ─── Phase 0: Initialize / retrieve AI state ───────────────────────
     const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
@@ -187,14 +181,7 @@ export class AIManager {
           break;
         }
 
-        let target = this.chooseAITarget(unit);
-        // If the chosen target is one this unit recently failed to reach,
-        // re-choose so it picks an alternative instead of grinding against
-        // an unreachable square (coastlines, blocked paths, etc.).
-        if (target && this.isTargetAvoided(unit, target.col, target.row)) {
-          console.log(`[AI] Target (${target.col},${target.row}) recently unreachable for ${unit.id}; re-choosing`);
-          target = this.chooseAITarget(unit);
-        }
+        const target = this.chooseAITarget(unit);
         if (!target) {
           // No valid target, skip the unit's turn
           console.log(`[AI] No target found for unit ${unit.id}, skipping`);
@@ -245,15 +232,12 @@ export class AIManager {
             if ((unit.movesRemaining || 0) >= moveCost) {
               const r = this.gameEngine.moveUnit(unit.id, target.col, target.row);
               if (!r || !r.success) {
-                console.log(`[AI] Move failed, trying fallback neighbor`);
+                console.log(`[AI] Move failed, skipping unit`);
                 this.gameEngine.log('ai', `Move failed — ${civ.name} ${unit.type}(${unit.id}) to (${target.col},${target.row})`);
-                if (!this.tryFallbackMove(unit)) {
-                  this.gameEngine.skipUnit(unit.id);
-                  break;
-                }
-              } else {
-                this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${target.col},${target.row})`);
+                this.gameEngine.skipUnit(unit.id);
+                break;
               }
+              this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${target.col},${target.row})`);
             } else {
               console.log(`[AI] Not enough moves for move (${unit.movesRemaining} < ${moveCost}), skipping`);
               this.gameEngine.skipUnit(unit.id);
@@ -263,10 +247,7 @@ export class AIManager {
         } else {
           // Pathfind towards target and take next step
           console.log(`[AI] Pathfinding to non-adjacent target (${target.col},${target.row})`);
-          const path = this.gameEngine.squareGrid.findPath(
-            unit.col, unit.row, target.col, target.row, new Set(),
-            this.gameEngine.getPassabilityFilter?.() ?? (() => true)
-          );
+          const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, new Set());
           if (path.length > 1) {
             const next = path[1];
             console.log(`[AI] Path found, next step to (${next.col},${next.row}), path length: ${path.length}`);
@@ -275,36 +256,25 @@ export class AIManager {
             if ((unit.movesRemaining || 0) >= moveCost) {
               const r = this.gameEngine.moveUnit(unit.id, next.col, next.row);
               if (!r || !r.success) {
-                console.log(`[AI] Path step failed, trying fallback neighbor`);
-                this.gameEngine.log('ai', `Path step failed — ${civ.name} ${unit.type}(${unit.id}) to (${next.col},${next.row})`);
-                this.markTargetUnreachable(unit, target.col, target.row);
-                if (!this.tryFallbackMove(unit)) {
-                  this.gameEngine.skipUnit(unit.id);
-                  break;
-                }
-              } else {
-                this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${next.col},${next.row}) toward (${target.col},${target.row})`);
+                console.log(`[AI] Path step failed, skipping unit`);
+                this.gameEngine.skipUnit(unit.id);
+                break;
               }
+              this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${next.col},${next.row}) toward (${target.col},${target.row})`);
             } else {
               console.log(`[AI] Not enough moves for path step (${unit.movesRemaining} < ${moveCost}), skipping`);
               this.gameEngine.skipUnit(unit.id);
               break;
             }
           } else {
-            console.log(`[AI] No path found to target, trying fallback neighbor`);
-            this.gameEngine.log('ai', `No path — ${civ.name} ${unit.type}(${unit.id}) cannot reach (${target.col},${target.row})`);
-            // Remember this square so chooseAITarget picks an alternative next
-            // round instead of re-trying the same unreachable target forever.
-            this.markTargetUnreachable(unit, target.col, target.row);
-            if (!this.tryFallbackMove(unit)) {
-              this.gameEngine.skipUnit(unit.id);
-            }
+            console.log(`[AI] No path found to target, skipping unit`);
+            this.gameEngine.skipUnit(unit.id);
             break;
           }
         }
 
-        // Wait a little so moves are visible (near-instant in AI-vs-AI auto mode)
-        await this.gameEngine.sleep(this.gameEngine.getAIMoveDelay?.() ?? 200);
+        // Wait a little so moves are visible
+        await this.gameEngine.sleep(200);
       }
       console.log(`[AI] Finished processing unit ${unit.id}, final moves remaining: ${unit.movesRemaining}`);
     }
@@ -326,63 +296,6 @@ export class AIManager {
     }
 
     // RoundManager now responsible for evaluating end-of-turn and timeouts
-  }
-
-  /** Remember that `unit` could not reach (col,row) for the next N rounds. */
-  private markTargetUnreachable(unit: any, col: number, row: number, rounds = 5): void {
-    const round = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
-    this.avoidTargets.set(unit.id, { col, row, untilRound: round + rounds });
-  }
-
-  /** Whether `unit` is currently avoiding the given square. */
-  private isTargetAvoided(unit: any, col: number, row: number): boolean {
-    const entry = this.avoidTargets.get(unit.id);
-    if (!entry) return false;
-    const round = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
-    if (round > entry.untilRound) {
-      this.avoidTargets.delete(unit.id);
-      return false;
-    }
-    return entry.col === col && entry.row === row;
-  }
-
-  /**
-   * Attempt a fallback move to the best passable, unoccupied neighbor so a
-   * unit is not permanently stuck when its primary target is unreachable
-   * (e.g. an ocean tile). Prefers unexplored tiles (exploration value) over
-   * already-seen terrain. Returns true if a move was made.
-   */
-  private tryFallbackMove(unit: any): boolean {
-    if (!this.gameEngine.squareGrid || !this.gameEngine.map) return false;
-
-    const neighbors = this.gameEngine.squareGrid.getNeighbors(unit.col, unit.row);
-    const isPassable = this.gameEngine.getPassabilityFilter?.() ?? (() => true);
-
-    let best: { col: number; row: number; cost: number; unexplored: boolean } | null = null;
-    for (const n of neighbors) {
-      if (!isPassable(n.col, n.row)) continue;
-      const occupant = this.gameEngine.getUnitAt(n.col, n.row);
-      if (occupant && occupant.civilizationId === unit.civilizationId) continue;
-      const tile = this.gameEngine.getTileAt(n.col, n.row);
-      const cost = Math.max(1, tile?.movement ?? 1);
-      const unexplored = !!tile && !tile.explored;
-      const isBetter =
-        best === null ||
-        (unexplored && !best.unexplored) ||
-        (unexplored === best.unexplored && cost < best.cost);
-      if (isBetter) {
-        best = { col: n.col, row: n.row, cost, unexplored };
-      }
-    }
-
-    if (!best) return false;
-    const r = this.gameEngine.moveUnit(unit.id, best.col, best.row);
-    if (r && r.success) {
-      console.log(`[AI] Fallback move for ${unit.id} to (${best.col},${best.row})${best.unexplored ? ' (unexplored)' : ''}`);
-      this.gameEngine.log('ai', `Fallback move — ${this.gameEngine.civilizations[unit.civilizationId]?.name ?? ''} ${unit.type}(${unit.id}) → (${best.col},${best.row})${best.unexplored ? ' (unexplored)' : ''}`);
-      return true;
-    }
-    return false;
   }
 
   /**
@@ -436,18 +349,8 @@ export class AIManager {
       });
 
       if (nearbyEnemies.length > 0) {
-        // Prefer the closest enemy CITY when at war — cities are the win
-        // condition. Chasing roaming enemy units only prolongs the war.
-        // Exception: an ADJACENT enemy unit is an immediate threat and is
-        // engaged first (defense), so we don't march past it toward a city.
-        const atWarEnemies = nearbyEnemies.filter(e => {
-          const targetCivId = this.getOwnerCivId(e);
-          return targetCivId !== undefined && (!dm || dm.isAtWar(unit.civilizationId, targetCivId));
-        });
-        const adjacentThreat = atWarEnemies.find(e => e.type === 'unit' && e.distance === 1);
-        const cityTarget = adjacentThreat ? null : atWarEnemies.find(e => e.type === 'city');
-        const closest = adjacentThreat || cityTarget || atWarEnemies[0] || nearbyEnemies[0];
-        console.log(`[AI] Area scan found ${nearbyEnemies.length} enemies near ${unit.id}, target: ${closest.type} at (${closest.col},${closest.row}) dist=${closest.distance}`);
+        const closest = nearbyEnemies[0];
+        console.log(`[AI] Area scan found ${nearbyEnemies.length} enemies near ${unit.id}, closest: ${closest.type} at (${closest.col},${closest.row}) dist=${closest.distance}`);
 
         // Broadcast threat alert so other nearby units rally
         this.broadcastThreatAlert(unit.civilizationId, closest.col, closest.row, closest.strength, storage);
@@ -650,13 +553,11 @@ export class AIManager {
       return { col: enemy.col, row: enemy.row };
     }
 
-    // 2) Nearby unexplored tile (passable only, so we never path into ocean)
+    // 2) Nearby unexplored tile
     const unexplored = AIUtility.findNearbyUnexplored(
       unit.col,
       unit.row,
-      (col, row) => this.gameEngine.squareGrid!.getNeighbors(col, row).filter(
-        (n: { col: number; row: number }) => this.gameEngine.isTilePassable?.(n.col, n.row) !== false
-      ),
+      (col, row) => this.gameEngine.squareGrid!.getNeighbors(col, row),
       (col, row) => this.gameEngine.getTileAt(col, row)
     );
     if (unexplored) {
@@ -781,7 +682,7 @@ export class AIManager {
       (fromCol, fromRow, toCol, toRow) => {
         // Check if settler can reach the location (simple path check)
         if (!this.gameEngine.squareGrid) return false;
-        const path = this.gameEngine.squareGrid.findPath(fromCol, fromRow, toCol, toRow, new Set(), this.gameEngine.getPassabilityFilter?.() ?? (() => true));
+        const path = this.gameEngine.squareGrid.findPath(fromCol, fromRow, toCol, toRow, new Set());
         return path.length > 0;
       }
     );
@@ -794,7 +695,7 @@ export class AIManager {
       // If we have a pathfinding grid available, precompute and store a path
       try {
         if (this.gameEngine.squareGrid && this.gameEngine.roundManager) {
-          const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, bestLocation.col, bestLocation.row, new Set(), this.gameEngine.getPassabilityFilter?.() ?? (() => true));
+          const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, bestLocation.col, bestLocation.row, new Set());
           if (path && path.length > 0) {
             console.log(`[AI-SETTLER] Precomputed path for settler ${unit.id} with ${path.length} steps`);
             this.gameEngine.roundManager.setUnitPath(unit.id, path);
@@ -858,8 +759,7 @@ export class AIManager {
         if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, col, row)) continue;
 
         const tile = this.gameEngine.getTileAt(col, row);
-        // Only target passable (non-ocean) tiles so pathfinding never routes into water
-        if (tile && !tile.explored && this.gameEngine.isTilePassable?.(col, row) !== false) {
+        if (tile && !tile.explored) {
           const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
           if (distance < minDistance) {
             minDistance = distance;
