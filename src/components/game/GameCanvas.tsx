@@ -765,6 +765,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
         // Handle Go To mode
         if (gotoMode && gotoUnit) {
+          // Clicking an adjacent enemy unit = attack, not a move order.
+          // Handle it directly (moveUnit triggers combat, which auto-declares
+          // war) instead of pathfinding onto the enemy tile.
+          const destUnit = getUnitAtFromEngine(hex.col, hex.row);
+          const adjacent = Math.abs(gotoUnit.col - hex.col) <= 1 && Math.abs(gotoUnit.row - hex.row) <= 1;
+          if (destUnit && destUnit.civilizationId !== gotoUnit.civilizationId && adjacent && (gotoUnit.movesRemaining || 0) > 0) {
+            console.log(`[CLICK] Attacking enemy ${destUnit.type} at (${hex.col},${hex.row})`);
+            gameEngine?.moveUnit?.(gotoUnit.id, hex.col, hex.row);
+            setGotoMode(false);
+            setGotoUnit(null);
+            triggerRender();
+            return;
+          }
+
           console.log(`[CLICK] Go To destination set for unit ${gotoUnit.id} to (${hex.col}, ${hex.row})`);
           
           // Use GoToManager to calculate and execute path

@@ -138,6 +138,12 @@ function App() {
 
       setGameEngine(engine);
 
+      // Dev-only test hook: expose the engine so Playwright/console can drive
+      // and inspect game state (units, combat, movement). Mirrors __gameStore.
+      if (import.meta.env.DEV && typeof window !== 'undefined') {
+        (window as any).__gameEngine = engine;
+      }
+
       // Get player's starting settler position
       const playerSettler = engine.units.find(
         (u) => u.civilizationId === 0 && u.type === 'settler'

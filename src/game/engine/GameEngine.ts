@@ -1403,14 +1403,9 @@ export default class GameEngine {
     // Check if there's another unit at target (combat or stacking rules)
     const targetUnit = this.getUnitAt(targetCol, targetRow);
     if (targetUnit && targetUnit.civilizationId !== unit.civilizationId) {
-      // Only allow combat if at war (or no diplomacy manager yet)
-      if (this.diplomacyManager) {
-        const dipStatus = this.diplomacyManager.getStatus(unit.civilizationId, targetUnit.civilizationId);
-        if (dipStatus !== 'war') {
-          return { success: false, reason: 'not_at_war' };
-        }
-      }
-      // Combat logic here
+      // Combat. combatUnit auto-declares war at its start, so we must NOT gate
+      // on 'not_at_war' here — that pre-check made UI attacks impossible while
+      // the civilizations were still at peace.
       const combatResult = this.combatUnit(unit, targetUnit);
       // combatUnit returns boolean success currently; normalize
       const success = !!combatResult;
@@ -1420,11 +1415,11 @@ export default class GameEngine {
     // Check if there's an enemy city at target
     const targetCity = this.getCityAt(targetCol, targetRow);
     if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
-      // Only allow city attack if at war
+      // Attacking an enemy city declares war (mirrors combatUnit behavior).
       if (this.diplomacyManager) {
         const dipStatus = this.diplomacyManager.getStatus(unit.civilizationId, targetCity.civilizationId);
         if (dipStatus !== 'war') {
-          return { success: false, reason: 'not_at_war' };
+          this.diplomacyManager.declareWar(unit.civilizationId, targetCity.civilizationId);
         }
       }
       // City combat (native engine logic — the legacy Unit.attackCity API
