@@ -1,6 +1,6 @@
 // Game types for Civ1Browser
 
-export type VictoryReason = 'elimination' | 'moonshot';
+export type VictoryReason = 'elimination' | 'moonshot' | 'domination';
 
 export class GameResult {
   outcome: 'victory' | 'defeat';

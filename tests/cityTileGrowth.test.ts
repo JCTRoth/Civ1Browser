@@ -119,8 +119,8 @@ describe('City tile & growth rules (Civ1)', () => {
   });
 
   it('food surplus leads to growth according to formula', () => {
-    // Civ1: growth threshold = 20 + (population * 2)
-    // For population 1: threshold = 20 + 2 = 22
+    // Civ1: growth threshold = (population + 1) * 10
+    // For population 1: threshold = 2 * 10 = 20
     city.population = 1;
 
     // Make city produce 25 food per turn (3 more than needed after 2 consumption)
@@ -131,9 +131,11 @@ describe('City tile & growth rules (Civ1)', () => {
     city.processFood(map as any);
 
     // foodSurplus = 25 - 2 = 23
-    // Since foodStorage (23) >= threshold (22) and population < maxPopulation, should grow
+    // Since foodStorage (23) >= threshold (20) and population < maxPopulation, should grow.
+    // Without a granary the food box fully empties to the surplus above threshold:
+    // 23 - 20 = 3.
     expect(city.population).toBe(2);
-    expect(city.foodStorage).toBe(0);
+    expect(city.foodStorage).toBe(3);
   });
 
   it('food shortage triggers starvation and reduces population', () => {

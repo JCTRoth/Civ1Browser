@@ -363,6 +363,29 @@ export default class GameEngine {
   }
 
   /**
+   * Delay between AI unit moves (visual pacing only).
+   * In AI-vs-AI auto mode there is no human watching, so moves run fast;
+   * in normal games a short pause keeps the action readable without making
+   * turns crawl when the AI fields many units.
+   */
+  getAIMoveDelay(): number {
+    if (this.gameSettings?.mapType === 'AI_VS_AI') {
+      return 5;
+    }
+    return 60;
+  }
+
+  /**
+   * Delay before an AI turn starts (visual pacing only).
+   */
+  getAITurnStartDelay(): number {
+    if (this.gameSettings?.mapType === 'AI_VS_AI') {
+      return 10;
+    }
+    return 120;
+  }
+
+  /**
    * Execute a function while measuring its duration (used by AI subsystems).
    * Returns the function result (or null on error) and logs the elapsed ms.
    */
@@ -964,8 +987,8 @@ export default class GameEngine {
           culture: 0,
           happiness: 0,
           yields: { food: 2, production: 2, trade: 0 },
-          currentProduction: civ.isAI ? { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 } : null,
-          buildQueue: civ.isAI ? [{ type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 }] : [],
+          currentProduction: civ.isAI ? this.pickInitialAIProduction(civ.id) : null,
+          buildQueue: civ.isAI ? [] : [],
           buildings: [],
           tiles: [],
           autoProduction: true // Enable auto-production for AI cities by default
@@ -1096,6 +1119,24 @@ export default class GameEngine {
     const name = civ.cityNames[civ.nextCityNameIndex] || `${civ.name} City ${civ.nextCityNameIndex + 1}`;
     civ.nextCityNameIndex++;
     return name;
+  }
+
+  /**
+   * Decide an AI city's first production item. The first city builds a scout
+   * for exploration; subsequent cities build a defender (warrior) so the AI
+   * stops flooding the map with scouts (previously every city defaulted to a
+   * scout, causing heavy scout over-production).
+   */
+  private pickInitialAIProduction(civId: number): { type: string; itemType: string; name: string; cost: number } {
+    const scoutCount = this.units.filter(
+      (u) => u.civilizationId === civId && u.type === 'scout'
+    ).length;
+    const cityCount = this.cities.filter((c) => c.civilizationId === civId).length;
+
+    if (scoutCount === 0 && cityCount <= 1) {
+      return { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 };
+    }
+    return { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 };
   }
 
   /**
@@ -1704,8 +1745,12 @@ export default class GameEngine {
       foodNeeded: 20,
       productionStored: 0,
       productionProgress: 0, // Initialize production display
-      currentProduction: civ.isHuman ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 } : { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 }, // AI builds scout first
-      buildQueue: civ.isHuman ? [{ type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }] : [{ type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 }], // AI builds scout first
+      currentProduction: civ.isHuman
+        ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
+        : this.pickInitialAIProduction(civId), // AI: scout for first city, defender otherwise
+      buildQueue: civ.isHuman
+        ? [{ type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }]
+        : [],
       autoProduction: civ.isAI || civ.isHuman === false // Enable auto-production for AI cities by default
     };
 

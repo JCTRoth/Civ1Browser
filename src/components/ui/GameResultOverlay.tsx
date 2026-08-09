@@ -27,6 +27,9 @@ const GameResultOverlay: React.FC<GameResultOverlayProps> = ({
       if (result.reason === 'moonshot') {
         return 'Your civilization is entering a new golden age with this new technology.';
       }
+      if (result.reason === 'domination') {
+        return 'Your empire now controls every city on the map.';
+      }
       return 'The last rival civilization has fallen beneath your banner.';
     }
     return 'Your empire has crumbled. Only stories of your once great cities remain.';

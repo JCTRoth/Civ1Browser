@@ -146,13 +146,16 @@ export class AutoProduction {
     }
 
     // 5. Build settlers if civilization has few cities
+    //    Cadence: 1 settler per city until 4 cities, with a second settler
+    //    allowed while still under 3 cities so expansion doesn't stall.
     if (civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
       const settlerCount = this.gameEngine.units.filter(
         (u: any) => u.civilizationId === city.civilizationId && u.type === 'settler'
       ).length;
-      
-      if (settlerCount === 0) {
-        console.log('[AutoProduction] Civilization needs more cities, building settler');
+      const maxSettlers = civCities.length < 3 ? 2 : 1;
+
+      if (settlerCount < maxSettlers) {
+        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s), building another (max ${maxSettlers})`);
         return {
           type: 'unit',
           itemType: 'settler',
@@ -195,8 +198,27 @@ export class AutoProduction {
     }
 
     // 7. Build military units (default)
-    console.log('[AutoProduction] Building default military unit');
-    return this.buildDefenderProduction(city, threatAssessment);
+    //    Balance the army: if the civ has an offensive plan (needs attackers)
+    //    or its offense is weaker than its defense, build an attacker;
+    //    otherwise keep the garrison topped up with a defender.
+    const offensiveUnits = this.countOffensiveUnits(city.civilizationId);
+    const defenders = this.gameEngine.units.filter(
+      (u: any) => u.civilizationId === city.civilizationId && this.isDefensiveUnitType(u.type)
+    ).length;
+    const needsAttackers = offensiveUnits < defenders || this.shouldSupportOffensivePlan(city);
+
+    console.log(`[AutoProduction] Building default military unit (offense: ${offensiveUnits}, defense: ${defenders})`);
+    return needsAttackers
+      ? this.buildOffensiveProduction(city)
+      : this.buildDefenderProduction(city, threatAssessment);
+  }
+
+  private isDefensiveUnitType(unitType: string): boolean {
+    const props = UNIT_PROPS[unitType];
+    if (!props) {
+      return false;
+    }
+    return (props.defense || 0) > (props.attack || 0);
   }
 
   private evaluateCityThreat(city: City): CityThreatAssessment | null {

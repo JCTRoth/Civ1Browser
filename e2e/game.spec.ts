@@ -413,8 +413,8 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      // The Foreign Advisor (Diplomacy Report) modal should show at least one other civilization
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      // The Foreign Advisor (Diplomatic Relations) modal should show at least one other civilization
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       // Close the diplomacy report
@@ -439,22 +439,22 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       // The modal should list at least one AI civilization
       // Either it shows civ data or "No other civilizations discovered yet."
       const noCivsMsg = modal.getByText('No other civilizations discovered yet.');
-      const civRows = modal.locator('.diplomacy-report-row');
+      const civRows = modal.locator('.diplomacy-civ-row');
 
       // One of these conditions should be true
       const hasNoCivs = await noCivsMsg.isVisible().catch(() => false);
       if (!hasNoCivs) {
         // AI civilization row(s) should be displayed
         await expect(civRows.first()).toBeVisible();
-        // Each row should have a name and a status indicator
-        await expect(civRows.first().locator('.diplomacy-report-name')).toBeVisible();
-        await expect(civRows.first().locator('.diplomacy-report-status')).toBeVisible();
+        // Each row should have a name and a status icon
+        await expect(civRows.first().locator('.diplomacy-civ-name')).toBeVisible();
+        await expect(civRows.first().locator('.diplomacy-status-icon')).toBeVisible();
       }
 
       await page.keyboard.press('Escape');
@@ -467,13 +467,14 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
-      const civRows = modal.locator('.diplomacy-report-row');
+      const civRows = modal.locator('.diplomacy-civ-row');
       if (await civRows.count() > 0) {
-        // Default diplomatic status should be "Peace"
-        await expect(civRows.first().locator('.diplomacy-report-status')).toContainText('Peace');
+        // Select the first civilization to view its diplomatic status
+        await civRows.first().click();
+        await expect(modal.locator('.diplomacy-status-value')).toContainText('PEACE');
       }
 
       await page.keyboard.press('Escape');
@@ -628,14 +629,14 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
       // The AI civ should be visible
-      const civRows = modal.locator('.diplomacy-report-row');
+      const civRows = modal.locator('.diplomacy-civ-row');
       if (await civRows.count() > 0) {
         // Check that AI civ has a name — proves they survived and are active
-        await expect(civRows.first().locator('.diplomacy-report-name')).not.toBeEmpty();
+        await expect(civRows.first().locator('.diplomacy-civ-name')).not.toBeEmpty();
       }
 
       await page.keyboard.press('Escape');
@@ -676,13 +677,13 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
-      const civRows = modal.locator('.diplomacy-report-row');
+      const civRows = modal.locator('.diplomacy-civ-row');
       if (await civRows.count() > 0) {
-        // Each row should show an attitude label (Friendly/Neutral/Annoyed/Hostile)
-        const attitude = civRows.first().locator('.diplomacy-report-attitude');
+        await civRows.first().click();
+        const attitude = modal.locator('.diplomacy-attitude-badge');
         await expect(attitude).toBeVisible();
         const text = await attitude.textContent();
         expect(['Friendly', 'Neutral', 'Annoyed', 'Hostile']).toContain(text?.trim());
@@ -698,13 +699,14 @@ test.describe('AI Behavior', () => {
       await openTopMenu(page, 'WORLD');
       await page.getByRole('button', { name: /Diplomacy/ }).click();
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
 
-      const civRows = modal.locator('.diplomacy-report-row');
+      const civRows = modal.locator('.diplomacy-civ-row');
       if (await civRows.count() > 0) {
-        // Portrait area should exist
-        await expect(civRows.first().locator('.diplomacy-report-portrait')).toBeVisible();
+        await civRows.first().click();
+        // Portrait area should exist in the selected negotiation panel
+        await expect(modal.locator('.diplomacy-portrait-slot')).toBeVisible();
       }
 
       await page.keyboard.press('Escape');
@@ -903,26 +905,26 @@ test.describe('AI Behavior', () => {
   // -------------------------------------------------------------------------
 
   test.describe('Keyboard Shortcuts During Gameplay', () => {
-    test('D key opens diplomacy report', async ({ page }) => {
+    test('D key opens diplomacy interface', async ({ page }) => {
       await startGame(page);
 
       await page.evaluate(() =>
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', code: 'KeyD', bubbles: true }))
       );
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
       await page.keyboard.press('Escape');
     });
 
-    test('F4 opens diplomacy report', async ({ page }) => {
+    test('F4 opens diplomacy interface', async ({ page }) => {
       await startGame(page);
 
       await page.evaluate(() =>
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F4', code: 'F4', bubbles: true }))
       );
 
-      const modal = page.locator('.modal').filter({ hasText: 'Diplomacy Report' });
+      const modal = page.locator('.modal').filter({ hasText: 'Diplomatic Relations' });
       await expect(modal).toBeVisible({ timeout: 5_000 });
       await page.keyboard.press('Escape');
     });

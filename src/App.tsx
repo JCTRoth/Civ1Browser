@@ -381,6 +381,36 @@ function App() {
     }
   }, [actions, gameEngine]);
 
+  // AI vs AI demo loop: when the automatic game concludes, let the result
+  // overlay show briefly, then auto-restart into a fresh AI-vs-AI session.
+  const lastAutoRestart = useRef(0);
+  useEffect(() => {
+    if (!gameResult) {
+      return;
+    }
+    // gameEngine is intentionally untyped (useState(null)) — its dynamic
+    // engine API (moveCursor, undoLastAction, …) is not part of the static
+    // GameEngine type; a full typing pass is a separate cleanup.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isAIVsAI = (gameEngine as any)?.gameSettings?.mapType === 'AI_VS_AI';
+    if (!isAIVsAI) {
+      return;
+    }
+    // Debounce: only restart once per concluded game (result timestamp changes).
+    const stamp = gameResult.timestamp ?? 0;
+    if (stamp === lastAutoRestart.current) {
+      return;
+    }
+    lastAutoRestart.current = stamp;
+
+    console.log('[App] AI-vs-AI game concluded; auto-restarting in ~8s');
+    const timer = setTimeout(() => {
+      handleResultRestart();
+    }, 8_000);
+
+    return () => clearTimeout(timer);
+  }, [gameResult, gameEngine, handleResultRestart]);
+
   const handleResultQuit = useCallback(() => {
     if (gameEngine) {
       gameEngine.shutdownToMenu();
@@ -612,8 +642,8 @@ function App() {
             break;
           case 'd':
           case 'D':
-            // Open diplomacy report
-            actions.showDialog('diplomacy-report');
+            // Open diplomacy interface
+            actions.showDialog('diplomacy');
             break;
           // 'a' key not bound
           case 'w':
@@ -692,8 +722,8 @@ function App() {
             setShowSettings(true);
             break;
           case 'F4':
-            // Open diplomacy report
-            actions.showDialog('diplomacy-report');
+            // Open diplomacy interface
+            actions.showDialog('diplomacy');
             break;
           case 'F11':
             // Toggle fullscreen
@@ -858,7 +888,7 @@ function App() {
           setActiveMenu(null);
         }}
         onDiplomacy={() => {
-          actions.showDialog('diplomacy-report');
+          actions.showDialog('diplomacy');
           setActiveMenu(null);
         }}
         onTechTree={() => {

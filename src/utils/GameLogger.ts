@@ -65,7 +65,13 @@ class GameLogger {
     return entry;
   }
 
-  /** Format and record a raw engine event (used as the onStateChange tap). */
+  /**
+   * Format and record a raw engine event (used as the onStateChange tap).
+   * Event payloads are heterogeneous (units, cities, nested objects) and are
+   * emitted by the engine's untyped event system; typing every shape here
+   * would be a large refactor, so the payload is deliberately `any`.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   record(event: string, data: any = {}): void {
     const message = this.formatMessage(event, data);
     if (message) {
@@ -74,6 +80,7 @@ class GameLogger {
   }
 
   /** Human-readable message for known engine events. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private formatMessage(event: string, data: any): string | null {
     switch (event) {
       case 'TURN_START':
@@ -94,8 +101,6 @@ class GameLogger {
         return `🏙 City founded: ${data.city?.name} at (${data.city?.col},${data.city?.row})`;
       case 'CITY_CAPTURED':
         return `🚩 City captured: ${data.city?.name} (civ ${data.city?.civilizationId})`;
-      case 'CITY_ATTACKED':
-        return `💥 City attacked: ${data.city?.name}`;
       case 'UNIT_SKIPPED':
         return `Skip: ${data.unit?.type}(${data.unit?.id})`;
       case 'UNIT_SLEPT':
@@ -113,7 +118,7 @@ class GameLogger {
       case 'WAR_DECLARED':
         return `☠ WAR DECLARED: civ ${data.aggressorId ?? data.civilizationId} vs civ ${data.targetId ?? data.targetCivilizationId}`;
       case 'CITY_DESTROYED':
-        return `💥 City destroyed: ${data.city?.name} (was civ ${data.city?.civilizationId})`;
+        return `💥💥💥 City destroyed 💥💥💥: ${data.city?.name} (was civ ${data.city?.civilizationId})`;
       case 'CITY_ATTACKED':
         return `💥 City attacked: ${data.city?.name} by ${data.attacker?.type}`;
       case 'DIPLOMACY_EVENT':
@@ -131,7 +136,11 @@ class GameLogger {
     }
   }
 
-  /** Keep detail payloads small & JSON-safe. */
+  /**
+   * Keep detail payloads small & JSON-safe. Accepts any engine event payload
+   * and returns a plain serialisable record.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private sanitize(data: any): any {
     if (data == null) return data;
     if (typeof data !== 'object') return data;

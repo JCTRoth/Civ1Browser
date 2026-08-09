@@ -68,6 +68,16 @@ export class VictoryManager {
     }
 
     const survivingCivs = civilizations.filter((civ) => aliveStatus.get(civ.id));
+    // Domination: with at least two alive civilizations, owning every city on
+    // the map is decisive. This ends AI-vs-AI games that would otherwise
+    // stall forever because stray units keep a civ "operational".
+    if (survivingCivs.length >= 2) {
+      const dominationWinner = this.detectDominationWinner(survivingCivs);
+      if (dominationWinner) {
+        return this.triggerVictory(dominationWinner, 'domination');
+      }
+    }
+
     if (survivingCivs.length <= 1) {
       const winner = survivingCivs[0];
       if (winner && winner.isHuman) {
@@ -97,6 +107,25 @@ export class VictoryManager {
         continue;
       }
       if (this.hasMoonshot(civ)) {
+        return civ;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Return the civilization that owns ALL cities on the map, or null.
+   * Only meaningful when at least two civilizations are still alive.
+   */
+  private detectDominationWinner(survivingCivs: Civilization[]): Civilization | null {
+    const cities = this.gameEngine.cities || [];
+    if (cities.length === 0) {
+      return null;
+    }
+
+    for (const civ of survivingCivs) {
+      const ownsAll = cities.every((city) => city.civilizationId === civ.id);
+      if (ownsAll) {
         return civ;
       }
     }
