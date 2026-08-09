@@ -9,6 +9,13 @@ module.exports = {
   ignorePatterns: ['dist', '.eslintrc.cjs'],
   parser: '@typescript-eslint/parser',
   plugins: ['@typescript-eslint', 'react-refresh'],
+  overrides: [
+    {
+      // Node.js runtime files (Vite config, build/test scripts) — no browser env.
+      files: ['vite.config.js', 'scripts/**/*.mjs', 'scripts/**/*.js', 'e2e/**/*.ts', 'e2e/**/*.js', 'playwright.config.ts'],
+      env: { node: true },
+    },
+  ],
   rules: {
     'react-refresh/only-export-components': [
       'warn',

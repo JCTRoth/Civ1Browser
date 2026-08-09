@@ -1762,9 +1762,7 @@ export default class GameEngine {
       currentProduction: civ.isHuman
         ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
         : this.pickInitialAIProduction(civId), // AI: scout for first city, defender otherwise
-      buildQueue: civ.isHuman
-        ? [{ type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }]
-        : [],
+      buildQueue: [], // Empty: the Warrior is already the current production, never also queue it
       autoProduction: civ.isAI || civ.isHuman === false // Enable auto-production for AI cities by default
     };
 
@@ -1776,6 +1774,10 @@ export default class GameEngine {
     // Remove settler
     // NOT CHANGE THIS TO === THAN SETTLER NOT DISAPPEARS
     this.units = this.units.filter(u => u.id !== settlerId);
+
+    // The settler is gone — remove it from the turn queue too, otherwise the
+    // queue is never empty and auto-end-turn can never trigger.
+    this.unitTurnQueue?.removeUnit(settlerId);
 
     // Log settler removal (effectively a movement off the map)
     console.log(`[SETTLER REMOVAL] ${settler.type} (${settlerId}) founded city "${cityName}" at (${settler.col},${settler.row}) and was removed from the map`);
@@ -1811,11 +1813,16 @@ export default class GameEngine {
 
     const playerUnits = this.units.filter(u => u.civilizationId === this.activePlayer);
     
-    // Only count ACTIVE units (not sleeping, not fortified) that have moves remaining
+    // Only count ACTIVE units that still have actions available. A unit is
+    // considered done (and therefore does not block auto-end) when it has no
+    // moves left, is sleeping, is fortified, was explicitly skipped, or has
+    // already been flagged as turn-done.
     const activeUnitsWithMoves = playerUnits.filter(u => 
       (u.movesRemaining || 0) > 0 && 
       !u.isSleeping && 
-      !u.isFortified
+      !u.isFortified && 
+      !u.isSkipped && 
+      !u.areTurnsDone
     );
     
     // Count inactive units (sleeping or fortified)
@@ -1840,9 +1847,11 @@ export default class GameEngine {
     
     // For human players, check if auto turn ending should trigger
     if (currentCiv.isHuman) {
-      // Only auto-end if NO active units have moves left AND queue is empty
-      // Sleeping/fortified units don't prevent auto-end
-      if (!hasActiveUnitsWithMoves && playerUnits.length > 0) {
+      // Only auto-end if NO active units have moves left AND queue is empty.
+      // Sleeping/fortified/skipped units don't prevent auto-end. A player with
+      // zero units (e.g. their last settler just founded a city) also auto-ends
+      // — there is nothing left to do this turn.
+      if (!hasActiveUnitsWithMoves) {
         console.log('[TURN] All active human units have no moves and queue is empty - checking auto end turn setting');
         if (this.onStateChange) {
           this.onStateChange('CHECK_AUTO_END_TURN', { civilizationId: this.activePlayer });
@@ -2496,6 +2505,10 @@ export default class GameEngine {
     unit.col = targetUnit.col;
     unit.row = targetUnit.row;
     this.units = this.units.filter(u => u.id !== unitId);
+
+    // The attached unit is gone — remove it from the turn queue so the queue
+    // can empty and auto-end-turn can trigger.
+    this.unitTurnQueue?.removeUnit(unitId);
     
     // Phase 3.2: If a scout was disbanded, reassign zones
     if (unit.type === 'scout') {

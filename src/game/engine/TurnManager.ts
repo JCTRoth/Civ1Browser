@@ -503,6 +503,7 @@ export class TurnManager {
       const unitProps = UNIT_PROPS?.[unit.type];
       unit.movesRemaining = unitProps?.movement || 1;
       unit.areTurnsDone = false;
+      unit.isSkipped = false; // "Skip turn" only applies to the current turn
     });
   }
 
