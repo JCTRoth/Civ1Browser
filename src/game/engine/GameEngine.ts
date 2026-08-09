@@ -466,6 +466,11 @@ export default class GameEngine {
       list.push(location);
       storage.enemyLocations.set(enemyCivId, list);
     }
+
+    // Feed the scout memory so scouts re-visit areas that were not seen for
+    // a long time ("long time no visits"). Without this the stale re-scout
+    // logic always had an empty discovery store and never fired.
+    this.scoutMemory?.recordDiscovery(enemyCivId, location);
   }
 
   /**

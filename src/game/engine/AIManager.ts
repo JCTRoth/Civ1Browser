@@ -7,6 +7,7 @@
 
 import { AIUtility, scanAreaForEnemies, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
+import { UNIT_PROPS } from '@/utils/Constants';
 import { SettlementEvaluator } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
 import { AICoordinator } from './AICoordinator';
@@ -425,6 +426,20 @@ export class AIManager {
     if (unit.type === 'scout') {
       console.log(`[AI-SCOUT] Scout detected at (${unit.col}, ${unit.row}), checking for enemies`);
 
+      // Defense override: exploration is less important than garrisoning an
+      // undefended friendly city while an enemy is close. When the threat
+      // clears (enemy gone or other troops arrive) this returns null and the
+      // scout resumes exploring.
+      try {
+        const defenseTarget = this.findScoutDefenseTarget(unit);
+        if (defenseTarget) {
+          console.log(`[AI-SCOUT] Defending undefended city at (${defenseTarget.col},${defenseTarget.row}) — enemy close`);
+          return defenseTarget;
+        }
+      } catch (error) {
+        console.error(`[AI-SCOUT] Error in scout defense check:`, error);
+      }
+
       try {
         // Check if scout already found an enemy (stored in unit state)
         if (unit.enemyFound) {
@@ -565,9 +580,11 @@ export class AIManager {
       return { col: unexplored.col, row: unexplored.row };
     }
 
-    // ScoutMemory: re-scout stale enemy positions if no immediate exploration targets
+    // ScoutMemory: re-scout stale enemy positions if no immediate exploration targets.
+    // Scans discoveries of ALL enemy civs (previously it searched the scout's OWN
+    // civ id, which never matched anything).
     if (unit.type === 'scout' && this.gameEngine.scoutMemory) {
-      const staleTarget = this.gameEngine.scoutMemory.getNearestUnexploredTarget?.(
+      const staleTarget = this.gameEngine.scoutMemory.getNearestStaleTarget?.(
         unit.col, unit.row, unit.civilizationId
       );
       if (staleTarget) {
@@ -726,6 +743,81 @@ export class AIManager {
   }
 
   /**
+   * Scout defense override: if a friendly city within response range has no
+   * other defender and an enemy is close, garrison the city tile. Exploration
+   * is lower priority than defending an exposed city. Returns null (so the
+   * scout keeps exploring) when the city is defended, no enemy is near, or
+   * the scout is too far away. Re-evaluated every turn, so the scout resumes
+   * exploring automatically once the enemy leaves or other troops arrive.
+   */
+  public findScoutDefenseTarget(unit: Unit): { col: number; row: number } | null {
+    if (!this.gameEngine.squareGrid || !this.gameEngine.map) return null;
+
+    const civId = unit.civilizationId;
+    const storage = this.gameEngine.getPlayerStorage?.(civId);
+    const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+    const distFn = (c1: number, r1: number, c2: number, r2: number) =>
+      this.gameEngine.squareGrid.squareDistance(c1, r1, c2, r2);
+
+    const SCOUT_DEFENSE_RESPONSE_RADIUS = 8;
+    const SCOUT_DEFENSE_ENEMY_RADIUS = 3;
+
+    const friendlyCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civId);
+    let bestTarget: { col: number; row: number } | null = null;
+    let bestThreat = -Infinity;
+
+    for (const city of friendlyCities) {
+      // The scout must be reasonably close to respond (no cross-map teleport).
+      const scoutDist = distFn(unit.col, unit.row, city.col, city.row);
+      if (scoutDist > SCOUT_DEFENSE_RESPONSE_RADIUS) continue;
+
+      // City already has another defender (non-scout) in/near it.
+      const hasOtherDefender = this.gameEngine.units.some((u: Unit) =>
+        u.civilizationId === civId &&
+        u.id !== unit.id &&
+        u.type !== 'scout' &&
+        this.isDefensiveUnit(u) &&
+        distFn(u.col, u.row, city.col, city.row) <= 1
+      );
+      if (hasOtherDefender) continue;
+
+      // Is an enemy close to the city? (visible units + recent known locations)
+      const samples = collectCityThreatSamples(this.gameEngine, city, civId, storage, roundNumber);
+      const closeEnemy = samples.find(s => s.distance <= SCOUT_DEFENSE_ENEMY_RADIUS);
+      if (!closeEnemy) continue;
+
+      // Prefer the most threatened city we can respond to.
+      const threat = Math.max(0, SCOUT_DEFENSE_ENEMY_RADIUS - closeEnemy.distance);
+      if (threat <= bestThreat) continue;
+      bestThreat = threat;
+
+      // Garrison the city tile when free; otherwise the nearest passable neighbor.
+      const cityUnit = this.gameEngine.getUnitAt?.(city.col, city.row);
+      const cityOccupied = !!cityUnit && cityUnit.civilizationId !== civId;
+      if (!cityOccupied) {
+        bestTarget = { col: city.col, row: city.row };
+      } else {
+        const neighbors = this.gameEngine.squareGrid.getNeighbors(city.col, city.row);
+        const passable = neighbors.find((n: { col: number; row: number }) => {
+          const tile = this.gameEngine.getTileAt?.(n.col, n.row);
+          return tile && tile.passable !== false && !this.gameEngine.getUnitAt?.(n.col, n.row);
+        });
+        if (passable) bestTarget = { col: passable.col, row: passable.row };
+      }
+    }
+
+    return bestTarget;
+  }
+
+  /** A unit that can actually defend a city (non-civilian, non-scout, has defense). */
+  private isDefensiveUnit(u: Unit): boolean {
+    const civilian = new Set(['settler', 'worker', 'caravan', 'diplomat', 'scout']);
+    if (civilian.has(u.type)) return false;
+    const props = UNIT_PROPS[u.type];
+    return !!props && (props.defense || 0) > 0;
+  }
+
+  /**
    * Find exploration target for scouts within their zone
    */
   private findScoutExplorationTarget(unit: any): any {
@@ -759,7 +851,17 @@ export class AIManager {
         if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, col, row)) continue;
 
         const tile = this.gameEngine.getTileAt(col, row);
-        if (tile && !tile.explored) {
+        if (!tile) continue;
+
+        // Prefer per-player explored state so each scout targets ITS OWN
+        // unexplored areas. Dev mode (AI-vs-AI) marks everything explored
+        // per-player, so fall back to global tile.explored there.
+        const isExplored = !this.gameEngine.devMode && typeof this.gameEngine.isExploredByPlayer === 'function'
+          ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
+          : !!tile.explored;
+        if (isExplored) continue;
+
+        {
           const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
           if (distance < minDistance) {
             minDistance = distance;

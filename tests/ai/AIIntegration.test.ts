@@ -422,4 +422,52 @@ describe('AI Integration Tests', () => {
       // either exhausted moves trying, or recognized it's stuck
     });
   });
+
+  describe('AI Scout Production', () => {
+    it('scales the desired scout count with total troops (1 / 2 / 3)', async () => {
+      engine = new GameEngine(null);
+      (engine as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
+
+      await engine.initialize({
+        numberOfCivilizations: 2,
+        mapType: 'MANY_CITIES',
+        devMode: false,
+        startingGold: 100
+      });
+
+      const civId = 1;
+      const city = engine.cities.find(c => c.civilizationId === civId);
+      expect(city).toBeTruthy();
+
+      const autoProduction = (engine as any).autoProduction as any;
+
+      // Reset the AI's army to a clean slate so counts are exact.
+      engine.units = engine.units.filter((u: any) => u.civilizationId !== civId);
+
+      const addWarriors = (n: number) => {
+        for (let i = 0; i < n; i++) {
+          engine.units.push({
+            id: `w-${i}`, type: 'warrior', civilizationId: civId,
+            col: city!.col + (i % 5), row: city!.row + Math.floor(i / 5),
+            attack: 1, defense: 1, movesRemaining: 1, health: 100, icon: 'warrior'
+          });
+        }
+      };
+
+      // 5 troops → 1 scout desired.
+      addWarriors(5);
+      expect(autoProduction.getDesiredScoutCount(civId)).toBe(1);
+
+      // 6 troops → 2 scouts desired.
+      engine.units.push({
+        id: 'w-6', type: 'warrior', civilizationId: civId,
+        col: city!.col, row: city!.row + 6, attack: 1, defense: 1, movesRemaining: 1, health: 100, icon: 'warrior'
+      });
+      expect(autoProduction.getDesiredScoutCount(civId)).toBe(2);
+
+      // 12 troops → 3 scouts desired.
+      addWarriors(6);
+      expect(autoProduction.getDesiredScoutCount(civId)).toBe(3);
+    });
+  });
 });

@@ -145,6 +145,20 @@ export class AutoProduction {
       return this.buildOffensiveProduction(city);
     }
 
+    // 4b. Maintain a scout corps for map exploration (1–3 scouts depending on
+    //     total troop count). Exploration ranks below defense (steps 1–2) and
+    //     offensive reinforcement (step 4) but above settlers/buildings/wonders.
+    if (this.needsScout(city.civilizationId) && city.population >= 2) {
+      const scoutProps = UNIT_PROPS.scout;
+      console.log(`[AutoProduction] Building scout for map exploration (${this.countTotalTroops(city.civilizationId)} troops)`);
+      return {
+        type: 'unit',
+        itemType: 'scout',
+        name: scoutProps?.name || 'Scout',
+        cost: scoutProps?.cost || 15
+      };
+    }
+
     // 5. Build settlers if civilization has few cities
     //    Cadence: 1 settler per city until 4 cities, with a second settler
     //    allowed while still under 3 cities so expansion doesn't stall.
@@ -302,6 +316,40 @@ export class AutoProduction {
 
   private countOffensiveUnits(civilizationId: number): number {
     return this.gameEngine.units.filter((unit: any) => unit.civilizationId === civilizationId && this.isOffensiveUnitType(unit.type)).length;
+  }
+
+  /**
+   * Total military units (troops) for a civilization — drives the scout count.
+   * Scouts are 'military'-type units, so existing scouts count as troops too.
+   */
+  private countTotalTroops(civilizationId: number): number {
+    return this.gameEngine.units.filter(
+      (unit: any) => unit.civilizationId === civilizationId && this.isMilitaryUnitType(unit.type)
+    ).length;
+  }
+
+  private isMilitaryUnitType(unitType: string): boolean {
+    const props = UNIT_PROPS[unitType];
+    return !!props && (props as any).type === 'military';
+  }
+
+  /**
+   * Desired number of scouts based on total troop count:
+   *   < 6 troops → 1 scout, 6–11 → 2 scouts, >= 12 → 3 scouts.
+   */
+  private getDesiredScoutCount(civilizationId: number): number {
+    const totalTroops = this.countTotalTroops(civilizationId);
+    if (totalTroops >= 12) return 3;
+    if (totalTroops >= 6) return 2;
+    return 1;
+  }
+
+  /** Whether the civilization should build another scout to reach its target. */
+  private needsScout(civilizationId: number): boolean {
+    const scoutCount = this.gameEngine.units.filter(
+      (u: any) => u.civilizationId === civilizationId && u.type === 'scout'
+    ).length;
+    return scoutCount < this.getDesiredScoutCount(civilizationId);
   }
 
   private isOffensiveUnitType(unitType: string): boolean {

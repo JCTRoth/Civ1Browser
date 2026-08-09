@@ -114,7 +114,44 @@ export class ScoutMemory {
     return nearestLocation;
   }
 
-  
+  /**
+   * Get the nearest stale discovery across ALL enemy civilizations.
+   * Scouts re-visit areas that were not seen for a long time (>= maxAge rounds).
+   *
+   * @param fromCol Starting column position
+   * @param fromRow Starting row position
+   * @param _seekerCivId The civilization doing the searching (kept for API symmetry)
+   * @param maxAge Maximum age in rounds before a location is considered stale
+   */
+  public getNearestStaleTarget(
+    fromCol: number,
+    fromRow: number,
+    _seekerCivId: number,
+    maxAge: number = 10
+  ): EnemyLocation | null {
+    let nearestLocation: EnemyLocation | null = null;
+    let minDistance = Infinity;
+
+    for (const civDiscoveries of this.discoveries.values()) {
+      for (const discovery of civDiscoveries) {
+        const age = this.currentRound - discovery.lastSeenRound;
+        if (age < maxAge) continue;
+
+        const distance = Math.abs(discovery.col - fromCol) + Math.abs(discovery.row - fromRow);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestLocation = discovery;
+        }
+      }
+    }
+
+    if (nearestLocation) {
+      console.log(`[SCOUT-MEMORY] Found stale target at (${nearestLocation.col}, ${nearestLocation.row}), age: ${this.currentRound - nearestLocation.lastSeenRound} rounds`);
+    }
+
+    return nearestLocation;
+  }
+
   /**
    * Get statistics about stored discoveries
    */

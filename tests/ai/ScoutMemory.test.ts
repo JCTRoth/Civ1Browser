@@ -148,6 +148,46 @@ describe('ScoutMemory', () => {
     });
   });
 
+  describe('getNearestStaleTarget', () => {
+    it('should return null when no discoveries exist', () => {
+      expect(scoutMemory.getNearestStaleTarget(5, 5, 2)).toBeNull();
+    });
+
+    it('should return null when all discoveries are recent', () => {
+      const location: EnemyLocation = {
+        col: 10, row: 10, type: 'unit', id: 'unit1',
+        discoveredRound: 1, lastSeenRound: 1
+      };
+      scoutMemory.recordDiscovery(2, location);
+      scoutMemory.setCurrentRound(5); // Only 4 rounds passed (< maxAge 10)
+
+      expect(scoutMemory.getNearestStaleTarget(5, 5, 2, 10)).toBeNull();
+    });
+
+    it('should find stale targets across ALL enemy civilizations', () => {
+      // Far discovery for civ 2, nearer stale discovery for civ 3.
+      scoutMemory.recordDiscovery(2, { col: 100, row: 100, type: 'city', id: 'c1', discoveredRound: 1, lastSeenRound: 1 });
+      scoutMemory.recordDiscovery(3, { col: 8, row: 8, type: 'unit', id: 'u1', discoveredRound: 1, lastSeenRound: 1 });
+      scoutMemory.setCurrentRound(15); // Both are stale (age 14)
+
+      const result = scoutMemory.getNearestStaleTarget(5, 5, 2, 10);
+      expect(result).not.toBeNull();
+      // (8,8) is nearer to (5,5) than (100,100), even though it belongs to civ 3.
+      expect(result?.col).toBe(8);
+      expect(result?.row).toBe(8);
+    });
+
+    it('should respect maxAge', () => {
+      // Record at round 1 (recordDiscovery stamps lastSeenRound = current round).
+      scoutMemory.recordDiscovery(2, { col: 8, row: 8, type: 'unit', id: 'u1', discoveredRound: 1, lastSeenRound: 1 });
+      scoutMemory.setCurrentRound(5); // age 4 < 10
+      expect(scoutMemory.getNearestStaleTarget(5, 5, 2, 10)).toBeNull();
+
+      scoutMemory.setCurrentRound(15); // age 14 >= 10
+      expect(scoutMemory.getNearestStaleTarget(5, 5, 2, 10)).not.toBeNull();
+    });
+  });
+
   describe('removeDiscovery', () => {
     it('should remove an existing discovery', () => {
       const location: EnemyLocation = {
