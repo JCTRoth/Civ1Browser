@@ -17,6 +17,7 @@ image::doc/2.png[Screenshot 2, width=800]
 image::doc/3.png[Screenshot 3, width=800]
 image::doc/4.png[Screenshot 4, width=800]
 image::doc/5.png[Screenshot 5, width=800]
+image::doc/6.png[Screenshot 6, width=800]
 
 image::doc/action_menu.png[Action Menu, width=800]
 
