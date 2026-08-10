@@ -291,34 +291,31 @@ export class EngineEventRouter {
       return;
     }
 
-    // Do not auto-end the turn while the player is managing a city (city
-    // details / production / purchase / citizens screens) or while a combat
-    // animation is still playing. The check is re-run when the city screen
-    // closes (see GameModals.handleCloseDialog) or the combat animation ends
-    // (see onCombat), so the turn is only ended when nothing is on screen.
-    // Other dialogs (WORLD menu, tech tree, diplomacy, …) do not block auto-end.
+    // Do not auto-end the turn while the player is in a screen where they
+    // might still make a decision: city management (details / production /
+    // purchase / citizens) and diplomacy (a leader may be awaiting a response)
+    // — or while a combat animation is still playing. The check is re-run when
+    // one of those screens closes (see GameModals.handleCloseDialog) or the
+    // combat animation ends (see onCombat). Other dialogs (WORLD menu, tech
+    // tree, help, hex details) do not block auto-end.
     const activeDialog = state.uiState?.activeDialog;
-    const cityScreenOpen = activeDialog !== null &&
+    const decisionScreenOpen = activeDialog !== null &&
       activeDialog !== 'game-menu' &&
       activeDialog !== 'help' &&
       activeDialog !== 'tech' &&
-      activeDialog !== 'diplomacy' &&
-      activeDialog !== 'diplomacy-report' &&
       activeDialog !== 'hex-details';
     const combatActive = (state.combatAnimations ?? []).length > 0;
-    if (cityScreenOpen || combatActive) {
+    if (decisionScreenOpen || combatActive) {
       console.log(`[EngineEventRouter] Auto end turn deferred (dialog: ${activeDialog ?? 'none'}, combat: ${combatActive})`);
       return;
     }
 
-    console.log('[EngineEventRouter] Auto-ending turn...');
-    // Trigger proper turn ending through TurnManager (advances through all phases)
-    const tm = (this.gameEngine as any).roundManager;
-    if (tm && typeof tm.endHumanTurn === 'function') {
-      tm.endHumanTurn();
-    } else {
-      console.error('[EngineEventRouter] TurnManager not available for auto-end turn');
-    }
+    console.log('[EngineEventRouter] Auto-end reached - asking player to confirm via End Turn dialog');
+    // Ask the player to confirm instead of ending instantly, so they get a
+    // chance to cancel (wake a unit, adjust a city, …). The App shows the
+    // "All Your Units Have Moved!" modal; with skipEndTurnConfirmation enabled
+    // the App ends the turn immediately (truly automatic).
+    this.onTurnEndConfirmationNeeded();
   }
 
   private onTurnEndConfirmationNeeded() {

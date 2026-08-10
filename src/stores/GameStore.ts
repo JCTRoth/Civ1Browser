@@ -135,6 +135,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     civListFontSize: 10, // Civilization list font size
     skipEndTurnConfirmation: false, // Skip showing end turn confirmation modal
     autoEndTurn: true,  // Automatically end turn when all human player units are done (default enabled)
+    autoEndIgnoreCivilian: false, // Ignore settler/worker moves when deciding to auto-end
     devMode: false       // Developer mode: see all players on minimap and switch between them
   },
 

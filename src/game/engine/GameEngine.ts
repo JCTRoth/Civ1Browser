@@ -87,6 +87,13 @@ export default class GameEngine {
   unitTurnQueue: UnitTurnQueue; // Unit turn queue for managing unit order
   diplomacyManager: DiplomacyManager; // Civ I–style diplomacy system
 
+  // When enabled, settler/worker units with moves left do NOT block auto-end
+  // (the player opted out of micro-managing them).
+  autoEndIgnoreCivilian = false;
+  // Human-readable recap of the most recent auto-end (what was skipped), used
+  // for the post-end summary notification.
+  lastAutoEndSummary: string | null = null;
+
   // Getter for turnManager (alias for roundManager)
   get turnManager() {
     return this.roundManager;
@@ -1412,6 +1419,19 @@ export default class GameEngine {
       // on 'not_at_war' here — that pre-check made UI attacks impossible while
       // the civilizations were still at peace.
       const combatResult = this.combatUnit(unit, targetUnit);
+
+      // The attacker is done after combat (moves spent, possibly destroyed).
+      // Drop it from the turn queue so the queue can empty and auto-end-turn
+      // can trigger. combatUnit ran its own auto-end check while the attacker
+      // was still queued, so re-check once the queue is cleaned — guarded to
+      // the same player's turn in case combat already ended it.
+      if (this.unitTurnQueue) {
+        this.unitTurnQueue.checkUnitStatus(unitId);
+      }
+      if (this.activePlayer === unit.civilizationId) {
+        this.checkAndEndTurnIfNoMoves();
+      }
+
       // combatUnit returns boolean success currently; normalize
       const success = !!combatResult;
       return { success, reason: success ? 'combat_victory' : 'combat_defeat' };
@@ -1430,6 +1450,20 @@ export default class GameEngine {
       // City combat (native engine logic — the legacy Unit.attackCity API
       // is incompatible with engine plain-object units).
       const result = this.resolveCityCombat(unit, targetCity);
+
+      // Drop the spent/destroyed attacker from the turn queue so the queue can
+      // empty and auto-end-turn can trigger after attacking a city.
+      if (this.unitTurnQueue) {
+        if (result === 'captured' || result === 'city_destroyed') {
+          this.unitTurnQueue.removeUnit(unitId); // attacker consumed
+        } else {
+          this.unitTurnQueue.checkUnitStatus(unitId); // attacker spent (moves 0)
+        }
+      }
+      if (this.activePlayer === unit.civilizationId) {
+        this.checkAndEndTurnIfNoMoves();
+      }
+
       if (result === 'captured') {
         // Remove unit (sacrificed in capture)
         this.units = this.units.filter(u => u.id !== unitId);
@@ -1816,13 +1850,15 @@ export default class GameEngine {
     // Only count ACTIVE units that still have actions available. A unit is
     // considered done (and therefore does not block auto-end) when it has no
     // moves left, is sleeping, is fortified, was explicitly skipped, or has
-    // already been flagged as turn-done.
+    // already been flagged as turn-done. When autoEndIgnoreCivilian is on,
+    // settlers/workers are treated as done too.
     const activeUnitsWithMoves = playerUnits.filter(u => 
       (u.movesRemaining || 0) > 0 && 
       !u.isSleeping && 
       !u.isFortified && 
       !u.isSkipped && 
-      !u.areTurnsDone
+      !u.areTurnsDone &&
+      !(this.autoEndIgnoreCivilian && (u.type === 'settler' || u.type === 'worker'))
     );
     
     // Count inactive units (sleeping or fortified)
@@ -1853,6 +1889,15 @@ export default class GameEngine {
       // — there is nothing left to do this turn.
       if (!hasActiveUnitsWithMoves) {
         console.log('[TURN] All active human units have no moves and queue is empty - checking auto end turn setting');
+        // Transparency: log which units the auto-end is skipping and remember
+        // the summary for the post-end recap notification.
+        const skipped = playerUnits
+          .filter(u => (u.movesRemaining || 0) <= 0 || u.isSleeping || u.isFortified || u.isSkipped || u.areTurnsDone)
+          .map(u => `${u.type}${u.isSleeping ? '(sleep)' : u.isFortified ? '(fort)' : u.isSkipped ? '(skip)' : ''}`);
+        this.lastAutoEndSummary = skipped.length
+          ? `${skipped.length} unit${skipped.length === 1 ? '' : 's'} skipped: ${skipped.join(', ')}`
+          : 'No units with remaining actions';
+        console.log(`[TURN] Auto-end summary — skipping turn, units skipped: ${skipped.length ? skipped.join(', ') : 'none'}`);
         if (this.onStateChange) {
           this.onStateChange('CHECK_AUTO_END_TURN', { civilizationId: this.activePlayer });
         }
@@ -1879,6 +1924,15 @@ export default class GameEngine {
         console.log('[TURN] ⏸️ AI player still has active units with moves or queue not empty, continuing');
       }
     }
+  }
+
+  /**
+   * Configure whether settler/worker units are ignored by the auto-end check.
+   * When enabled, a settler or worker with remaining moves no longer blocks
+   * auto-end (the player opted out of micro-managing them).
+   */
+  setAutoEndIgnoreCivilian(enabled: boolean): void {
+    this.autoEndIgnoreCivilian = enabled;
   }
 
   /**
@@ -2311,6 +2365,8 @@ export default class GameEngine {
       case 'gather_intelligence':
         result = this.diplomacyManager.gatherIntelligence(diplomat.civilizationId, targetCivId);
         diplomat.movesRemaining = 0;
+        if (this.unitTurnQueue) this.unitTurnQueue.checkUnitStatus(diplomatId);
+        if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves();
         return { success: true, type: 'intelligence', report: result };
 
       case 'propose_peace':
@@ -2324,6 +2380,8 @@ export default class GameEngine {
           goldAmount: action === 'demand_tribute' ? 50 : undefined,
         });
         diplomat.movesRemaining = 0;
+        if (this.unitTurnQueue) this.unitTurnQueue.checkUnitStatus(diplomatId);
+        if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves();
         return { success: true, type: 'proposal', response: result };
 
       case 'bribe_unit': {
@@ -2336,6 +2394,8 @@ export default class GameEngine {
             diplomat.movesRemaining = 0;
             // Diplomat is consumed after bribery attempt
             this.units = this.units.filter(u => u.id !== diplomatId);
+            if (this.unitTurnQueue) this.unitTurnQueue.checkUnitStatus(diplomatId);
+            if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves();
             return { success: true, type: 'bribe', response: result };
           }
         }
@@ -2430,6 +2490,12 @@ export default class GameEngine {
       this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType });
     }
 
+    // Remove the worker from the turn queue if it spent all its moves, so the
+    // queue can empty and auto-end-turn can trigger after building.
+    if (this.unitTurnQueue) {
+      this.unitTurnQueue.checkUnitStatus(unitId);
+    }
+
     // Check if turn should end
     this.checkAndEndTurnIfNoMoves();
 
@@ -2469,6 +2535,12 @@ export default class GameEngine {
 
     if (this.onStateChange) {
       this.onStateChange('POLLUTION_CLEANED', { unit, tile });
+    }
+
+    // Remove the worker from the turn queue if it spent all its moves, so the
+    // queue can empty and auto-end-turn can trigger after cleaning.
+    if (this.unitTurnQueue) {
+      this.unitTurnQueue.checkUnitStatus(unitId);
     }
 
     this.checkAndEndTurnIfNoMoves();

@@ -1,0 +1,107 @@
+= Auto. turn ending — how it works
+
+The *Auto. turn ending* setting automatically ends the player's turn once
+every one of their units has finished acting, so the player does not have to
+press *End Turn* manually.
+
+== Where the setting lives
+
+* UI checkboxes: `src/components/ui/SidePanel.tsx` — *"Auto. turn ending"* and
+  *"Ignore settlers/workers"* in the side-panel header.
+* Game state: `settings.autoEndTurn` (default `true`) and
+  `settings.autoEndIgnoreCivilian` (default `false`) in `src/stores/GameStore.ts`.
+
+== When auto-end fires
+
+Auto-end fires only when *all* of the following hold (`GameEngine.checkAndEndTurnIfNoMoves`
+`src/game/engine/GameEngine.ts`, then `EngineEventHandlers.onCheckAutoEndTurn`
+`src/utils/EngineEventHandlers.ts`):
+
+1. The setting is enabled (`settings.autoEndTurn === true`).
+2. No *active* unit has moves left. A unit is considered *done* (does not
+   block auto-end) when any of these is true:
+   * `movesRemaining <= 0`
+   * it is *sleeping*
+   * it is *fortified*
+   * it was explicitly *skipped*
+   * it is flagged `areTurnsDone`
+   * *"Ignore settlers/workers"* is enabled and the unit is a `settler` or
+     `worker` (player opted out of micro-managing them)
+3. The turn queue is empty (every unit processed / removed from the queue).
+4. No screen is open that must block it:
+   * *City-management dialogs* (`city-details`, `city-production`,
+     `city-purchase`, `city-citizens`) defer auto-end while open; the check is
+     re-run when the dialog closes (`GameModals.handleCloseDialog`).
+   * *Diplomacy dialogs* (`diplomacy`, `diplomacy-report`) defer auto-end
+     while open (a leader may be awaiting a response); the check is re-run when
+     they close.
+   * A *combat animation* defers auto-end while playing; the check is re-run
+     ~2.4 s later when the cloud animation finishes (`onCombat` timeout).
+   * *Non-blocking dialogs* (WORLD menu, help, tech tree, hex-details) do *not*
+     block auto-end — closing them does not end the turn.
+5. GoTo movement paths are not currently being processed
+   (`TurnManager.isProcessingGoTo` guard).
+
+== When the check runs
+
+`checkAndEndTurnIfNoMoves` is evaluated after every unit action that can finish
+a unit:
+
+* a unit moves (`moveUnit`)
+* a unit attacks another unit (`moveUnit` → `combatUnit`)
+* a unit attacks a city (`moveUnit` → `resolveCityCombat`)
+* a unit skips (`skipUnit`)
+* a unit sleeps (`unitSleep`)
+* a unit fortifies (`unitFortify`)
+* a settler founds a city (`foundCityWithSettler`)
+* a worker builds an improvement (`buildImprovement`)
+* a worker cleans pollution (`cleanPollution`)
+* a diplomat performs an action (`executeDiplomatAction`)
+* a unit is disbanded (`disbandUnit`) or attached (`attachUnit`)
+* a city-management dialog closes (`GameModals.handleCloseDialog`)
+* the UNIT_MOVEMENT phase starts, after GoTo paths are processed (`TurnManager`)
+
+== What happens when it fires
+
+* The engine emits `CHECK_AUTO_END_TURN` → `onCheckAutoEndTurn` re-checks the
+  setting and screen guards → asks the player to confirm by dispatching
+  `showEndTurnConfirmation`.
+* The App shows the *"All Your Units Have Moved!"* modal with **[Cancel] /
+  [End Turn]** — the player can cancel (e.g. to wake a unit or adjust a city)
+  or confirm to end. With `skipEndTurnConfirmation` enabled the turn ends
+  immediately (truly automatic). Confirming ends the turn via
+  `TurnManager.endHumanTurn()` through CITY_PRODUCTION → RESEARCH → END → next
+  player.
+* Before prompting, the engine logs a skipped-turn summary to the console
+  (e.g. `Auto-end summary — skipping turn, units skipped: warrior(skip), settler`),
+  and after an auto-ended turn the App shows a brief recap notification
+  (e.g. `Auto-end: 2 units skipped: warrior, settler`).
+* When the setting is *off*, no auto-end occurs; instead, when the queue
+  empties during the human's UNIT_MOVEMENT phase, a one-time
+  *"All Your Units Have Moved!"* prompt is shown (per turn).
+* AI players also auto-advance when their queue is empty and no active units
+  with moves remain.
+
+== Turn queue is the source of truth
+
+Auto-end only triggers when the *turn queue* is empty. Every action that
+spends or destroys a unit's movement must therefore remove that unit from the
+queue before the auto-end check runs:
+
+* `skipUnit` → `unitDone`
+* `unitSleep` / `unitFortify` → `checkUnitStatus`
+* `foundCityWithSettler` / `attachUnit` → `removeUnit`
+* `disbandUnit` → `unitDone`
+* `moveUnit` (combat), `moveUnit` (city combat), `buildImprovement`,
+  `cleanPollution`, `executeDiplomatAction` → `checkUnitStatus` / `removeUnit`
+  (regression fix; previously the spent unit stayed in the queue and blocked
+  auto-end)
+
+== Related tests
+
+* `tests/autoEndTurn.test.ts` — core rules (no-moves / zero-units / skipped,
+  sleeping, fortified; settler removal from queue; no duplicate production).
+* `tests/autoEndTurnScreen.test.ts` — deferral while a city dialog or combat
+  animation is open, and re-check after closing.
+* `e2e/game.spec.ts` — "auto end turn checkbox is available" (checkbox visible
+  and checked by default).

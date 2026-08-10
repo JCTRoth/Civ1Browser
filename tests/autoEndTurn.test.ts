@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
 
 /**
@@ -141,5 +141,176 @@ describe('Auto End Turn + city founding', () => {
     (engine as any).checkAndEndTurnIfNoMoves();
 
     expect(emitted).toContain('CHECK_AUTO_END_TURN');
+  });
+
+  it('ignore-civilian rule: settler/worker moves do not block auto end when enabled', () => {
+    // Keep only one human settler with moves left.
+    (engine as any).units = (engine as any).units.filter((u: any) => u.civilizationId !== 0);
+    (engine as any).units.push({
+      id: 'settler', civilizationId: 0, type: 'settler', col: 5, row: 5,
+      movesRemaining: 1, attack: 0, defense: 1, maxMoves: 1,
+      isSleeping: false, isFortified: false, isSkipped: false, areTurnsDone: false
+    });
+
+    // Default: a settler with moves blocks auto-end.
+    (engine as any).setAutoEndIgnoreCivilian(false);
+    emitted = [];
+    (engine as any).checkAndEndTurnIfNoMoves();
+    expect(emitted).not.toContain('CHECK_AUTO_END_TURN');
+
+    // Enable the rule: the settler no longer blocks auto-end.
+    (engine as any).setAutoEndIgnoreCivilian(true);
+    emitted = [];
+    (engine as any).checkAndEndTurnIfNoMoves();
+    expect(emitted).toContain('CHECK_AUTO_END_TURN');
+
+    (engine as any).setAutoEndIgnoreCivilian(false);
+  });
+
+  it('records a skipped-unit recap for the post-end summary', () => {
+    // One human unit that is explicitly skipped.
+    (engine as any).units = (engine as any).units.filter((u: any) => u.civilizationId !== 0);
+    (engine as any).units.push({
+      id: 'warrior-a', civilizationId: 0, type: 'warrior', col: 5, row: 5,
+      movesRemaining: 0, attack: 1, defense: 1, maxMoves: 1,
+      isSleeping: false, isFortified: false, isSkipped: true, areTurnsDone: true
+    });
+
+    (engine as any).checkAndEndTurnIfNoMoves();
+
+    expect((engine as any).lastAutoEndSummary).toContain('warrior');
+  });
+});
+
+/**
+ * Regression: after the last human unit attacks (combat), the spent attacker
+ * used to stay in the turn queue, so the queue never emptied and auto-end-turn
+ * never triggered. The attacker must be removed from the queue after combat so
+ * the queue can empty and auto-end can fire.
+ */
+describe('Auto End Turn after combat', () => {
+  let engine: GameEngine;
+  let emitted: string[];
+  let randomSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    engine = new GameEngine(null);
+    (engine as any).sleep = () => Promise.resolve();
+    emitted = [];
+    engine.onStateChange = (type: string, _data?: any) => {
+      emitted.push(type);
+    };
+    await engine.initialize({
+      numberOfCivilizations: 2,
+      mapType: 'MANY_CITIES',
+      devMode: false,
+      startingGold: 100
+    });
+    randomSpy = vi.spyOn(Math, 'random');
+  });
+
+  afterEach(() => {
+    randomSpy.mockRestore();
+  });
+
+  /** Find two adjacent passable land tiles away from all cities. */
+  const findAdjacentPair = (): { a: { col: number; row: number }; b: { col: number; row: number } } => {
+    const width = (engine as any).map?.width ?? 80;
+    const height = (engine as any).map?.height ?? 50;
+    const isLand = (col: number, row: number): boolean => {
+      const tile = (engine as any).getTileAt?.(col, row);
+      if (!tile) return false;
+      const type = String(tile.type ?? '').toLowerCase();
+      return type !== 'ocean' && type !== 'water';
+    };
+    const far = (col: number, row: number): boolean =>
+      !engine.cities.some((c: any) => Math.abs(c.col - col) + Math.abs(c.row - row) < 3);
+    for (let row = 1; row < height - 1; row++) {
+      for (let col = 1; col < width - 1; col++) {
+        if (!isLand(col, row) || !far(col, row)) continue;
+        const nbs = [
+          { col: col + 1, row },
+          { col: col - 1, row },
+          { col, row: row + 1 },
+          { col, row: row - 1 }
+        ];
+        for (const nb of nbs) {
+          if (isLand(nb.col, nb.row) && far(nb.col, nb.row)) {
+            return { a: { col, row }, b: { col: nb.col, row: nb.row } };
+          }
+        }
+      }
+    }
+    throw new Error('No adjacent land pair found');
+  };
+
+  const addWarrior = (id: string, civId: number, pos: { col: number; row: number }, attack: number) => {
+    const unit = {
+      id,
+      civilizationId: civId,
+      type: 'warrior',
+      col: pos.col,
+      row: pos.row,
+      movesRemaining: 1,
+      health: 100,
+      attack,
+      defense: 1,
+      maxMoves: 1,
+      movement: 1,
+      icon: 'warrior',
+      isSleeping: false,
+      isFortified: false,
+      isSkipped: false,
+      areTurnsDone: false
+    };
+    (engine as any).units.push(unit);
+    return unit;
+  };
+
+  it('fires CHECK_AUTO_END_TURN after the last human unit attacks and wins', () => {
+    // Keep only the two combatants.
+    (engine as any).units = (engine as any).units.filter(
+      (u: any) => u.civilizationId !== 0 && u.civilizationId !== 1
+    );
+    const pair = findAdjacentPair();
+    addWarrior('human-warrior', 0, pair.a, 100);
+    addWarrior('ai-warrior', 1, pair.b, 1);
+
+    const queue = (engine as any).unitTurnQueue;
+    queue.initializeQueue(0);
+    expect(queue.getQueue(0)).toContain('human-warrior');
+
+    // Force attacker victory.
+    randomSpy.mockReturnValue(0.01);
+    emitted = [];
+    const result = engine.moveUnit('human-warrior', pair.b.col, pair.b.row);
+
+    expect(result.success).toBe(true);
+    // The spent attacker must be removed from the queue so the queue empties…
+    expect(queue.getQueue(0)).not.toContain('human-warrior');
+    // …and auto-end-turn fires.
+    expect(emitted).toContain('CHECK_AUTO_END_TURN');
+  });
+
+  it('does NOT fire while another unit still has moves after combat', () => {
+    (engine as any).units = (engine as any).units.filter(
+      (u: any) => u.civilizationId !== 0 && u.civilizationId !== 1
+    );
+    const pair = findAdjacentPair();
+    addWarrior('human-warrior', 0, pair.a, 100);
+    addWarrior('ai-warrior', 1, pair.b, 1);
+    // A second human unit with moves elsewhere.
+    addWarrior('human-warrior-2', 0, { col: pair.a.col + 3, row: pair.a.row }, 1);
+
+    const queue = (engine as any).unitTurnQueue;
+    queue.initializeQueue(0);
+    // Second unit is NOT queued here; the check counts ALL player units.
+    (engine as any).units.find((u: any) => u.id === 'human-warrior-2').movesRemaining = 1;
+
+    randomSpy.mockReturnValue(0.01);
+    emitted = [];
+    engine.moveUnit('human-warrior', pair.b.col, pair.b.row);
+
+    expect(emitted).not.toContain('CHECK_AUTO_END_TURN');
   });
 });

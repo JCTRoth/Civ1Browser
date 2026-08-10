@@ -76,7 +76,7 @@
 }
 
 .settings-control__hint {
-  color: var(--color-text-muted, #8b9aa9);
+  color: var(--color-text-muted, #ffffff);
   font-size: var(--text-sm, 0.875rem);
   line-height: 1.4;
 }

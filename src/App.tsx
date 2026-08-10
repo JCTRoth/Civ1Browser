@@ -144,6 +144,11 @@ function App() {
         (window as any).__gameEngine = engine;
       }
 
+      // Keep the engine's auto-end rule in sync with the current setting.
+      if (typeof (engine as any).setAutoEndIgnoreCivilian === 'function') {
+        (engine as any).setAutoEndIgnoreCivilian(!!useGameStore.getState().settings.autoEndIgnoreCivilian);
+      }
+
       // Get player's starting settler position
       const playerSettler = engine.units.find(
         (u) => u.civilizationId === 0 && u.type === 'settler'
@@ -174,17 +179,26 @@ function App() {
   // Handle end turn confirmation
   const handleEndTurnConfirm = useCallback(() => {
     console.log('[App] End turn confirmed');
+    const wasAutomatic = isEndTurnAutomatic;
     setShowEndTurnConfirm(false);
     setIsEndTurnAutomatic(false);
-    
+
     // Always process the turn when confirmed
     if (gameEngine) {
       console.log('[App] Processing turn via gameEngine.processTurn()');
       gameEngine.processTurn();
+      // Feedback & transparency: after an auto-ended turn, show a brief recap
+      // of what was automatically resolved (e.g. "2 units skipped").
+      if (wasAutomatic && typeof (gameEngine as any).lastAutoEndSummary === 'string') {
+        const summary = (gameEngine as any).lastAutoEndSummary as string;
+        if (summary) {
+          actions.addNotification({ type: 'info', message: `Auto-end: ${summary}` });
+        }
+      }
     } else {
       console.warn('[App] Cannot process turn - gameEngine is null');
     }
-  }, [gameEngine]);
+  }, [actions, gameEngine, isEndTurnAutomatic]);
 
   // Initialize game engine
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
 import { EngineEventRouter } from '@/utils/EngineEventHandlers';
 import { useGameStore } from '@/stores/GameStore';
@@ -8,13 +8,17 @@ import { useGameStore } from '@/stores/GameStore';
  * city management / production dialog). It is deferred until that screen
  * closes, then re-checked.
  *
+ * When it would fire, the router asks the player to confirm by dispatching
+ * `showEndTurnConfirmation` (the App shows the "All Your Units Have Moved!"
+ * modal) instead of ending the turn instantly.
+ *
  * The guard lives in EngineEventHandlers.onCheckAutoEndTurn, which consults
  * the store's `uiState.activeDialog` and `combatAnimations`.
  */
 describe('Auto End Turn defers while a screen is open', () => {
   let engine: GameEngine;
   let router: EngineEventRouter;
-  let endTurnCalls: number;
+  let prompts: string[];
 
   beforeEach(async () => {
     engine = new GameEngine(null);
@@ -33,16 +37,17 @@ describe('Auto End Turn defers while a screen is open', () => {
       router.handle(type, data);
     };
 
-    // Spy on the turn-ending path.
-    endTurnCalls = 0;
-    const tm = (engine as any).roundManager;
-    if (tm && typeof tm.endHumanTurn === 'function') {
-      const orig = tm.endHumanTurn.bind(tm);
-      tm.endHumanTurn = async () => {
-        endTurnCalls += 1;
-        await orig();
+    // Node test env has no DOM: fake a `window` so the router's
+    // showEndTurnConfirmation dispatch is observable.
+    prompts = [];
+    if (typeof (globalThis as any).CustomEvent === 'undefined') {
+      (globalThis as any).CustomEvent = class {
+        constructor(public type: string) {}
       };
     }
+    (globalThis as any).window = {
+      dispatchEvent: (e: any) => { prompts.push(e.type); }
+    };
 
     // Reset store UI state between tests.
     useGameStore.getState().actions.hideDialog();
@@ -54,21 +59,28 @@ describe('Auto End Turn defers while a screen is open', () => {
     }
   });
 
-  it('does NOT auto-end while a city management dialog is open', () => {
-    useGameStore.getState().actions.showDialog('city-details');
-    // All human units done → auto-end would otherwise trigger.
+  afterEach(() => {
+    delete (globalThis as any).window;
+  });
+
+  const makeAllUnitsDone = () => {
     const units = (engine as any).units.filter((u: any) => u.civilizationId === 0);
     for (const u of units) {
       u.movesRemaining = 0;
       u.areTurnsDone = true;
     }
+  };
+
+  it('does NOT prompt while a city management dialog is open', () => {
+    useGameStore.getState().actions.showDialog('city-details');
+    makeAllUnitsDone();
 
     router.handle('CHECK_AUTO_END_TURN', { civilizationId: 0 });
 
-    expect(endTurnCalls).toBe(0);
+    expect(prompts).not.toContain('showEndTurnConfirmation');
   });
 
-  it('does NOT auto-end while a combat animation is active', () => {
+  it('does NOT prompt while a combat animation is active', () => {
     useGameStore.getState().actions.addCombatAnimation({
       id: 'test-combat',
       attackerId: 'a',
@@ -82,33 +94,40 @@ describe('Auto End Turn defers while a screen is open', () => {
       startTime: performance.now(),
       duration: 2000,
     });
-    const units = (engine as any).units.filter((u: any) => u.civilizationId === 0);
-    for (const u of units) {
-      u.movesRemaining = 0;
-      u.areTurnsDone = true;
-    }
+    makeAllUnitsDone();
 
     router.handle('CHECK_AUTO_END_TURN', { civilizationId: 0 });
 
-    expect(endTurnCalls).toBe(0);
+    expect(prompts).not.toContain('showEndTurnConfirmation');
   });
 
-  it('auto-ends once the city dialog is closed', () => {
+  it('prompts to confirm once the city dialog is closed', () => {
     useGameStore.getState().actions.showDialog('city-details');
-    const units = (engine as any).units.filter((u: any) => u.civilizationId === 0);
-    for (const u of units) {
-      u.movesRemaining = 0;
-      u.areTurnsDone = true;
-    }
+    makeAllUnitsDone();
 
     // While open → deferred.
     router.handle('CHECK_AUTO_END_TURN', { civilizationId: 0 });
-    expect(endTurnCalls).toBe(0);
+    expect(prompts).not.toContain('showEndTurnConfirmation');
 
-    // Close the dialog → re-check → auto-end fires.
+    // Close the dialog → re-check → the router asks the player to confirm.
     useGameStore.getState().actions.hideDialog();
     router.handle('CHECK_AUTO_END_TURN', { civilizationId: 0 });
 
-    expect(endTurnCalls).toBeGreaterThan(0);
+    expect(prompts).toContain('showEndTurnConfirmation');
+  });
+
+  it('defers auto-end while a diplomacy dialog is open (a leader may be awaiting a response)', () => {
+    useGameStore.getState().actions.showDialog('diplomacy-report');
+    makeAllUnitsDone();
+
+    // While the diplomacy screen is open → deferred.
+    router.handle('CHECK_AUTO_END_TURN', { civilizationId: 0 });
+    expect(prompts).not.toContain('showEndTurnConfirmation');
+
+    // Close it → re-check → prompt to confirm.
+    useGameStore.getState().actions.hideDialog();
+    router.handle('CHECK_AUTO_END_TURN', { civilizationId: 0 });
+
+    expect(prompts).toContain('showEndTurnConfirmation');
   });
 });

@@ -12,10 +12,12 @@ A modern, faithful browser-based recreation of Sid Meier's Civilization I (1991)
 image::doc/2025-11-16_21-36.png[Screenshot 1, width=800]
 image::doc/2025-11-16_21-36_1.png[Screenshot 2, width=800]
 
-image::doc/1.png[Screenshot 3, width=800]
-image::doc/2.png[Screenshot 4, width=800]
+image::doc/1.png[Screenshot 1, width=800]
+image::doc/2.png[Screenshot 2, width=800]
+image::doc/3.png[Screenshot 3, width=800]
+image::doc/4.png[Screenshot 4, width=800]
+image::doc/5.png[Screenshot 5, width=800]
 
-image::doc/3.png[Screenshot 5, width=800]
 image::doc/action_menu.png[Action Menu, width=800]
 
 image::doc/all_over.png[All Over, width=800]

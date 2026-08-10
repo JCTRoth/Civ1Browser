@@ -71,7 +71,7 @@
 
 .unit-context-menu__coords {
   font-size: 12px;
-  color: var(--color-text-muted, #8b9aa9);
+  color: var(--color-text-muted, #ffffff);
   white-space: nowrap;
 }
 
@@ -135,7 +135,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: var(--color-text-muted, #8b9aa9);
+  color: var(--color-text-muted, #ffffff);
   text-transform: uppercase;
 }
 

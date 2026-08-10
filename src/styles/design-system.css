@@ -21,9 +21,9 @@
   --color-border: #2c3b49;        /* visible borders            */
   --color-border-strong: #3d5163;
   --color-text: #e8eef3;          /* primary text  (>15:1)      */
-  --color-text-secondary: #b8c4cf;/* secondary text (>7:1)      */
-  --color-text-muted: #8b9aa9;    /* muted text   (>4.6:1)      */
-  --color-text-disabled: #64717e;
+  --color-text-secondary: #ffffff;/* secondary text (>7:1)      */
+  --color-text-muted: #ffffff;    /* muted text   (>4.6:1)      */
+  --color-text-disabled: #30887d;
   --color-accent: #f0c33c;        /* gold accent  (5.5:1 on bg) */
   --color-accent-strong: #ffd75e;
   --color-accent-ink: #141006;    /* text on accent             */
@@ -470,6 +470,14 @@ body {
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.text-muted {
+  color: var(--color-text-m) !important;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 

@@ -39,7 +39,7 @@
 
 /* Muted text — WCAG AA (>= 4.5:1 on panel background) */
 .side-panel-small-muted {
-  color: var(--color-text-muted, #8b9aa9);
+  color: var(--color-text-muted, #ffffff);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -128,7 +128,7 @@
 }
 
 .path-info {
-  color: var(--color-text-muted, #8b9aa9);
+  color: var(--color-text-muted, #ffffff);
   font-size: 13px;
   padding: 6px 10px;
   background: rgba(255, 255, 255, 0.05);
@@ -300,7 +300,7 @@
 
 .settings-hint {
   font-size: 12px;
-  color: var(--color-text-muted, #8b9aa9);
+  color: var(--color-text-muted, #ffffff);
   margin-top: 4px;
   margin-left: 30px;
   line-height: 1.3;

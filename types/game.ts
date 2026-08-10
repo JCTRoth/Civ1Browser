@@ -187,6 +187,7 @@ interface Settings {
   civListFontSize: number;
   skipEndTurnConfirmation: boolean;
   autoEndTurn: boolean; // Automatically end turn when all units are done
+  autoEndIgnoreCivilian: boolean; // Ignore settler/worker moves when deciding to auto-end
   devMode: boolean; // Developer mode: see all players on minimap and switch between them
 }
 
@@ -312,6 +313,8 @@ export interface GameEngine {
   canUnitMoveTo: (unitId: string, col: number, row: number) => boolean;
   /** End the current player's turn automatically if every unit is done/skipped. */
   checkAndEndTurnIfNoMoves(): void;
+  /** Configure whether settler/worker units are ignored by the auto-end check. */
+  setAutoEndIgnoreCivilian(enabled: boolean): void;
   foundCity(col: number, row: number, civilizationId: number, customName?: string | null): any;
   foundCityWithSettler(settlerId: string): boolean;
   setResearch(civId: number, techId: string): void;
