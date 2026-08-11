@@ -143,30 +143,6 @@ describe('Auto End Turn + city founding', () => {
     expect(emitted).toContain('CHECK_AUTO_END_TURN');
   });
 
-  it('ignore-civilian rule: settler/worker moves do not block auto end when enabled', () => {
-    // Keep only one human settler with moves left.
-    (engine as any).units = (engine as any).units.filter((u: any) => u.civilizationId !== 0);
-    (engine as any).units.push({
-      id: 'settler', civilizationId: 0, type: 'settler', col: 5, row: 5,
-      movesRemaining: 1, attack: 0, defense: 1, maxMoves: 1,
-      isSleeping: false, isFortified: false, isSkipped: false, areTurnsDone: false
-    });
-
-    // Default: a settler with moves blocks auto-end.
-    (engine as any).setAutoEndIgnoreCivilian(false);
-    emitted = [];
-    (engine as any).checkAndEndTurnIfNoMoves();
-    expect(emitted).not.toContain('CHECK_AUTO_END_TURN');
-
-    // Enable the rule: the settler no longer blocks auto-end.
-    (engine as any).setAutoEndIgnoreCivilian(true);
-    emitted = [];
-    (engine as any).checkAndEndTurnIfNoMoves();
-    expect(emitted).toContain('CHECK_AUTO_END_TURN');
-
-    (engine as any).setAutoEndIgnoreCivilian(false);
-  });
-
   it('records a skipped-unit recap for the post-end summary', () => {
     // One human unit that is explicitly skipped.
     (engine as any).units = (engine as any).units.filter((u: any) => u.civilizationId !== 0);

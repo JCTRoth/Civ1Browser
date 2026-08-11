@@ -6,10 +6,10 @@ press *End Turn* manually.
 
 == Where the setting lives
 
-* UI checkboxes: `src/components/ui/SidePanel.tsx` — *"Auto. turn ending"* and
-  *"Ignore settlers/workers"* in the side-panel header.
-* Game state: `settings.autoEndTurn` (default `true`) and
-  `settings.autoEndIgnoreCivilian` (default `false`) in `src/stores/GameStore.ts`.
+* UI checkbox: `src/components/ui/SidePanel.tsx` — *"Auto. turn ending"* in the
+  side-panel header.
+* Game state: `settings.autoEndTurn` (default `false`) in
+  `src/stores/GameStore.ts`.
 
 == When auto-end fires
 
@@ -25,8 +25,6 @@ Auto-end fires only when *all* of the following hold (`GameEngine.checkAndEndTur
    * it is *fortified*
    * it was explicitly *skipped*
    * it is flagged `areTurnsDone`
-   * *"Ignore settlers/workers"* is enabled and the unit is a `settler` or
-     `worker` (player opted out of micro-managing them)
 3. The turn queue is empty (every unit processed / removed from the queue).
 4. No screen is open that must block it:
    * *City-management dialogs* (`city-details`, `city-production`,

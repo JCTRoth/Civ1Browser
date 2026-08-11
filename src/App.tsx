@@ -144,11 +144,6 @@ function App() {
         (window as any).__gameEngine = engine;
       }
 
-      // Keep the engine's auto-end rule in sync with the current setting.
-      if (typeof (engine as any).setAutoEndIgnoreCivilian === 'function') {
-        (engine as any).setAutoEndIgnoreCivilian(!!useGameStore.getState().settings.autoEndIgnoreCivilian);
-      }
-
       // Get player's starting settler position
       const playerSettler = engine.units.find(
         (u) => u.civilizationId === 0 && u.type === 'settler'

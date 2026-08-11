@@ -607,8 +607,8 @@ test.describe('AI Behavior', () => {
       // It should have an associated checkbox
       const checkbox = page.getByRole('checkbox', { name: /Auto.*turn/i });
       await expect(checkbox).toBeVisible();
-      // Default should be checked (auto turn ending is enabled by default)
-      await expect(checkbox).toBeChecked();
+      // Default should be unchecked (auto turn ending is disabled by default)
+      await expect(checkbox).not.toBeChecked();
     });
   });
 

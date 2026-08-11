@@ -87,9 +87,6 @@ export default class GameEngine {
   unitTurnQueue: UnitTurnQueue; // Unit turn queue for managing unit order
   diplomacyManager: DiplomacyManager; // Civ I–style diplomacy system
 
-  // When enabled, settler/worker units with moves left do NOT block auto-end
-  // (the player opted out of micro-managing them).
-  autoEndIgnoreCivilian = false;
   // Human-readable recap of the most recent auto-end (what was skipped), used
   // for the post-end summary notification.
   lastAutoEndSummary: string | null = null;
@@ -1850,15 +1847,13 @@ export default class GameEngine {
     // Only count ACTIVE units that still have actions available. A unit is
     // considered done (and therefore does not block auto-end) when it has no
     // moves left, is sleeping, is fortified, was explicitly skipped, or has
-    // already been flagged as turn-done. When autoEndIgnoreCivilian is on,
-    // settlers/workers are treated as done too.
+    // already been flagged as turn-done.
     const activeUnitsWithMoves = playerUnits.filter(u => 
       (u.movesRemaining || 0) > 0 && 
       !u.isSleeping && 
       !u.isFortified && 
       !u.isSkipped && 
-      !u.areTurnsDone &&
-      !(this.autoEndIgnoreCivilian && (u.type === 'settler' || u.type === 'worker'))
+      !u.areTurnsDone
     );
     
     // Count inactive units (sleeping or fortified)
@@ -1924,15 +1919,6 @@ export default class GameEngine {
         console.log('[TURN] ⏸️ AI player still has active units with moves or queue not empty, continuing');
       }
     }
-  }
-
-  /**
-   * Configure whether settler/worker units are ignored by the auto-end check.
-   * When enabled, a settler or worker with remaining moves no longer blocks
-   * auto-end (the player opted out of micro-managing them).
-   */
-  setAutoEndIgnoreCivilian(enabled: boolean): void {
-    this.autoEndIgnoreCivilian = enabled;
   }
 
   /**

@@ -165,21 +165,6 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
                 />
                 <span className="checkbox-text">Auto. turn ending</span>
               </label>
-              <label className="settings-checkbox-label" style={{ fontSize: '0.8rem', opacity: settings.autoEndTurn ? 1 : 0.5 }} title="End the turn even while a settler/worker still has moves">
-                <input
-                  type="checkbox"
-                  checked={!!settings.autoEndTurn && !!settings.autoEndIgnoreCivilian}
-                  disabled={!settings.autoEndTurn}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    actions.updateSettings({ autoEndIgnoreCivilian: checked });
-                    if (gameEngine && typeof (gameEngine as GameEngine & { setAutoEndIgnoreCivilian?: (v: boolean) => void }).setAutoEndIgnoreCivilian === 'function') {
-                      (gameEngine as GameEngine & { setAutoEndIgnoreCivilian: (v: boolean) => void }).setAutoEndIgnoreCivilian(checked);
-                    }
-                  }}
-                />
-                <span className="checkbox-text">Ignore settlers/workers</span>
-              </label>
             </div>
           </div>
         </div>
