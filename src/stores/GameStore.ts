@@ -10,7 +10,6 @@ import type { GameStoreState, GameState, MapState, CameraState, UIState, GameRes
 
 // Internal store property types for cached/computed state
 type StoreWithInternals = GameStoreState & {
-  _lastActivePlayer: number | null;
   _cachedPlayerResources: { food: number; production: number; trade: number; science: number; gold: number };
   _cachedGameStats: { turn: number; totalCities: number; totalUnits: number; aliveCivilizations: number; gameStarted: boolean };
 };
@@ -97,6 +96,11 @@ const setVisibilityAreaInternal = (visibility, revealed, centerCol, centerRow, r
   }
 };
 
+// The human player is always civilization 0. The UI's fog of war
+// (map.visibility) reflects this player's perspective, and the camera may only
+// follow units the human can actually see.
+const HUMAN_PLAYER_ID = 0;
+
 // Zustand store replacing Jotai atoms
 export const useGameStore = create<GameStoreState>((set, get) => ({
   // Game State
@@ -107,9 +111,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   // Camera State
   camera: createInitialCameraState(),
-
-  // Internal helper to track last active player to avoid noisy camera pans
-  _lastActivePlayer: null,
 
   // Units State
   units: [],
@@ -225,8 +226,19 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
       // Find next unit belonging to active player that still has moves and is not sleeping
       const activeId = state.gameState.activePlayer;
-      const lastActive = (state as StoreWithInternals)._lastActivePlayer;
       const devMode = !!state.settings?.devMode;
+
+      // Camera-follow rule: only focus on the human player's own units, or on
+      // enemy/AI units whose tile the human can currently see (fog of war), so
+      // the camera never trails hidden AI movement. Dev mode overrides this.
+      const shouldFocus = (unit: { civilizationId: number; col: number; row: number }): boolean => {
+        if (devMode) return true;
+        if (unit.civilizationId === HUMAN_PLAYER_ID) return true;
+        const mapWidth = state.map?.width ?? 0;
+        if (!mapWidth) return false;
+        return !!state.map?.visibility?.[unit.row * mapWidth + unit.col];
+      };
+
       const candidate = state.units.find(u => u.civilizationId === activeId && (u.movesRemaining || 0) > 0 && !u.isSleeping);
 
       if (candidate) {
@@ -250,15 +262,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           zoom,
         };
 
-        // Only update the camera position if either the same player retained control or developer mode is enabled
-        const shouldMoveCamera = devMode || lastActive === null || lastActive === activeId;
+        // Only select/follow the unit when the human player should see it.
+        if (!shouldFocus(candidate)) {
+          return state;
+        }
 
         return {
           ...state,
           _lastFocusCall: now,
-          _lastActivePlayer: activeId,
           gameState: { ...state.gameState, selectedUnit: candidate.id, activeUnit: candidate.id, selectedCity: null },
-          camera: shouldMoveCamera ? { ...state.camera, ...newCamera } : { ...state.camera }
+          camera: { ...state.camera, ...newCamera }
         };
       } else {
         // No unit found, focus on the capital city of the active player
@@ -284,16 +297,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
             zoom,
           };
 
-          const lastActive = (state as StoreWithInternals)._lastActivePlayer;
-          const devMode = !!state.settings?.devMode;
-          const shouldMoveCamera = devMode || lastActive === null || lastActive === activeId;
+          // Same rule for capitals: only follow the human's own or a visible one.
+          if (!shouldFocus({ civilizationId: capitalCity.civilizationId, col: capitalCity.col, row: capitalCity.row })) {
+            return state;
+          }
 
           return {
             ...state,
             _lastFocusCall: now,
-            _lastActivePlayer: activeId,
             gameState: { ...state.gameState, selectedUnit: null, activeUnit: null, selectedCity: capitalCity.id },
-            camera: shouldMoveCamera ? { ...state.camera, ...newCamera } : { ...state.camera }
+            camera: { ...state.camera, ...newCamera }
           };
         }
       }
@@ -430,7 +443,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       // The store's visibility always reflects the human player's perspective (player 0).
       // The game engine maintains per-player visibility separately for AI decision-making.
       // This ensures the UI (minimap, main canvas) never reveals what other players see.
-      const HUMAN_PLAYER_ID = 0;
 
       // Create new visibility arrays
       const newVisibility = new Array(map.tiles.length).fill(false);

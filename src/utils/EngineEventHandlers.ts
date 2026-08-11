@@ -2,6 +2,9 @@ import { useGameStore } from '../stores/GameStore';
 import { centerCameraOnTile, getGameViewport } from './CameraUtils';
 import type { GameEngine } from '../../types/game';
 
+// The human player is always civilization 0 (mirrors the store's fog of war).
+const HUMAN_PLAYER_ID = 0;
+
 export class EngineEventRouter {
   private gameEngine: GameEngine;
   private actions = useGameStore.getState().actions;
@@ -164,9 +167,33 @@ export class EngineEventRouter {
     const moved = eventData && eventData.unit ? eventData.unit : null;
     if (moved) {
       const movesLeft = moved.movesRemaining || 0;
-      if (movesLeft > 0) this.actions.selectUnit(moved.id);
-      else this.actions.focusOnNextUnit();
+      if (movesLeft > 0) {
+        // Only auto-select the moved unit when it is the human player's own
+        // unit, or an enemy/AI unit the human can currently see. Hidden enemy
+        // movement must not be revealed through the selection panel.
+        if (this.isUnitVisibleToHuman(moved)) {
+          this.actions.selectUnit(moved.id);
+        }
+      } else {
+        // focusOnNextUnit applies the same visibility rule before moving the camera.
+        this.actions.focusOnNextUnit();
+      }
     }
+  }
+
+  /**
+   * Whether a unit should be revealed/followed by the UI: either the human
+   * player's own unit, or an enemy/AI unit whose tile the human can currently
+   * see (fog of war). Dev mode reveals everything.
+   */
+  private isUnitVisibleToHuman(unit: { civilizationId: number; col: number; row: number }): boolean {
+    const state = useGameStore.getState();
+    if (state.settings?.devMode) return true;
+    if (unit.civilizationId === HUMAN_PLAYER_ID) return true;
+    const mapWidth = state.map?.width ?? 0;
+    if (!mapWidth) return false;
+    const index = unit.row * mapWidth + unit.col;
+    return !!state.map?.visibility?.[index];
   }
 
   private onCombat(eventType: string, eventData: any) {
