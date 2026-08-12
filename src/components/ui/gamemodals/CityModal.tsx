@@ -262,56 +262,6 @@ const CityModal: React.FC<CityModalProps> = ({
                 )}
               </div>
             </Tab>
-            <Tab eventKey="buildings" title="Buildings">
-              <div className="city-buildings-content">
-                {selectedCity.buildings && selectedCity.buildings.length > 0 ? (
-                  <div className="buildings-grid">
-                    {selectedCity.buildings.map((buildingKey: string, index: number) => {
-                      const buildingProps = BUILDING_PROPERTIES[buildingKey];
-                      return (
-                        <div key={index} className="building-card bg-secondary text-white p-3 rounded mb-2">
-                          <div className="d-flex justify-content-between align-items-start">
-                            <div className="d-flex align-items-center">
-                              {buildingProps?.icon && (
-                                <span className="building-icon me-2" style={{ fontSize: '1.5em' }}>
-                                  {buildingProps.icon}
-                                </span>
-                              )}
-                              <div>
-                                <h6 className="building-name mb-1">{buildingProps?.name || buildingKey}</h6>
-                                <div className="building-details small">
-                                  <div>Cost: {buildingProps?.cost || 0} shields</div>
-                                  <div>Maintenance: {buildingProps?.maintenance || 0} gold/turn</div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          {buildingProps?.description && (
-                            <div className="building-description small text-muted mt-2">
-                              {buildingProps.description}
-                            </div>
-                          )}
-                          {buildingProps?.effects && (
-                            <div className="building-effects small mt-2">
-                              <strong>Effects:</strong>
-                              <ul className="mb-0 mt-1">
-                                {Object.entries(buildingProps.effects).map(([effect, value]) => (
-                                  <li key={effect}>
-                                    {effect.replace(/([A-Z])/g, ' $1').toLowerCase()}: {String(value)}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-muted">No buildings constructed yet</div>
-                )}
-              </div>
-            </Tab>
             <Tab eventKey="resources" title="Resources">
               <div className="city-resources-content">
                 {(() => {
@@ -479,6 +429,51 @@ const CityModal: React.FC<CityModalProps> = ({
                     </div>
                   );
                 })()}
+              </div>
+            </Tab>
+            <Tab eventKey="buildings" title="Buildings">
+              <div className="city-buildings-content">
+                {selectedCity.buildings && selectedCity.buildings.length > 0 ? (
+                  <div className="buildings-grid">
+                    {selectedCity.buildings.map((buildingKey: string, index: number) => {
+                      const buildingProps = BUILDING_PROPERTIES[buildingKey];
+                      return (
+                        <div key={index} className="building-card">
+                          <div className="building-card__header">
+                            {buildingProps?.icon && (
+                              <span className="building-icon">{buildingProps.icon}</span>
+                            )}
+                            <div className="building-card__body">
+                              <h6 className="building-name mb-1">{buildingProps?.name || buildingKey}</h6>
+                              <div className="building-details small">
+                                <span>Cost: {buildingProps?.cost || 0} shields</span>
+                                <span className="building-details-sep">•</span>
+                                <span>Maintenance: {buildingProps?.maintenance || 0} gold/turn</span>
+                              </div>
+                              {buildingProps?.description && (
+                                <div className="building-description small mt-2">{buildingProps.description}</div>
+                              )}
+                              {buildingProps?.effects && (
+                                <div className="building-effects small mt-2">
+                                  <strong>Effects:</strong>
+                                  <ul className="mb-0 mt-1">
+                                    {Object.entries(buildingProps.effects).map(([effect, value]) => (
+                                      <li key={effect}>
+                                        {effect.replace(/([A-Z])/g, ' $1').toLowerCase()}: {String(value)}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="city-buildings-empty">No buildings constructed yet</div>
+                )}
               </div>
             </Tab>
             <Tab eventKey="raw" title="Raw JSON">
