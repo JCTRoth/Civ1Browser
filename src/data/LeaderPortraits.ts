@@ -37,12 +37,14 @@ export interface LeaderPortraitConfig {
   sceneAccent: string;
 }
 
-/** Mood colors used to tint the portrait background based on diplomatic attitude */
+/** Mood colors used to tint the portrait background based on diplomatic attitude.
+ *  Aligned with the game's design-system palette — subtle translucent tints so
+ *  the diplomacy panel stays consistent with the rest of the dark UI. */
 export const MOOD_COLORS: Record<string, { bg: string; glow: string; border: string }> = {
-  friendly: { bg: '#1a2e1a', glow: '#4caf5033', border: '#4caf50' },
-  neutral:  { bg: '#1a1a2e', glow: '#9e9e9e22', border: '#8b7355' },
-  annoyed:  { bg: '#2e2a1a', glow: '#ff980033', border: '#ff9800' },
-  hostile:  { bg: '#2e1a1a', glow: '#f4433633', border: '#f44336' },
+  friendly: { bg: 'rgba(53, 196, 108, 0.07)', glow: 'rgba(53, 196, 108, 0.14)', border: 'rgba(53, 196, 108, 0.6)' },
+  neutral:  { bg: 'rgba(183, 195, 207, 0.05)', glow: 'rgba(183, 195, 207, 0.1)', border: 'rgba(183, 195, 207, 0.45)' },
+  annoyed:  { bg: 'rgba(242, 163, 60, 0.07)', glow: 'rgba(242, 163, 60, 0.14)', border: 'rgba(242, 163, 60, 0.6)' },
+  hostile:  { bg: 'rgba(239, 90, 110, 0.07)', glow: 'rgba(239, 90, 110, 0.14)', border: 'rgba(239, 90, 110, 0.6)' },
 };
 
 /** Per-leader portrait configuration keyed by leader name (matches GameData.ts) */

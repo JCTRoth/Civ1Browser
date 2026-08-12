@@ -71,17 +71,22 @@
   background-color: rgba(28, 30, 32, 0.95);
 }
 
-/* Mobile-only (below lg): city/production/hex-detail modals fill the viewport */
+/* Mobile-only (below lg): city/production/hex-detail modals fill the viewport.
+   NOTE: dialogClassName is applied ON the .modal-dialog element itself, so the
+   dialog-level selectors below are compound (no space). Compound selectors
+   also outrank Bootstrap's later `.modal-dialog { max-width: var(--bs-modal-width) }`,
+   so the sheet actually fills the screen instead of a 500px centered box. */
 @media (max-width: 991.98px) {
-  .city-details-modal .modal-dialog,
-  .production-selection-modal .modal-dialog,
-  .hex-detail-modal .modal-dialog {
+  .modal-dialog.city-details-modal,
+  .modal-dialog.production-selection-modal,
+  .modal-dialog.hex-detail-modal {
     max-height: 100dvh;
     display: flex;
     align-items: center;
     margin: 0;
+    width: 100%;
+    max-width: 100vw;
     height: 100%;
-    max-height: 100%;
   }
 
   .city-details-modal .modal-content,
@@ -112,8 +117,38 @@
 
 /* Desktop: give the hex detail modal a reasonable dialog width */
 @media (min-width: 992px) {
-  .hex-detail-modal .modal-dialog {
-    max-width: 560px;
+  .modal-dialog.hex-detail-modal {
+    max-width: min(560px, 92vw);
+  }
+}
+
+/* ============================================================================
+   Desktop — large city / production dialogs
+   The content-heavy city modal gets a wider dialog, and its body scrolls
+   internally so the header + tabs stay fixed (no clipped content, no
+   whole-modal scrolling).
+   ========================================================================== */
+@media (min-width: 992px) {
+  .modal-dialog.city-details-modal,
+  .modal-dialog.production-selection-modal {
+    max-width: min(900px, 92vw);
+  }
+
+  .city-details-modal .modal-content,
+  .production-selection-modal .modal-content {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - 3.5rem);
+    min-height: 0;
+  }
+
+  .city-details-modal .modal-body,
+  .production-selection-modal .modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
   }
 }
 
@@ -146,7 +181,12 @@
 
 .city-details-modal .form-check-label {
   font-size: var(--text-base, 1rem);
-  color: var(--color-text-secondary, #b8c4cf);
+  color: var(--bs-secondary-color, #b7c3cf); /* muted gray — matches the hint below */
+}
+
+.city-details-modal .form-check-label strong {
+  color: var(--bs-secondary-color, #b7c3cf);
+  font-weight: 600;
 }
 
 .production-selection-modal .table-responsive {
@@ -205,7 +245,7 @@
 
 .city-resources-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: 1.5rem;
   padding: 1rem 0;
 }

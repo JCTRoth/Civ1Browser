@@ -1647,7 +1647,6 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   // Render static content only when needed
   useEffect(() => {
     if (needsRender.current || hasGameStateChanged()) {
-      console.log('[GameCanvas] Rendering static content due to changes');
       renderStaticContent();
       needsRender.current = false;
     }
@@ -1756,6 +1755,46 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   useEffect(() => {
     triggerRender();
   }, [gameState.activePlayer, gameState.currentTurn, units.length, cities.length]);
+
+  // Keep the canvas in sync with its container: when the window is resized
+  // (desktop) or the layout changes, re-sync the backing store size and redraw
+  // so the map is never stretched/blurry or left stale. We call the latest
+  // render function directly (via a ref) so a plain CSS resize — which React
+  // state doesn't see — still redraws immediately. A lightweight interval
+  // covers environments where resize events / ResizeObserver are suppressed.
+  const renderStaticRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    renderStaticRef.current = renderStaticContent;
+  }, [renderStaticContent]);
+
+  useEffect(() => {
+    if (minimap) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    // Redraw only when the CSS size no longer matches the backing store.
+    const check = () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      if (c.width !== c.clientWidth || c.height !== c.clientHeight) {
+        renderStaticRef.current();
+      }
+    };
+
+    // Fast path: real browsers fire these on window/layout changes.
+    const ro = new ResizeObserver(check);
+    ro.observe(canvas);
+    window.addEventListener('resize', check);
+
+    // Reliable fallback (cheap: compares two integers twice a second).
+    const interval = window.setInterval(check, 500);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('resize', check);
+      ro.disconnect();
+    };
+  }, [minimap]);
 
 
   return (

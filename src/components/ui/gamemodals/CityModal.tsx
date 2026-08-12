@@ -482,7 +482,7 @@ const CityModal: React.FC<CityModalProps> = ({
               </div>
             </Tab>
             <Tab eventKey="raw" title="Raw JSON">
-              <pre>{JSON.stringify(selectedCity, null, 2)}</pre>
+              <pre className="city-raw-json">{JSON.stringify(selectedCity, null, 2)}</pre>
             </Tab>
           </Tabs>
         </Modal.Body>

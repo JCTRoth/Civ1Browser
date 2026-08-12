@@ -80,3 +80,103 @@
   font-size: 0.8rem;
   padding: 1px 0;
 }
+
+/* ============================================================================
+   City modal — Buildings tab
+   ========================================================================== */
+
+.city-buildings-content {
+  color: #f5f5f5;
+  padding: 0.5rem 0;
+}
+
+.buildings-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .buildings-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.building-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.building-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(240, 195, 60, 0.4);
+}
+
+.building-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: #ffd700;
+  flex-shrink: 0;
+}
+
+.building-name {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.building-details {
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.building-description {
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.building-effects {
+  color: #e6e6e6;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 0.5rem;
+}
+
+.building-effects strong {
+  color: #ffd700;
+}
+
+.building-effects ul {
+  padding-left: 1.25rem;
+  margin-top: 0.25rem;
+}
+
+/* ============================================================================
+   City modal — Raw JSON tab
+   Wrap long JSON lines so the user never has to scroll sideways. The block
+   scrolls vertically only, keeping the modal body scroll in sync.
+   ========================================================================== */
+
+.city-raw-json {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 55vh;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.875rem 1rem;
+  margin: 0.5rem 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #c6d2db;
+  font-family: var(--font-mono, 'Cascadia Mono', Consolas, monospace);
+}

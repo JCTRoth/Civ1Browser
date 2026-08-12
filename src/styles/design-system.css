@@ -113,6 +113,15 @@ body {
   overflow: hidden; /* game is a full-viewport app */
   overscroll-behavior: none; /* prevent pull-to-refresh / back-nav on mobile */
   touch-action: manipulation; /* remove 300ms tap delay & double-tap zoom */
+
+  /* ---- Bootstrap integration (dark theme) ----
+     Retune Bootstrap's secondary color so `.text-muted` / `.text-secondary`
+     and form hints stay legible on dark surfaces. Set on `body` (not `:root`)
+     because Bootstrap's own `:root` block may be bundled later — custom
+     properties inherit, so body's value wins for everything inside it. */
+  --bs-secondary-color: #b7c3cf;
+  --bs-secondary-color-rgb: 183, 195, 207;
+  --bs-secondary-rgb: 183, 195, 207;
 }
 
 /* Height: use dynamic viewport units on supporting browsers (mobile URL bars) */
@@ -473,13 +482,13 @@ body {
   text-transform: uppercase;
 }
 
-.text-muted {
-  color: var(--color-text-m) !important;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+/* ----------------------------------------------------------------------------
+   Muted text — restored to Bootstrap's semantics.
+   The previous global override forced every `.text-muted` element to be
+   white, uppercased and tiny, which broke labels all over the UI. We now let
+   Bootstrap style it, but retune the secondary color for the dark theme so
+   muted text stays legible (no forced case / size).
+   -------------------------------------------------------------------------- */
 
 /* ============================================================================
    Bottom action bar (mobile primary actions)
@@ -829,10 +838,16 @@ body {
   }
 
   /* ---- Modals: centered dialogs ---- */
+  /* Safety net: no dialog may ever force horizontal scrolling. More specific
+     per-modal max-widths (e.g. city modal) override this via the cascade. */
+  .modal-dialog {
+    max-width: calc(100vw - 2rem);
+  }
+
   .modal-dialog {
     margin: 1.75rem auto;
     width: auto;
-    max-width: 560px;
+    max-width: min(560px, 92vw);
     height: auto;
     max-height: calc(100dvh - 3.5rem);
   }
@@ -854,11 +869,20 @@ body {
     padding: var(--space-3) var(--space-4);
   }
 
-  /* Larger dialogs get a sensible max-width */
-  .modal-dialog.modal-lg { max-width: 760px; }
-  .modal-dialog.modal-xl { max-width: 960px; }
+  /* Larger dialogs get a sensible max-width (capped to viewport) */
+  .modal-dialog.modal-lg { max-width: min(760px, 92vw); }
+  .modal-dialog.modal-xl { max-width: min(960px, 92vw); }
   .settings-modal.modal-dialog,
-  .modal-dialog.settings-modal { max-width: 680px; }
+  .modal-dialog.settings-modal { max-width: min(680px, 92vw); }
+
+  /* Content-heavy game dialogs (city view, production picker) are wider than
+     the default dialogs. The dialogClassName lands on the .modal-dialog
+     element itself, hence the compound selectors. NOTE: city & production
+     modals also carry the .hex-detail-modal class, so the city rule must come
+     AFTER the hex-detail rule to win the cascade. */
+  .modal-dialog.hex-detail-modal { max-width: min(560px, 92vw); }
+  .modal-dialog.city-details-modal,
+  .modal-dialog.production-selection-modal { max-width: min(900px, 92vw); }
 
   /* Modal footers: desktop-style right-aligned row */
   .settings-modal .modal-footer,
