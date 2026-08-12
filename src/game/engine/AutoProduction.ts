@@ -17,6 +17,9 @@ import { canBuildUnit, type StrategyProfile, type AIState, createDefaultAIState 
 import { AIBuildingStrategy } from './AIBuildingStrategy';
 import type { City } from '../../../types/game';
 
+/** How many follow-up items auto-production keeps lined up in a city's queue. */
+const AUTO_QUEUE_TARGET = 3;
+
 export class AutoProduction {
   private gameEngine: any;
 
@@ -45,12 +48,14 @@ export class AutoProduction {
           this.gameEngine.removeCurrentProduction(city.id);
         } else {
           console.log('[AutoProduction] City already has production:', city.currentProduction);
+          // Keep the current item and top up the queue with sensible follow-ups.
+          this.ensureProductionQueue(city.id);
           return true;
         }
       }
 
       // Determine what the city should produce based on its state
-      const productionItem = this.determineProductionItem(city, threatAssessment);
+      const productionItem = this.determineProductionItem(city, threatAssessment, []);
       
       if (productionItem) {
         console.log('[AutoProduction] Setting production item:', productionItem);
@@ -58,6 +63,7 @@ export class AutoProduction {
         // Use ProductionManager to set production
         if (this.gameEngine.productionManager) {
           const result = this.gameEngine.productionManager.setCityProduction(cityId, productionItem, false);
+          this.ensureProductionQueue(city.id);
           return result.success || false;
         }
       }
@@ -70,9 +76,48 @@ export class AutoProduction {
   }
 
   /**
+   * Top up the city's production queue with follow-ups chosen by the same
+   * strategy used for the current production item. Keeps the queue from
+   * appearing empty while auto-production is enabled.
+   */
+  ensureProductionQueue(cityId: string): void {
+    try {
+      const city = this.gameEngine.cities.find((c: any) => c.id === cityId);
+      if (!city || !(city as any).autoProduction) return;
+      if (!this.gameEngine.productionManager) return;
+
+      const threatAssessment = this.evaluateCityThreat(city);
+      const existingQueue: any[] = Array.isArray(city.buildQueue) ? city.buildQueue.slice() : [];
+      const plannedTypes: string[] = existingQueue
+        .map((q: any) => q.itemType || q.type)
+        .filter((t: string) => !!t);
+
+      const slots = AUTO_QUEUE_TARGET - existingQueue.length;
+      if (slots <= 0) return;
+
+      let added = 0;
+      let guard = 0;
+      while (added < slots && guard++ < 10) {
+        const item = this.determineProductionItem(city, threatAssessment, plannedTypes);
+        if (!item) break;
+        const itemType = item.itemType || item.type;
+        if (!itemType) break;
+
+        const result = this.gameEngine.productionManager.setCityProduction(cityId, item, true);
+        if (!result || result.success === false) break;
+
+        plannedTypes.push(itemType);
+        added++;
+      }
+    } catch (e) {
+      console.error('[AutoProduction] ensureProductionQueue error', e);
+    }
+  }
+
+  /**
    * Determine what production item a city should build
    */
-  private determineProductionItem(city: any, threatAssessment?: CityThreatAssessment | null): any | null {
+  private determineProductionItem(city: any, threatAssessment?: CityThreatAssessment | null, plannedTypes: string[] = []): any | null {
     // Priority order:
     // 1. Urgent defender if city has none
     // 2. Emergency reinforcements for threatened cities
@@ -94,7 +139,12 @@ export class AutoProduction {
       (u: any) => u.col === city.col && u.row === city.row && u.civilizationId === city.civilizationId
     );
     
-    const hasDefender = unitsInCity.some((u: any) => {
+    // A queued unit with defense also counts toward the garrison.
+    const plannedHasDefender = plannedTypes.some((t: string) => {
+      const unitProps = UNIT_PROPS[t];
+      return unitProps && (unitProps.defense || 0) > 0;
+    });
+    const hasDefender = plannedHasDefender || unitsInCity.some((u: any) => {
       const unitProps = UNIT_PROPS[u.type];
       return unitProps && unitProps.defense > 0;
     });
@@ -116,7 +166,11 @@ export class AutoProduction {
     const buildingPlans = civ
       ? AIBuildingStrategy.evaluateBuildings(city, civ, strategy, gameState)
       : [];
-    const buildingPlan = buildingPlans.length > 0 ? buildingPlans[0] : null;
+    // Never queue the same building twice.
+    const availableBuildingPlans = buildingPlans.filter(
+      (p: any) => !plannedTypes.includes(p.buildingType)
+    );
+    const buildingPlan = availableBuildingPlans.length > 0 ? availableBuildingPlans[0] : null;
 
     const civCities = this.gameEngine.cities.filter((c: any) => c.civilizationId === city.civilizationId);
     const numMilitary = this.gameEngine.units.filter(
@@ -148,7 +202,8 @@ export class AutoProduction {
     // 4b. Maintain a scout corps for map exploration (1–3 scouts depending on
     //     total troop count). Exploration ranks below defense (steps 1–2) and
     //     offensive reinforcement (step 4) but above settlers/buildings/wonders.
-    if (this.needsScout(city.civilizationId) && city.population >= 2) {
+    const plannedScouts = plannedTypes.filter((t: string) => t === 'scout').length;
+    if (this.needsScout(city.civilizationId, plannedScouts) && city.population >= 2) {
       const scoutProps = UNIT_PROPS.scout;
       console.log(`[AutoProduction] Building scout for map exploration (${this.countTotalTroops(city.civilizationId)} troops)`);
       return {
@@ -163,9 +218,10 @@ export class AutoProduction {
     //    Cadence: 1 settler per city until 4 cities, with a second settler
     //    allowed while still under 3 cities so expansion doesn't stall.
     if (civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
+      const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
       const settlerCount = this.gameEngine.units.filter(
         (u: any) => u.civilizationId === city.civilizationId && u.type === 'settler'
-      ).length;
+      ).length + plannedSettlers;
       const maxSettlers = civCities.length < 3 ? 2 : 1;
 
       if (settlerCount < maxSettlers) {
@@ -197,7 +253,7 @@ export class AutoProduction {
     if (!threatAssessment?.needsDefense && civ) {
       const wonderPlans = AIBuildingStrategy.evaluateWonders(city, civ, strategy, gameState);
       const wonderPlan = wonderPlans.length > 0 ? wonderPlans[0] : null;
-      if (wonderPlan) {
+      if (wonderPlan && !plannedTypes.includes(wonderPlan.buildingType)) {
         const wProps = WONDER_PROPERTIES[wonderPlan.buildingType];
         if (wProps) {
           console.log(`[AutoProduction] Wonder strategy chose: ${wonderPlan.buildingType} (priority: ${wonderPlan.priority})`);
@@ -215,10 +271,13 @@ export class AutoProduction {
     //    Balance the army: if the civ has an offensive plan (needs attackers)
     //    or its offense is weaker than its defense, build an attacker;
     //    otherwise keep the garrison topped up with a defender.
-    const offensiveUnits = this.countOffensiveUnits(city.civilizationId);
+    // Count already-queued units so the queue balances attackers/defenders.
+    const plannedOffensive = plannedTypes.filter((t: string) => this.isOffensiveUnitType(t)).length;
+    const plannedDefensive = plannedTypes.filter((t: string) => this.isDefensiveUnitType(t)).length;
+    const offensiveUnits = this.countOffensiveUnits(city.civilizationId) + plannedOffensive;
     const defenders = this.gameEngine.units.filter(
       (u: any) => u.civilizationId === city.civilizationId && this.isDefensiveUnitType(u.type)
-    ).length;
+    ).length + plannedDefensive;
     const needsAttackers = offensiveUnits < defenders || this.shouldSupportOffensivePlan(city);
 
     console.log(`[AutoProduction] Building default military unit (offense: ${offensiveUnits}, defense: ${defenders})`);
@@ -345,10 +404,10 @@ export class AutoProduction {
   }
 
   /** Whether the civilization should build another scout to reach its target. */
-  private needsScout(civilizationId: number): boolean {
+  private needsScout(civilizationId: number, plannedScouts: number = 0): boolean {
     const scoutCount = this.gameEngine.units.filter(
       (u: any) => u.civilizationId === civilizationId && u.type === 'scout'
-    ).length;
+    ).length + plannedScouts;
     return scoutCount < this.getDesiredScoutCount(civilizationId);
   }
 

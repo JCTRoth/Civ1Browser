@@ -112,7 +112,7 @@ const CityModal: React.FC<CityModalProps> = ({
                     <div className="mt-3">
                       <h6>Current Production</h6>
                       {selectedCity.currentProduction ? (
-                        <div className="bg-secondary text-white p-2 rounded d-flex justify-content-between align-items-start">
+                        <div className="text-white p-2 rounded d-flex justify-content-between align-items-start">
                           <div className="flex-grow-1">
                             <strong>{logic.getCurrentProductionName()}</strong>
                             <div className="small text-muted">
@@ -244,7 +244,7 @@ const CityModal: React.FC<CityModalProps> = ({
                       <div className="queue-box bg-dark border border-secondary rounded p-2" style={{maxHeight: '220px', overflowY: 'auto'}}>
                         {logic.hasQueueItems() ? (
                           logic.getQueueItems().map((q: any, i: number) => (
-                            <div key={i} className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'bg-secondary text-white' : 'text-white'}`} onClick={() => setSelectedQueueIndex(i)}>
+                            <div key={i} className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'text-white' : 'text-white'}`} onClick={() => setSelectedQueueIndex(i)}>
                               <div className="d-flex justify-content-between">
                                 <div><strong>{q.name}</strong></div>
                                 <div>{q.cost} shields</div>

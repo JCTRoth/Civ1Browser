@@ -1799,6 +1799,11 @@ export default class GameEngine {
     };
 
     this.cities.push(city);
+
+    // Auto-production: line up follow-ups so the queue isn't empty right away.
+    if (this.autoProduction && city.autoProduction) {
+      this.autoProduction.ensureProductionQueue(city.id);
+    }
     
     // Consume the settler's movement (founding a city costs one turn)
     settler.movesRemaining = 0;

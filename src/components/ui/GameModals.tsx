@@ -1313,7 +1313,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         <div className="mb-3">
           <h6>Current Production</h6>
           {currentProductionItem ? (
-            <div className="bg-secondary text-white p-2 rounded">
+            <div className="text-white p-2 rounded">
               <strong>{currentProductionName}</strong>
               <div className="small text-muted">
                 {currentProductionCost > 0
@@ -1391,7 +1391,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
                 return (
                   <div
                     key={i}
-                    className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'bg-secondary text-white' : 'text-white'}`}
+                    className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'text-white' : 'text-white'}`}
                     style={{cursor: 'pointer'}}
                     onClick={() => setSelectedQueueIndex(i)}
                   >
