@@ -126,6 +126,7 @@ export interface City {
   buildings?: any[];
   shields?: number;
   productionQueue?: any[];
+  autoProduction?: boolean; // When true, the engine auto-selects production for this city
   output?: any;
   processTurn?: (gameMap: any, turn: number) => void;
 }

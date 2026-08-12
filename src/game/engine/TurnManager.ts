@@ -344,7 +344,10 @@ export class TurnManager {
     console.log(`[TurnManager] City production phase for civ ${civilizationId}`);
     try {
       const civ = this.gameEngine.civilizations?.[civilizationId];
-      if (civ?.isAI && this.gameEngine.autoProduction) {
+      // Auto Production applies to human cities too. processAutoProduction
+      // internally only touches cities with autoProduction enabled, so cities
+      // where the player turned it off are left alone.
+      if (civ && this.gameEngine.autoProduction) {
         this.gameEngine.autoProduction.processAutoProductionForCivilization(civilizationId);
       }
       this.emit('CITY_PRODUCTION_PHASE', { civilizationId });

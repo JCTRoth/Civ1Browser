@@ -1174,6 +1174,7 @@ export default class GameEngine {
       shields: 0, // Production shields
       currentProduction: 'warrior', // Start building a settler
       productionQueue: [],
+      autoProduction: true, // Auto Production is selected by default for every new city
       buildings: [],
       wonders: [],
       workingTiles: [], // Tiles being worked by citizens
@@ -1794,7 +1795,7 @@ export default class GameEngine {
         ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
         : this.pickInitialAIProduction(civId), // AI: scout for first city, defender otherwise
       buildQueue: [], // Empty: the Warrior is already the current production, never also queue it
-      autoProduction: civ.isAI || civ.isHuman === false // Enable auto-production for AI cities by default
+      autoProduction: true // Auto Production is selected by default for every new city
     };
 
     this.cities.push(city);
