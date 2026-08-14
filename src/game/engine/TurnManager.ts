@@ -22,6 +22,7 @@ export enum TurnPhase {
 
 import { AIResearch } from './AIResearch';
 import { createDefaultAIState } from './AITypes';
+import { serializeCities } from '../../utils/CitySnapshots';
 
 export class TurnManager {
   private gameEngine: any;
@@ -148,7 +149,15 @@ export class TurnManager {
     const yearDisplay = this.formatYear(currentYear);
     
     console.log(`[TurnManager] Starting turn for civ ${civilizationId} | Round: ${this.roundNumber} | Year: ${yearDisplay}`);
-    this.emit('TURN_START', { civilizationId, roundNumber: this.roundNumber });
+    this.emit('TURN_START', {
+      civilizationId,
+      roundNumber: this.roundNumber,
+      // Full city JSONs of the active player so the game log regularly
+      // contains the complete per-player city state.
+      cities: serializeCities(
+        this.gameEngine?.getAllCities?.()?.filter((c) => c?.civilizationId === civilizationId) ?? [],
+      ),
+    });
 
     const civ = this.gameEngine.civilizations?.[civilizationId];
     if (civ?.isAI) {
@@ -400,8 +409,15 @@ export class TurnManager {
   private finalizeEndPhase(civilizationId: number) {
     console.log(`[TurnManager] Finalizing end phase for civ ${civilizationId}`);
     
-    // Emit event for UI to clear highlights and selection
-    this.emit('TURN_END', { civilizationId, roundNumber: this.roundNumber });
+    // Emit event for UI to clear highlights and selection; include the active
+    // player's full city JSONs so the game log carries them on every turn end.
+    this.emit('TURN_END', {
+      civilizationId,
+      roundNumber: this.roundNumber,
+      cities: serializeCities(
+        this.gameEngine?.getAllCities?.()?.filter((c) => c?.civilizationId === civilizationId) ?? [],
+      ),
+    });
     
     // Now advance to the next player's turn
     this.advanceTurn();

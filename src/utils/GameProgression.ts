@@ -14,39 +14,9 @@
 import { gameLogger } from './GameLogger';
 import { GameUtils } from './GameUtils';
 import { DomUtils } from './DomUtils';
+import { serializeCity } from './CitySnapshots';
+import type { CitySnapshot } from './CitySnapshots';
 import type { GameEngine } from '../../types/game';
-
-/**
- * JSON-safe snapshot of a city, stripped of any function/method references so
- * the exported progression file only contains serializable city data.
- */
-export interface CitySnapshot {
-  id: string;
-  name: string;
-  civilizationId: number;
-  col: number;
-  row: number;
-  population: number;
-  production: number;
-  food: number;
-  gold: number;
-  science: number;
-  productionProgress?: number;
-  buildQueue?: unknown[];
-  currentProduction?: unknown;
-  carriedOverProgress?: number;
-  isCapital?: boolean;
-  yields?: { food: number; production: number; trade: number };
-  foodStored?: number;
-  foodNeeded?: number;
-  foodRequired?: number;
-  productionStored?: number;
-  buildings?: unknown[];
-  shields?: number;
-  productionQueue?: unknown[];
-  autoProduction?: boolean;
-  output?: unknown;
-}
 
 export interface ProgressionCivSnapshot {
   id: string;
@@ -219,7 +189,7 @@ class GameProgression {
         gold: civ?.gold ?? 0,
         science: civ?.science ?? 0,
         cities: civCities.length,
-        cityData: civCities.map((c) => this.serializeCity(c)),
+        cityData: civCities.map((c) => serializeCity(c)),
         units: civUnits,
         technologies: techList.length,
         techList,
@@ -236,41 +206,6 @@ class GameProgression {
       year,
       yearLabel: GameUtils.formatYear(year),
       civs,
-    };
-  }
-
-  /**
-   * Convert a live City object into a plain JSON-safe snapshot. Any method
-   * references (e.g. `processTurn`) are intentionally dropped.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private serializeCity(city: any): CitySnapshot {
-    return {
-      id: String(city?.id ?? ''),
-      name: city?.name ?? '',
-      civilizationId: city?.civilizationId ?? 0,
-      col: city?.col ?? 0,
-      row: city?.row ?? 0,
-      population: city?.population ?? 0,
-      production: city?.production ?? 0,
-      food: city?.food ?? 0,
-      gold: city?.gold ?? 0,
-      science: city?.science ?? 0,
-      productionProgress: city?.productionProgress,
-      buildQueue: city?.buildQueue ? [...city.buildQueue] : undefined,
-      currentProduction: city?.currentProduction ?? undefined,
-      carriedOverProgress: city?.carriedOverProgress,
-      isCapital: city?.isCapital,
-      yields: city?.yields ? { ...city.yields } : undefined,
-      foodStored: city?.foodStored,
-      foodNeeded: city?.foodNeeded,
-      foodRequired: city?.foodRequired,
-      productionStored: city?.productionStored,
-      buildings: city?.buildings ? [...city.buildings] : undefined,
-      shields: city?.shields,
-      productionQueue: city?.productionQueue ? [...city.productionQueue] : undefined,
-      autoProduction: city?.autoProduction,
-      output: city?.output,
     };
   }
 }

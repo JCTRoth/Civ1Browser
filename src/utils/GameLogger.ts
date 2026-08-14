@@ -6,7 +6,15 @@
  * It is a singleton so the engine hook, AI and UI can all share one buffer.
  * If the dev server is unreachable the lines are kept in memory and can be
  * exported via downloadLog().
+ *
+ * City state: city-related events (founding, capture, destruction, production,
+ * building/unit completion, …) carry the full JSON-safe city snapshot under
+ * `detail.city`, and every TURN_START / TURN_END carries the active player's
+ * complete city JSONs under `detail.cities` — so the log regularly contains
+ * the full city state of every player.
  */
+
+import { serializeCity, isCityEvent, isTurnBoundaryEvent } from './CitySnapshots';
 
 interface GameLogEntry {
   ts: string; // ISO timestamp
@@ -75,7 +83,18 @@ class GameLogger {
   record(event: string, data: any = {}): void {
     const message = this.formatMessage(event, data);
     if (message) {
-      this.log(event, message, { data: this.sanitize(data) });
+      const detail: Record<string, unknown> = { data: this.sanitize(data) };
+      // Attach the full JSON-safe city snapshot on city-related events so the
+      // log regularly contains the complete city state, not just a summary.
+      if (isCityEvent(event) && data?.city) {
+        detail.city = serializeCity(data.city);
+      }
+      // Turn boundaries carry the active player's full city JSONs (attached by
+      // the TurnManager), giving a regular per-player city snapshot in the log.
+      if (isTurnBoundaryEvent(event) && Array.isArray(data?.cities)) {
+        detail.cities = data.cities;
+      }
+      this.log(event, message, detail);
     }
   }
 

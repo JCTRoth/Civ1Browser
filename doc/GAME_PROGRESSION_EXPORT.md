@@ -73,6 +73,38 @@ post-game analysis and AI improvement.
     }
   ],
   "log": [
+    {
+      "ts": "...",
+      "round": 1,
+      "player": 0,
+      "event": "TURN_START",
+      "message": "▶ Turn start — civ 0 (round 1)",
+      "detail": {
+        "data": { "civilizationId": 0, "roundNumber": 1, "cities": "[array:1]" },
+        "cities": [
+          {
+            "id": "city-3",
+            "name": "Berlin",
+            "civilizationId": 0,
+            "col": 12,
+            "row": 8,
+            "population": 1,
+            "production": 0,
+            "food": 0,
+            "gold": 0,
+            "science": 0,
+            "productionProgress": 0.25,
+            "currentProduction": "warrior",
+            "isCapital": true,
+            "foodStored": 0,
+            "foodNeeded": 2,
+            "productionStored": 0,
+            "buildings": [],
+            "autoProduction": false
+          }
+        ]
+      }
+    },
     { "ts": "...", "round": 1, "player": 0, "event": "UNIT_MOVED", "message": "...", "detail": { } }
   ]
 }
@@ -106,6 +138,10 @@ post-game analysis and AI improvement.
   track individual city growth (population, buildings, production queue, food
   storage) turn by turn — not just counts.
 - `log` is the raw event stream with timestamps for deep-dive debugging.
+  City-related entries carry the full JSON-safe city snapshot under
+  `detail.city`, and every `TURN_START` / `TURN_END` carries the active
+  player's complete city JSONs under `detail.cities` — so the log regularly
+  contains the full city state of every player.
 
 ## Notes
 
