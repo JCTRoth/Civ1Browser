@@ -232,6 +232,51 @@ test.describe('Top Menu', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Rates (Tax / Science / Luxury)
+// ---------------------------------------------------------------------------
+
+test.describe('Rates', () => {
+  test('opens the rates modal from GAME menu and keeps the sum at 100%', async ({ page }) => {
+    await startGame(page);
+
+    await openTopMenu(page, 'GAME');
+    await page.getByRole('button', { name: /Rates/ }).click();
+
+    const modal = page.locator('.rates-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText('Rates');
+    await expect(modal.locator('.rates-summary')).toContainText('Total');
+
+    // The three sliders are present.
+    await expect(page.getByLabel('Tax rate')).toBeVisible();
+    await expect(page.getByLabel('Science rate')).toBeVisible();
+    await expect(page.getByLabel('Luxury rate')).toBeVisible();
+
+    // Initially the sum must read 100%.
+    await expect(modal.locator('.rates-summary')).toContainText('100%');
+
+    // Moving one slider actually changes its value AND keeps the total at 100%.
+    await page.getByLabel('Science rate').fill('80');
+    await expect(modal.locator('.rates-control__value').nth(1)).toHaveText('80%');
+    await expect(modal.locator('.rates-summary')).toContainText('100%');
+
+    await page.getByLabel('Tax rate').fill('0');
+    await expect(modal.locator('.rates-control__value').nth(0)).toHaveText('0%');
+    await expect(modal.locator('.rates-summary')).toContainText('100%');
+
+    // Apply closes the modal.
+    await page.getByRole('button', { name: 'Apply Rates' }).click();
+    await expect(modal).not.toBeVisible();
+  });
+
+  test('T key opens the rates modal', async ({ page }) => {
+    await startGame(page);
+    await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 't', code: 'KeyT', bubbles: true })));
+    await expect(page.locator('.rates-modal')).toBeVisible();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Keyboard Shortcuts
 // ---------------------------------------------------------------------------
 
@@ -559,8 +604,12 @@ test.describe('AI Behavior', () => {
       const sidePanel = page.locator('.side-panel-shell').first();
       await expect(sidePanel).toBeVisible();
 
-      // Should display gold, units, and cities info
+      // Gold is always shown in the panel header.
       await expect(sidePanel.getByText(/🪙/).first()).toBeVisible();
+
+      // The starter settler is auto-selected, so deselect it to reveal the
+      // Player Summary with per-resource breakdown.
+      await page.keyboard.press('Escape');
       await expect(sidePanel.getByText(/Units:/).first()).toBeVisible();
       await expect(sidePanel.getByText(/Cities:/).first()).toBeVisible();
     });
@@ -574,6 +623,9 @@ test.describe('AI Behavior', () => {
 
       // Advance several turns
       await advanceTurns(page, 3);
+
+      // Deselect any auto-focused unit so the Player Summary is revealed.
+      await page.keyboard.press('Escape');
 
       // The side panel content should have changed (at minimum the turn display)
       // We just verify it's still functional and showing data
@@ -769,7 +821,9 @@ test.describe('AI Behavior', () => {
       await openSidePanel(page);
 
       const sidePanel = page.locator('.side-panel-shell').first();
-      // In "No Selection" state, shows Units and Cities counts
+      // The starter settler is auto-selected; deselect to reach the
+      // "No Selection" Player Summary with Units and Cities counts.
+      await page.keyboard.press('Escape');
       await expect(sidePanel.getByText(/Units:/).first()).toBeVisible();
       await expect(sidePanel.getByText(/Cities:/).first()).toBeVisible();
     });

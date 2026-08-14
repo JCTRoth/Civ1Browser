@@ -162,11 +162,31 @@
 
 .gold-div {
   margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .gold-strong {
   color: #7fe0a0;
   font-size: 15px;
+}
+
+.rates-shortcut {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--color-border, #2c3b49);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--color-text, #e8eef3);
+  font-size: 13px;
+  line-height: 1;
+  padding: 3px 6px;
+  cursor: pointer;
+  min-height: var(--touch-min, 26px);
+}
+
+.rates-shortcut:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--color-accent, #f0c33c);
 }
 
 .selected-title {

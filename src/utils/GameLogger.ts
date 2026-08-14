@@ -140,6 +140,12 @@ class GameLogger {
         return `💥💥💥 City destroyed 💥💥💥: ${data.city?.name} (was civ ${data.city?.civilizationId})`;
       case 'CITY_ATTACKED':
         return `💥 City attacked: ${data.city?.name} by ${data.attacker?.type}`;
+      case 'CITY_DISORDER':
+        return `🚨 City in disorder: ${data.city?.name} (production & growth halted)`;
+      case 'UNIT_DISBANDED':
+        return `✝ Unit disbanded (upkeep deficit): ${data.unit?.type}(${data.unit?.id})`;
+      case 'RATES_CHANGED':
+        return `📊 Rates — civ ${data.civilizationId}: Tax ${data.taxRate ?? 0}% / Science ${data.scienceRate ?? 0}% / Luxury ${data.luxuryRate ?? 0}%`;
       case 'DIPLOMACY_EVENT':
         return `🤝 Diplomacy: ${data.type ?? ''} civ ${data.civilizationId}`;
       case 'AI_FINISHED':

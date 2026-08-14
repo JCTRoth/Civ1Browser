@@ -63,10 +63,10 @@ export const CityUtils = {
         // Calculate trade and its distribution
         const totalTrade = city.yields?.trade ?? 0;
 
-        // For now, use simple 50/50/0 split (can be enhanced with actual trade rates later)
-        const luxuryRate = 50; // percentage
-        const taxRate = 0;     // percentage
-        const scienceRate = 50; // percentage
+        // Use the civ's actual Tax/Science/Luxury rates (fallback 50/50/0).
+        const luxuryRate = currentPlayer?.luxuryRate ?? 0;      // percentage
+        const taxRate = currentPlayer?.taxRate ?? 50;           // percentage
+        const scienceRate = currentPlayer?.scienceRate ?? 50;   // percentage
 
         // Calculate corruption based on distance from capital and government
         const corruption = CityUtils.calculateCorruption(city, currentPlayer, totalTrade);

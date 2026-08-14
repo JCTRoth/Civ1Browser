@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { CIVILIZATIONS } from '@/data/GameData';
 import { TILE_SIZE } from '@/data/TerrainData';
@@ -8,21 +8,46 @@ import '../../styles/sidePanel.css';
 import type { GameEngine, City, Civilization } from '../../../types/game';
 
 // New side panel matching the provided mockup image
+//
+// NOTE: the store's `currentPlayer` / `playerResources` / `playerUnits` /
+// `selectedUnit` getters are frozen to their initial values by zustand's state
+// merge, so this component derives them LIVE from the raw store fields instead
+// (inline selectors + useMemo). See GameStore.ts for details.
 const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine }) => {
-  const currentPlayer = useGameStore((s) => s.currentPlayer);
+  const currentPlayer = useGameStore(
+    (s) => s.civilizations[s.gameState.activePlayer] || null,
+  );
   const civilizations = useGameStore((s) => s.civilizations);
-  const playerUnits = useGameStore((s) => s.playerUnits);
-  const playerCities = useGameStore((s) => s.playerCities);
-  const selectedUnit = useGameStore((s) => s.selectedUnit);
-  const selectedCityId: string | null = useGameStore((s) => s.gameState.selectedCity);
-  const cities = useGameStore((s) => s.cities);
   const units = useGameStore((s) => s.units);
-  const playerResources = useGameStore((s) => s.playerResources);
+  const cities = useGameStore((s) => s.cities);
+  const selectedUnit = useGameStore(
+    (s) => s.units.find((u) => u.id === s.gameState.selectedUnit) || null,
+  );
+  const selectedCityId: string | null = useGameStore((s) => s.gameState.selectedCity);
   const uiState = useGameStore((s) => s.uiState);
   const actions = useGameStore((s) => s.actions);
   const selectedHex = useGameStore((s) => s.gameState.selectedHex);
   const map = useGameStore((s) => s.map);
   const settings = useGameStore((s) => s.settings);
+
+  const playerUnits = useMemo(
+    () => (currentPlayer ? units.filter((u) => u.civilizationId === currentPlayer.id) : []),
+    [currentPlayer, units],
+  );
+  const playerCities = useMemo(
+    () => (currentPlayer ? cities.filter((c) => c.civilizationId === currentPlayer.id) : []),
+    [currentPlayer, cities],
+  );
+  const playerResources = useMemo(() => {
+    const res = currentPlayer?.resources;
+    return {
+      food: res?.food ?? 0,
+      production: res?.production ?? 0,
+      trade: res?.trade ?? 0,
+      science: res?.science ?? 0,
+      gold: res?.gold ?? 0,
+    };
+  }, [currentPlayer]);
 
   const selectedCity = cities.find(c => c.id === selectedCityId);
 
@@ -154,6 +179,15 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
               <div className="side-panel-small-muted player-leader">{(displayPlayer as { civilizationName?: string })?.civilizationName || displayPlayer.leader || 'Unknown Civilization'}</div>
               <div className="gold-div">
                 <strong className="gold-strong">{(playerResources.gold ?? 0)} 🪙</strong>
+                <button
+                  type="button"
+                  className="rates-shortcut"
+                  onClick={() => actions.showDialog('rates')}
+                  title="Tax / Science / Luxury rates (T)"
+                  aria-label="Open rates"
+                >
+                  📊
+                </button>
               </div>
               <label className="settings-checkbox-label" style={{ marginTop: '8px', fontSize: '0.85rem' }}>
                 <input

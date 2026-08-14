@@ -27,6 +27,10 @@ export interface ProgressionCivSnapshot {
   alive: boolean;
   gold: number;
   science: number;
+  taxRate: number;
+  scienceRate: number;
+  luxuryRate: number;
+  government: string;
   cities: number;
   /** Full per-player city JSONs (one entry per city owned by this civ). */
   cityData: CitySnapshot[];
@@ -188,6 +192,10 @@ class GameProgression {
         alive: civ?.alive !== false,
         gold: civ?.gold ?? 0,
         science: civ?.science ?? 0,
+        taxRate: civ?.taxRate ?? 0,
+        scienceRate: civ?.scienceRate ?? 50,
+        luxuryRate: civ?.luxuryRate ?? 50,
+        government: civ?.government ?? 'despotism',
         cities: civCities.length,
         cityData: civCities.map((c) => serializeCity(c)),
         units: civUnits,

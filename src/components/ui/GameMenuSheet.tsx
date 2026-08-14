@@ -11,6 +11,7 @@ interface GameMenuSheetProps {
   onLoadGame: () => void;
   onPause: () => void;
   onOpenSettings: () => void;
+  onOpenRates: () => void;
   onQuit: () => void;
   onDownloadMap: () => void;
   onDownloadProgression: () => void;
@@ -51,6 +52,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
   onLoadGame,
   onPause,
   onOpenSettings,
+  onOpenRates,
   onQuit,
   onDownloadMap,
   onDownloadProgression,
@@ -91,7 +93,8 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
             <MenuItem icon="⏸️" label="Pause" onClick={onPause} />
             <MenuItem icon="📁" label="Load Game" onClick={onLoadGame} />
             <MenuItem icon="⚙️" label="Settings" onClick={onOpenSettings} />
-            <MenuItem icon="🚪" label="Quit" onClick={onQuit} danger />
+            <MenuItem icon="�" label="Rates" onClick={onOpenRates} />
+            <MenuItem icon="�🚪" label="Quit" onClick={onQuit} danger />
           </>
         )}
 

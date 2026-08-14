@@ -561,16 +561,43 @@ export class TurnManager {
 
     // Process cities for the active player
     const playerCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === playerId) || [];
-    
+    const civ = this.gameEngine.civilizations[playerId];
+
+    // Compute per-city economic outputs + happiness FIRST so disorder is known
+    // before production/growth is applied.
     playerCities.forEach((city: any) => {
-      this.processCityProduction(city);
-      this.processCityGrowth(city);
+      this.gameEngine.economicManager?.applyCityOutputs(city, civ);
     });
 
-    // Process civilization resources and research
-    const civ = this.gameEngine.civilizations[playerId];
+    playerCities.forEach((city: any) => {
+      const inDisorder = city.disorder === true;
+      // Emit CITY_DISORDER only on transitions (enter/leave) to avoid spamming.
+      if (inDisorder !== (city.disorderLastTurn === true)) {
+        if (this.gameEngine.onStateChange) {
+          this.gameEngine.onStateChange('CITY_DISORDER', { city, civilizationId: playerId });
+        }
+      }
+      city.disorderLastTurn = inDisorder;
+
+      if (inDisorder) {
+        // Disorder halts growth (stability) but NOT production — otherwise a
+        // low-commerce economy (trade ~0) would deadlock forever. Commerce is
+        // already lost to unrest in EconomicManager.applyCityOutputs.
+        console.log(`[TurnManager] City ${city.name} is in disorder — growth halted`);
+      } else {
+        this.processCityGrowth(city);
+      }
+      this.processCityProduction(city);
+    });
+
+    // Process civilization resources (rate-based income + upkeep) and research
     if (civ) {
-      this.processCivilizationResources(civ);
+      const econResult = this.processCivilizationResources(civ);
+      if (econResult && (econResult.upkeep > 0 || econResult.disbanded > 0)) {
+        this.gameEngine.log('economy',
+          `Upkeep −${econResult.upkeep} gold (deficit ${econResult.deficit}, ${econResult.disbanded} unit(s) disbanded)`,
+          { upkeep: econResult.upkeep, deficit: econResult.deficit, disbanded: econResult.disbanded, civilizationId: playerId });
+      }
       this.processCivilizationResearch(civ);
     }
 
@@ -711,15 +738,18 @@ export class TurnManager {
     }
   }
 
-  private processCivilizationResources(civ: any): void {
+  private processCivilizationResources(civ: any): any {
     try {
-      if (civ.resources && this.gameEngine.calculateCivScience && this.gameEngine.calculateCivGold) {
-        civ.resources.science += this.gameEngine.calculateCivScience(civ.id);
-        civ.resources.gold += this.gameEngine.calculateCivGold(civ.id);
+      if (civ?.resources && this.gameEngine.economicManager) {
+        // Rate-based income (tax/science/luxury split) + upkeep + deficit
+        // handling. Also resets per-turn resource accumulators, which fixes
+        // the research compounding bug (science is now the per-turn amount).
+        return this.gameEngine.economicManager.processTurn(civ);
       }
     } catch (e) {
       console.warn('[TurnManager] Error processing civilization resources', e);
     }
+    return null;
   }
 
   private processCivilizationResearch(civ: any): void {

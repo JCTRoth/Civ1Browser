@@ -105,6 +105,14 @@ export interface City {
   food: number;
   gold: number;
   science: number;
+  // Per-turn economic outputs derived from the civ's Tax/Science/Luxury rates
+  tax?: number;      // gold to treasury from this city's commerce
+  luxury?: number;   // commerce spent on happiness
+  // Happiness points (luxury + building effects). The legacy `foundCity` path
+  // used an object form { happy, content, unhappy } — kept for compatibility.
+  happiness?: number | { happy: number; content: number; unhappy: number };
+  unhappiness?: number; // unhappiness points (population-based)
+  disorder?: boolean;   // true when unhappiness > happiness (halts production/growth)
   // Current production progress (0..1 or absolute depending on implementation)
   productionProgress?: number;
   // Queue of production items (units/buildings)
@@ -144,6 +152,11 @@ export interface Civilization {
     science: number;
     gold: number;
   };
+  // Economic rates (percentages; taxRate + scienceRate + luxuryRate must equal 100)
+  taxRate?: number;
+  scienceRate?: number;
+  luxuryRate?: number;
+  government?: string;
   leader?: string;
   leaderName?: string;
   cityNames?: string[];
@@ -164,7 +177,7 @@ export interface UIState {
   showTechTree: boolean;
   showDiplomacy: boolean;
   showGameMenu: boolean;
-  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | null;
+  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | null;
   sidebarCollapsed: boolean;
   notifications: Notification[];
   goToMode: boolean; // When true, next click will set destination for selected unit
@@ -303,6 +316,7 @@ export interface GameEngine {
   isInitialized: boolean;
   map: any; // TODO: type properly
   units: Unit[];
+  cities: City[];
   civilizations: Civilization[];
   technologies: Technology[];
   onStateChange: ((eventType: string, eventData: any) => void) | null;
@@ -316,6 +330,12 @@ export interface GameEngine {
   foundCity(col: number, row: number, civilizationId: number, customName?: string | null): any;
   foundCityWithSettler(settlerId: string): boolean;
   setResearch(civId: number, techId: string): void;
+  /** Set Tax/Science/Luxury rates (sum always 100). */
+  setRates(civId: number, tax: number, science: number, luxury: number): void;
+  /** Switch a civilization's government and re-apply rate caps/anarchy rules. */
+  setGovernment(civId: number, government: string): void;
+  calculateCivScience(civId: number): number;
+  calculateCivGold(civId: number): number;
   unitSleep(unitId: string): void;
   unitWake(unitId: string): void;
   unitFortify(unitId: string): void;

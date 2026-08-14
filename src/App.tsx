@@ -765,8 +765,8 @@ function App() {
             break;
           case 't':
           case 'T':
-            // Open tax/science/luxury slider
-            setShowSettings(true);
+            // Open tax/science/luxury rate sliders
+            actions.showDialog('rates');
             break;
           case 'Escape':
             // Cancel action or close menus
@@ -955,6 +955,10 @@ function App() {
         onPause={handlePause}
         onOpenSettings={() => {
           setShowSettings(true);
+          setActiveMenu(null);
+        }}
+        onOpenRates={() => {
+          actions.showDialog('rates');
           setActiveMenu(null);
         }}
         onQuit={handleQuit}

@@ -13,6 +13,7 @@ import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
+import { EconomicManager } from './EconomicManager';
 import type { GameActions, Unit, City, Civilization } from '../../../types/game';
 
 interface GameSettings {
@@ -76,6 +77,7 @@ export default class GameEngine {
   onStateChange: ((eventType: string, eventData?: any) => void) | null;
   productionManager: ProductionManager;
   autoProduction: AutoProduction;
+  economicManager: EconomicManager;
   playerStorage: Map<number, PlayerTurnStorage>; // Per-player persistent storage
   devMode: boolean; // Developer mode flag
   roundManager: TurnManager; // kept property name for compatibility
@@ -126,6 +128,7 @@ export default class GameEngine {
     this.onStateChange = null;
     this.productionManager = new ProductionManager(this);
     this.autoProduction = new AutoProduction(this);
+    this.economicManager = new EconomicManager(this);
     this.roundManager = new TurnManager(this);
     this.goToManager = new GoToManager(this, this.roundManager);
     this.playerStorage = new Map();
@@ -804,8 +807,8 @@ export default class GameEngine {
         currentResearch: null,
         researchProgress: 0,
         scienceRate: 50,
-        taxRate: 0,
-        luxuryRate: 50,
+        taxRate: 50,
+        luxuryRate: 0,
         government: 'despotism',
         score: 0
       };
@@ -1979,19 +1982,31 @@ export default class GameEngine {
   }
 
   /**
-   * Calculate civilization's science output
+   * Calculate civilization's science output (rate-based via EconomicManager).
    */
   calculateCivScience(civId) {
-    const cities = this.cities.filter(c => c.civilizationId === civId);
-    return cities.reduce((total, city) => total + (city.yields.trade * 0.5), 0);
+    return this.economicManager?.civScience(civId) ?? 0;
   }
 
   /**
-   * Calculate civilization's gold output  
+   * Calculate civilization's gold output (rate-based via EconomicManager).
    */
   calculateCivGold(civId) {
-    const cities = this.cities.filter(c => c.civilizationId === civId);
-    return cities.reduce((total, city) => total + (city.yields.trade * 0.5), 0);
+    return this.economicManager?.civGold(civId) ?? 0;
+  }
+
+  /**
+   * Set the Tax/Science/Luxury rates for a civilization (sum always 100).
+   */
+  setRates(civId, tax, science, luxury) {
+    this.economicManager?.setRates(civId, tax, science, luxury);
+  }
+
+  /**
+   * Switch a civilization's government and re-apply rate caps/anarchy rules.
+   */
+  setGovernment(civId, government) {
+    this.economicManager?.setGovernment(civId, government);
   }
 
   /**

@@ -1,0 +1,152 @@
+/* Tax/Science/Luxury Rates modal — mirrors the settings modal design tokens. */
+
+.rates-modal {
+  --rates-accent: var(--color-accent, #f0c33c);
+  --rates-border: var(--color-border, #2c3b49);
+  --rates-text: var(--color-text, #e8eef3);
+  --rates-muted: var(--color-text-muted, #9fb0bd);
+  --rates-bg: var(--color-bg-overlay, #1d2935);
+}
+
+.rates-modal__header {
+  background: var(--color-bg-elevated, #16202a);
+  color: var(--rates-text);
+  border-bottom: 1px solid var(--rates-border);
+}
+
+.rates-modal__title {
+  color: var(--rates-text);
+  font-weight: 600;
+}
+
+.rates-modal__body {
+  background: var(--rates-bg);
+  color: var(--rates-text);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rates-modal__footer {
+  background: #0000000a;
+  border-top: 1px solid var(--rates-border);
+}
+
+.rates-government {
+  font-size: 0.9rem;
+  color: var(--rates-muted);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--rates-border);
+  border-radius: var(--radius-md, 10px);
+}
+
+.rates-government strong {
+  color: var(--rates-text);
+}
+
+.rates-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--rates-border);
+  border-radius: var(--radius-md, 10px);
+}
+
+.rates-control__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rates-control__label {
+  margin: 0;
+  font-weight: 600;
+  color: var(--rates-text);
+}
+
+.rates-control__value {
+  color: var(--rates-accent);
+  font-family: var(--font-mono, monospace);
+}
+
+.rates-control__range {
+  width: 100%;
+  height: 28px;
+  accent-color: var(--rates-accent);
+  cursor: pointer;
+}
+
+.rates-control__hint {
+  color: var(--rates-muted);
+  font-size: 0.8rem;
+}
+
+.rates-warning {
+  margin-bottom: 0;
+  font-size: 0.85rem;
+}
+
+.rates-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--rates-border);
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.9rem;
+}
+
+.rates-summary strong {
+  color: var(--rates-accent);
+  font-family: var(--font-mono, monospace);
+}
+
+.rates-summary__ok strong {
+  color: #6fce7c;
+}
+
+.rates-summary__bad strong {
+  color: #e0625a;
+}
+
+.rates-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--rates-border);
+  border-radius: var(--radius-md, 10px);
+  font-size: 0.9rem;
+}
+
+.rates-preview__title {
+  font-weight: 600;
+  color: var(--rates-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+}
+
+.rates-preview__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.rates-preview__row strong {
+  color: var(--rates-accent);
+  font-family: var(--font-mono, monospace);
+}
+
+.rates-preview__hint {
+  color: var(--rates-muted);
+  font-size: 0.8rem;
+  font-style: italic;
+  margin-top: 4px;
+}

@@ -37,6 +37,10 @@ post-game analysis and AI improvement.
           "alive": true,
           "gold": 50,
           "science": 0,
+          "taxRate": 50,
+          "scienceRate": 50,
+          "luxuryRate": 0,
+          "government": "despotism",
           "cities": 1,
           "cityData": [
             {
@@ -142,6 +146,11 @@ post-game analysis and AI improvement.
   `detail.city`, and every `TURN_START` / `TURN_END` carries the active
   player's complete city JSONs under `detail.cities` — so the log regularly
   contains the full city state of every player.
+- Economy events: `RATES_CHANGED` (Tax/Science/Luxury changes), `CITY_DISORDER`
+  (city enters/leaves disorder), `UNIT_DISBANDED` (upkeep bankruptcy), and
+  `economy` log lines (per-turn upkeep/deficit/disbanded totals). Each civ
+  snapshot also carries `taxRate` / `scienceRate` / `luxuryRate` / `government`
+  so you can correlate rate choices with research and gold over time.
 
 ## Notes
 
