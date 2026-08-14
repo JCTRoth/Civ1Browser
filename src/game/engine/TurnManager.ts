@@ -29,6 +29,7 @@ export class TurnManager {
   private unitPaths: Map<string, Array<{ col: number; row: number }>>;
   private AI_MAX_TURN_MS = 30000; // timeout for AI movement phase
   private isProcessingGoToPaths = false; // Prevents auto-end while GoTo is executing
+  private aiTurnInProgress = false; // Prevents auto-end / re-entrant phase advances while the AI turn is running
 
   private currentPlayer: number | null = null;
   private currentPhase: TurnPhase | null = null;
@@ -46,6 +47,7 @@ export class TurnManager {
   getCurrentPlayer(): number | null { return this.currentPlayer; }
   getRoundNumber(): number { return this.roundNumber; }
   isProcessingGoTo(): boolean { return this.isProcessingGoToPaths; }
+  isAITurnInProgress(): boolean { return this.aiTurnInProgress; }
 
   // --- Event helper ---
   private emit(eventType: string, data: any = {}) {
@@ -326,9 +328,15 @@ export class TurnManager {
       this.nextPhase();
       return;
     }
+    // Flag that an AI turn is in flight so checkAndEndTurnIfNoMoves cannot
+    // re-entrantly advance the phase chain while the AI is still processing
+    // (that used to start the NEXT player's turn mid-AI-turn, leaving a stale
+    // AI turn running on the wrong player which froze all unit movement).
+    this.aiTurnInProgress = true;
     const promise = this.gameEngine.processAITurn(civilizationId);
     if (!promise || typeof promise.then !== 'function') {
       console.warn('[TurnManager] AI processAITurn not promise-based; skipping to production');
+      this.aiTurnInProgress = false;
       this.nextPhase(); // CITY_PRODUCTION
       return;
     }
@@ -343,6 +351,17 @@ export class TurnManager {
     promise.then(() => {
       if (finished) return;
       finished = true; clearTimeout(timeoutHandle);
+      // Only advance phases and clear the in-progress flag if we are STILL on
+      // this civ's turn. A stale AI turn resolving after the turn moved on
+      // (e.g. force-ended or advanced by another path) must NOT advance the
+      // CURRENT player's phases — that would skip the current AI's unit
+      // movement entirely — and must NOT clear the flag of the turn that is
+      // actually running now.
+      if (this.currentPlayer !== civilizationId) {
+        console.warn(`[TurnManager] Stale AI turn for civ ${civilizationId} resolved on civ ${this.currentPlayer}'s turn — not advancing phases`);
+        return;
+      }
+      this.aiTurnInProgress = false;
       // After AI movement, move to next phase
       this.nextPhase(); // CITY_PRODUCTION
       this.nextPhase(); // RESEARCH
@@ -351,7 +370,12 @@ export class TurnManager {
       if (finished) return;
       finished = true; clearTimeout(timeoutHandle);
       console.error('[TurnManager] AI movement error:', err);
-      this.forceEndAITurn(civilizationId, 'error');
+      if (this.currentPlayer === civilizationId) {
+        this.forceEndAITurn(civilizationId, 'error');
+      } else {
+        // Stale turn errored on another player's turn — leave their state alone.
+        console.warn(`[TurnManager] Stale AI turn for civ ${civilizationId} errored on civ ${this.currentPlayer}'s turn`);
+      }
     });
   }
 
@@ -912,6 +936,7 @@ export class TurnManager {
 
   // --- Forced end for AI (timeout/error) ---
   private forceEndAITurn(civilizationId: number, reason: 'timeout' | 'error') {
+    this.aiTurnInProgress = false;
     this.gameEngine.units.filter((u: any) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0)
       .forEach((u: any) => {
         u.movesRemaining = 0;

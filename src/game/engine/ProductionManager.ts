@@ -1,6 +1,10 @@
 /**
  * Production Manager - Handles city production, purchasing, and queuing
  */
+
+import { UNIT_PROPERTIES } from '@/data/UnitConstants';
+import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
+
 export class ProductionManager {
   private gameEngine: any;
 
@@ -8,8 +12,63 @@ export class ProductionManager {
     this.gameEngine = gameEngine;
   }
 
+  /**
+   * Tech-gating: return false when the city's owner hasn't researched the
+   * technology required to build/produce the item. Enforced on EVERY
+   * production path (UI modal, purchase, auto-production, queueing) so an
+   * item requiring an unresearched tech can never be produced.
+   */
+  private canBuildItem(cityId: string, item: any): { ok: boolean; reason?: string } {
+    try {
+      const city = this.gameEngine.cities?.find((c: any) => c.id === cityId)
+        || (this.gameEngine.map && typeof this.gameEngine.map.getCity === 'function' && this.gameEngine.map.getCity(cityId))
+        || null;
+      if (!city) return { ok: true }; // City not found — don't block in validation
+      const civ = this.gameEngine.civilizations?.[city.civilizationId];
+      const techs = new Set<string>();
+      if (Array.isArray(civ?.technologies)) {
+        for (const t of civ.technologies) techs.add(String(t));
+      } else if (civ?.technologies instanceof Set) {
+        for (const t of civ.technologies) techs.add(String(t));
+      }
+
+      const itemType = item?.itemType ?? item?.type ?? (typeof item === 'string' ? item : null);
+      if (!itemType) return { ok: true };
+
+      // Units: required tech lives on the unit definition (`requires`).
+      const unitProps = UNIT_PROPERTIES[itemType];
+      if (unitProps) {
+        const req = unitProps.requires ?? null;
+        if (req && !techs.has(req)) {
+          return { ok: false, reason: `requires_tech_${req}` };
+        }
+      }
+
+      // Buildings: required tech lives on the building definition.
+      const buildingProps = BUILDING_PROPERTIES[itemType];
+      if (buildingProps) {
+        const req = buildingProps.requiredTechnology ?? null;
+        if (req && !techs.has(req)) {
+          return { ok: false, reason: `requires_tech_${req}` };
+        }
+      }
+
+      return { ok: true };
+    } catch (e) {
+      console.warn('[ProductionManager] canBuildItem validation error', e);
+      return { ok: true };
+    }
+  }
+
   setCityProduction(cityId: string, item: any, queue: boolean = false) {
     console.log('[ProductionManager] setCityProduction called', { cityId, item, queue });
+
+    // Enforce tech requirements before anything is queued or set.
+    const gate = this.canBuildItem(cityId, item);
+    if (!gate.ok) {
+      console.warn(`[ProductionManager] Rejected production ${item?.name ?? item?.itemType ?? item}: ${gate.reason}`);
+      return { success: false, reason: gate.reason };
+    }
     // Try city manager if available
     try {
       if ((this.gameEngine as any).map && (this.gameEngine as any).map.getCity) {
@@ -92,6 +151,13 @@ export class ProductionManager {
       console.log('[ProductionManager] purchaseCityProduction called', { cityId, item, civId });
       const city = this.gameEngine.cities.find(c => c.id === cityId) || ((this.gameEngine as any).map && (this.gameEngine as any).map.getCity(cityId));
       if (!city) return { success: false, reason: 'city_not_found' };
+
+      // Purchasing must respect tech requirements too.
+      const gate = this.canBuildItem(cityId, item);
+      if (!gate.ok) {
+        console.warn(`[ProductionManager] Rejected purchase ${item?.name ?? item?.itemType ?? item}: ${gate.reason}`);
+        return { success: false, reason: gate.reason };
+      }
 
       // Check if city has already purchased something this turn
       if ((city as any).purchasedThisTurn && (city as any).purchasedThisTurn.length > 0) {

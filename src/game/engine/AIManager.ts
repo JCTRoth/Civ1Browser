@@ -27,6 +27,15 @@ import {
 } from './AIStrategy';
 import type { Unit, City } from '../../../types/game';
 
+// How much better (in settlement-score points) the best location must be for a
+// settler to keep walking instead of founding at its current tile. Prevents
+// settlers from chasing the 10x10 window maximum forever — as the settler
+// moves, the window re-centers and the "best" spot keeps moving ahead.
+const SETTLE_SCORE_THRESHOLD = 12;
+// If the best settlement location is farther than this Chebyshev distance,
+// found at the current tile instead of walking across the map.
+const MAX_SETTLE_WALK_DISTANCE = 4;
+
 export class AIManager {
   private gameEngine: any;
 
@@ -85,6 +94,20 @@ export class AIManager {
 
     // Small delay before AI starts so player can observe
     await this.gameEngine.sleep(250);
+
+    // The turn may have moved on during the delay (another path advanced the
+    // phase chain). If we're no longer the active player, stop immediately —
+    // continuing would process THIS civ's units on the WRONG player's turn
+    // (turn-overlap), and the stale completion would advance the new player's
+    // phases prematurely.
+    if (this.gameEngine.activePlayer !== civilizationId) {
+      console.warn(`[AI] runAITurn: Turn changed during AI start delay (expected: ${civilizationId}, actual: ${this.gameEngine.activePlayer}) — aborting stale AI turn`);
+      return;
+    }
+    if (this.gameEngine.isPaused) {
+      console.warn(`[AI] runAITurn: Game paused during AI start delay — aborting AI turn for civ ${civilizationId}`);
+      return;
+    }
 
     // ─── Phase 0: Initialize / retrieve AI state ───────────────────────
     const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
@@ -236,6 +259,27 @@ export class AIManager {
           break;
         }
 
+        // Highlight chosen target
+        this.highlightAITarget(target.col, target.row);
+
+        // Special handling for settlers: found city when at target location.
+        // MUST run before the generic "already at target" skip below — that
+        // block (identical condition) used to shadow this one, turning a
+        // settler that reached its spot into a skipped, never-founding unit.
+        if (unit.type === 'settler' && unit.col === target.col && unit.row === target.row) {
+          console.log(`[AI-SETTLER] Settler ${unit.id} has reached settlement location (${target.col}, ${target.row}), founding city`);
+          this.gameEngine.log('ai', `Settler settles — ${civ.name} founds city at (${target.col},${target.row})`);
+          const result = this.gameEngine.foundCityWithSettler(unit.id);
+          if (result) {
+            console.log(`[AI-SETTLER] City founded successfully`);
+            break; // Settler consumed, end this unit's processing
+          } else {
+            console.log(`[AI-SETTLER] Failed to found city, skipping settler`);
+            this.gameEngine.skipUnit(unit.id);
+            break;
+          }
+        }
+
         // Target is the unit's own tile — it's already where it wants to be
         // (e.g. a scout garrisoning a threatened city via findScoutDefenseTarget).
         // Trying to "move" there makes the AI loop pathfind-to-self forever and
@@ -245,22 +289,6 @@ export class AIManager {
           this.gameEngine.log('ai', `Already at target — ${civ.name} ${unit.type}(${unit.id}) holds (${target.col},${target.row})`);
           this.gameEngine.skipUnit(unit.id);
           break;
-        }
-
-        // Highlight chosen target
-        this.highlightAITarget(target.col, target.row);
-
-        // Special handling for settlers: found city when at target location
-        if (unit.type === 'settler' && unit.col === target.col && unit.row === target.row) {
-          console.log(`[AI-SETTLER] Settler ${unit.id} has reached settlement location (${target.col}, ${target.row}), founding city`);
-          this.gameEngine.log('ai', `Settler settles — ${civ.name} founds city at (${target.col},${target.row})`);
-          const result = this.gameEngine.foundCityWithSettler(unit.id);
-          if (result) {
-            console.log(`[AI-SETTLER] City founded successfully`);
-            break; // Settler consumed, end this unit's processing
-          } else {
-            console.log(`[AI-SETTLER] Failed to found city, continuing movement`);
-          }
         }
 
         // If target is adjacent, try to move or attack
@@ -773,6 +801,41 @@ export class AIManager {
       console.log(`[AI-SETTLER] Score: ${bestLocation.score}, Yields:`, bestLocation.yields);
       console.log(`[AI-SETTLER] Water access: ${bestLocation.hasWaterAccess}`);
 
+      // ── "Good enough" settling ────────────────────────────────────────────
+      // The 10x10 search re-centers on the settler every turn, so the best
+      // tile keeps moving ahead as the settler walks toward it — the old code
+      // chased that moving maximum forever and only founded via the 3-visit
+      // oscillation breaker (cities appeared after 100+ rounds, if at all).
+      // Instead: found at the current tile unless the best location is clearly
+      // better AND close enough to bother walking to.
+      if (currentPosValid) {
+        const currentScore = SettlementEvaluator.scoreLocation(
+          unit.col,
+          unit.row,
+          (col, row) => this.gameEngine.getTileAt(col, row),
+          (col, row) => this.gameEngine.getCityAt(col, row),
+          (col, row) => this.gameEngine.getUnitAt(col, row),
+          weights,
+          unit.civilizationId,
+          unit.col,
+          unit.row
+        );
+        const bestDist = Math.max(
+          Math.abs(bestLocation.col - unit.col),
+          Math.abs(bestLocation.row - unit.row)
+        );
+        const bestClearlyBetter = currentScore !== null &&
+          bestLocation.score - currentScore > SETTLE_SCORE_THRESHOLD;
+        const bestIsFar = bestDist > MAX_SETTLE_WALK_DISTANCE;
+
+        if (currentScore !== null && (!bestClearlyBetter || bestIsFar)) {
+          console.log(`[AI-SETTLER] 🏙 Current tile good enough (current=${currentScore.toFixed(1)}, best=${bestLocation.score.toFixed(1)}, bestDist=${bestDist}) — founding city here`);
+          this.gameEngine.foundCityWithSettler(unit.id);
+          return null;
+        }
+        console.log(`[AI-SETTLER] Best location clearly better (current=${currentScore?.toFixed(1)}, best=${bestLocation.score.toFixed(1)}, bestDist=${bestDist}) — walking there`);
+      }
+
       // If we have a pathfinding grid available, precompute and store a path
       try {
         if (this.gameEngine.squareGrid && this.gameEngine.roundManager) {
@@ -800,6 +863,16 @@ export class AIManager {
       (unit as any)._lastSettlementTarget = { col: bestLocation.col, row: bestLocation.row };
 
       return bestLocation;
+    }
+
+    // No suitable location found in the window — if the settler is standing on
+    // a valid tile (the window search can fail due to the reachability check,
+    // e.g. findPath to the settler's own tile returning empty), just found the
+    // city here instead of wandering forever.
+    if (currentPosValid) {
+      console.log(`[AI-SETTLER] No better location found, founding city at current tile (${unit.col}, ${unit.row})`);
+      this.gameEngine.foundCityWithSettler(unit.id);
+      return null;
     }
 
     console.log(`[AI-SETTLER] No suitable settlement location found`);

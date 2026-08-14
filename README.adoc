@@ -450,6 +450,7 @@ cd Civ1Browser
 [source,bash]
 ----
 npm install
+npx playwright install chromium
 ----
 
 3. **Start development server**:

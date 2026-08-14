@@ -60,6 +60,14 @@ export class AutoProduction {
         if (threatAssessment?.needsDefense && !this.isDefensiveProduction(city.currentProduction)) {
           console.log('[AutoProduction] City under threat, overriding existing production');
           this.gameEngine.removeCurrentProduction(city.id);
+        } else if (
+          city.currentProduction.type === 'building' &&
+          (city.buildings ?? []).includes(city.currentProduction.itemType)
+        ) {
+          // Never keep producing a building the city already owns (the queue
+          // item can outlive the building it produced). Re-pick a fresh item.
+          console.log('[AutoProduction] City already has', city.currentProduction.itemType, '- re-picking production');
+          this.gameEngine.removeCurrentProduction(city.id);
         } else {
           console.log('[AutoProduction] City already has production:', city.currentProduction);
           // Keep the current item and top up the queue with sensible follow-ups.
@@ -218,7 +226,43 @@ export class AutoProduction {
       return this.buildDefenderProduction(city, threatAssessment);
     }
 
-    // 3. Evaluate buildings via AIBuildingStrategy
+    const civCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === city.civilizationId);
+    const econ = this.gameEngine?.economicManager;
+
+    // Happiness emergency: a city at (or near) disorder burns its whole
+    // commerce on luxury — starving science and the treasury. Such a city
+    // fixes its happiness first; a healthy city expands instead.
+    let needsHappiness = false;
+    if (civ && econ) {
+      const happyState = econ.cityHappiness(city, civ);
+      needsHappiness = happyState.disorder || happyState.unhappiness >= happyState.happiness;
+    }
+
+    // 3. Settler expansion FIRST (right after defense) so the civ actually
+    //    grows. Previously buildings (and the happiness-emergency path) ran
+    //    before this branch, so a civ with 1 city queued forge/colosseum/
+    //    factory/… forever and never produced a second settler.
+    //    Cadence: 1 settler per city until 4 cities, with a second settler
+    //    allowed while still under 3 cities so expansion doesn't stall.
+    if (!needsHappiness && civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
+      const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
+      const settlerCount = this.gameEngine.units.filter(
+        (u: Unit) => u.civilizationId === city.civilizationId && u.type === 'settler'
+      ).length + plannedSettlers;
+      const maxSettlers = civCities.length < 3 ? 2 : 1;
+
+      if (settlerCount < maxSettlers) {
+        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s), building another (max ${maxSettlers})`);
+        return {
+          type: 'unit',
+          itemType: 'settler',
+          name: UNIT_PROPS.settler?.name || 'Settler',
+          cost: UNIT_PROPS.settler?.cost || 40
+        };
+      }
+    }
+
+    // 4. Evaluate buildings via AIBuildingStrategy
     const gameState = this.buildGameState(city.civilizationId);
     gameState.isUnderThreat = !!threatAssessment?.needsDefense;
     const buildingPlans = civ
@@ -229,35 +273,28 @@ export class AutoProduction {
       (p: BuildingPlan) => !plannedTypes.includes(p.buildingType)
     );
 
-    // 3b. Happiness emergency: a city at (or near) disorder burns its whole
-    //     commerce on luxury — starving science and the treasury. Build a
-    //     happiness building (temple/colosseum/cathedral) BEFORE general
-    //     buildings so large cities stay content with less luxury.
-    const econ = this.gameEngine?.economicManager;
-    if (civ && econ) {
-      const happyState = econ.cityHappiness(city, civ);
-      if (happyState.disorder || happyState.unhappiness >= happyState.happiness) {
-        const happyPlan = availableBuildingPlans.find(
-          (p: BuildingPlan) => (BUILDING_PROPERTIES[p.buildingType]?.effects?.happiness ?? 0) > 0
-        );
-        if (happyPlan) {
-          const bProps = BUILDING_PROPS[happyPlan.buildingType] || BUILDING_PROPERTIES[happyPlan.buildingType];
-          if (bProps) {
-            console.log(`[AutoProduction] Happiness emergency: building ${happyPlan.buildingType} (unhappiness ${happyState.unhappiness} ≥ happiness ${happyState.happiness})`);
-            return {
-              type: 'building',
-              itemType: happyPlan.buildingType,
-              name: bProps.name,
-              cost: bProps.cost
-            };
-          }
+    // 4b. Happiness emergency: build a happiness building (temple/colosseum/
+    //     cathedral) BEFORE general buildings so large cities stay content
+    //     with less luxury.
+    if (needsHappiness) {
+      const happyPlan = availableBuildingPlans.find(
+        (p: BuildingPlan) => (BUILDING_PROPERTIES[p.buildingType]?.effects?.happiness ?? 0) > 0
+      );
+      if (happyPlan) {
+        const bProps = BUILDING_PROPS[happyPlan.buildingType] || BUILDING_PROPERTIES[happyPlan.buildingType];
+        if (bProps) {
+          console.log(`[AutoProduction] Happiness emergency: building ${happyPlan.buildingType} (unhappiness ≥ happiness)`);
+          return {
+            type: 'building',
+            itemType: happyPlan.buildingType,
+            name: bProps.name,
+            cost: bProps.cost
+          };
         }
       }
     }
 
     const buildingPlan = availableBuildingPlans.length > 0 ? availableBuildingPlans[0] : null;
-
-    const civCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === city.civilizationId);
     const numMilitary = this.gameEngine.units.filter(
       (u: Unit) => u.civilizationId === city.civilizationId && this.isOffensiveUnitType(u.type)
     ).length;
@@ -278,15 +315,15 @@ export class AutoProduction {
       }
     }
 
-    // 4. Support offensive plan
+    // 5. Support offensive plan
     if (this.shouldSupportOffensivePlan(city)) {
       console.log('[AutoProduction] Supporting offensive plan with new attacker');
       return this.buildOffensiveProduction(city);
     }
 
-    // 4b. Maintain a scout corps for map exploration (1–3 scouts depending on
+    // 5b. Maintain a scout corps for map exploration (1–3 scouts depending on
     //     total troop count). Exploration ranks below defense (steps 1–2) and
-    //     offensive reinforcement (step 4) but above settlers/buildings/wonders.
+    //     offensive reinforcement (step 5) but above buildings/wonders.
     const plannedScouts = plannedTypes.filter((t: string) => t === 'scout').length;
     if (this.needsScout(city.civilizationId, plannedScouts) && city.population >= 2) {
       const scoutProps = UNIT_PROPS.scout;
@@ -297,27 +334,6 @@ export class AutoProduction {
         name: scoutProps?.name || 'Scout',
         cost: scoutProps?.cost || 15
       };
-    }
-
-    // 5. Build settlers if civilization has few cities
-    //    Cadence: 1 settler per city until 4 cities, with a second settler
-    //    allowed while still under 3 cities so expansion doesn't stall.
-    if (civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
-      const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
-      const settlerCount = this.gameEngine.units.filter(
-        (u: Unit) => u.civilizationId === city.civilizationId && u.type === 'settler'
-      ).length + plannedSettlers;
-      const maxSettlers = civCities.length < 3 ? 2 : 1;
-
-      if (settlerCount < maxSettlers) {
-        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s), building another (max ${maxSettlers})`);
-        return {
-          type: 'unit',
-          itemType: 'settler',
-          name: UNIT_PROPS.settler?.name || 'Settler',
-          cost: UNIT_PROPS.settler?.cost || 40
-        };
-      }
     }
 
     // 5b. Build the building even if not "high-priority"

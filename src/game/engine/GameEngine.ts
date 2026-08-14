@@ -1,6 +1,7 @@
 import { SquareGrid } from '../HexGrid';
 import { Constants, TERRAIN_PROPS, UNIT_PROPS } from '@/utils/Constants';
 import { CIVILIZATIONS, TECHNOLOGIES } from '@/data/GameData';
+import { TECHNOLOGIES_DATA } from '@/data/TechnologyData';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_REQUIREMENTS } from '@/data/TileImprovementConstants';
 import { ProductionManager } from './ProductionManager';
 import { AutoProduction } from './AutoProduction';
@@ -1124,9 +1125,32 @@ export default class GameEngine {
         console.log(`[TECH] Civilization ${civ.name} received ${allTechs.length} technologies`);
       }
     }
-    // Standard starting technologies are already set in createCivilizations
-    
-    console.log('Technology tree initialized');
+
+    // Build the full researchable technology tree (deep-cloned from the data
+    // table). This is REQUIRED for setResearch(): previously the tree stayed
+    // empty for non-TECH_LEVEL_10 maps, so setResearch() could never find a
+    // tech, civ.currentResearch stayed null, and the AI re-selected the same
+    // tech every turn without ever completing it.
+    this.technologies = TECHNOLOGIES_DATA.map((t) => ({
+      ...t,
+      researched: false,
+      researching: false,
+      // Root techs (no prerequisites) are immediately researchable.
+      available: t.available === true || (t.prerequisites?.length ?? 0) === 0,
+    }));
+
+    // Mark each civ's starting technologies as researched on the shared tree.
+    for (const civ of this.civilizations) {
+      for (const techId of civ.technologies ?? []) {
+        const tech = this.technologies.find((t) => t.id === String(techId));
+        if (tech) tech.researched = true;
+      }
+    }
+
+    // Unlock any techs whose prerequisites are already met (across all civs).
+    this.updateTechnologyAvailability();
+
+    console.log(`Technology tree initialized (${this.technologies.length} techs)`);
   }
 
   /**
@@ -1916,6 +1940,15 @@ export default class GameEngine {
       return;
     }
     
+    // Don't trigger auto-end while an AI turn is being processed — the AI's own
+    // completion (runAIUnitMovementPhase) advances the phases. Auto-ending here
+    // would start the NEXT player's turn mid-AI-turn, leaving a stale AI turn
+    // running on the wrong player that freezes all unit movement.
+    if (this.roundManager?.isAITurnInProgress?.()) {
+      console.log('[TURN] ⏸️ Skipping auto-end check - AI turn in progress');
+      return;
+    }
+    
     const currentCiv = this.civilizations[this.activePlayer];
     if (!currentCiv) {
       console.warn('[TURN] No civilization found for active player', this.activePlayer);
@@ -2087,14 +2120,20 @@ export default class GameEngine {
    * Update technology availability based on prerequisites
    */
   updateTechnologyAvailability() {
-    const currentCiv = this.civilizations[this.activePlayer];
-    if (!currentCiv) return;
+    // Collect the union of all civilizations' researched techs so availability
+    // unlocks correctly regardless of whose turn it is (the tree is shared
+    // across civs and AI turns rotate).
+    const researched = new Set<string>();
+    for (const civ of this.civilizations) {
+      for (const techId of civ.technologies ?? []) {
+        researched.add(String(techId));
+      }
+    }
 
     this.technologies.forEach(tech => {
       if (!tech.researched && !tech.available) {
-        const hasPrereqs = tech.prerequisites.every(prereq => 
-          currentCiv.technologies.includes(prereq)
-        );
+        const prereqs = tech.prerequisites ?? [];
+        const hasPrereqs = prereqs.length === 0 || prereqs.every(prereq => researched.has(prereq));
         if (hasPrereqs) {
           tech.available = true;
         }

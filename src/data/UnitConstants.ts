@@ -100,6 +100,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🗡️',
+        requires: 'bronze_working',
         type: 'military'
     },
     [UNIT_TYPES.CHARIOT]: {
@@ -114,6 +115,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '𓌝',
+        requires: 'the_wheel',
         type: 'military'
     },
     [UNIT_TYPES.KNIGHTS]: {
@@ -128,6 +130,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🏇',
+        requires: 'horseback_riding',
         type: 'military'
     },
     [UNIT_TYPES.LEGION]: {
@@ -142,6 +145,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '⚔️',
+        requires: 'iron_working',
         type: 'military'
     },
     [UNIT_TYPES.CATAPULT]: {
@@ -156,6 +160,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🪨',
+        requires: 'mathematics',
         type: 'siege'
     },
     [UNIT_TYPES.MUSKETEER]: {
@@ -170,6 +175,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '💂',
+        requires: 'gunpowder',
         type: 'military'
     },
     [UNIT_TYPES.RIFLEMEN]: {
@@ -184,6 +190,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🪖',
+        requires: 'gunpowder',
         type: 'military'
     },
     [UNIT_TYPES.CAVALRY]: {
@@ -198,6 +205,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🐎',
+        requires: 'horseback_riding',
         type: 'military'
     },
     [UNIT_TYPES.MECH_INF]: {
@@ -212,6 +220,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🚐',
+        requires: 'combustion',
         type: 'military'
     },
     [UNIT_TYPES.CANNON]: {
@@ -226,6 +235,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '💣',
+        requires: 'metallurgy',
         type: 'siege'
     },
     [UNIT_TYPES.ARTILLERY]: {
@@ -240,6 +250,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '💥',
+        requires: 'steel',
         type: 'siege'
     },
     [UNIT_TYPES.TANK]: {
@@ -254,6 +265,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🚂',
+        requires: 'combustion',
         type: 'military'
     },
     [UNIT_TYPES.SAIL]: {
@@ -268,6 +280,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '⛵',
+        requires: 'sailing',
         type: 'naval'
     },
     [UNIT_TYPES.TRIREME]: {
@@ -282,6 +295,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🚣',
+        requires: 'map_making',
         type: 'naval'
     },
     [UNIT_TYPES.CARAVEL]: {
@@ -296,6 +310,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '⛵',
+        requires: 'navigation',
         type: 'naval'
     },
     [UNIT_TYPES.FRIGATE]: {
@@ -310,6 +325,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '𓊝',
+        requires: 'navigation',
         type: 'naval'
     },
     [UNIT_TYPES.IRONCLAD]: {
@@ -324,6 +340,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🚢',
+        requires: 'steel',
         type: 'naval'
     },
     [UNIT_TYPES.DESTROYER]: {
@@ -338,6 +355,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🏴‍☠',
+        requires: 'combustion',
         type: 'naval'
     },
     [UNIT_TYPES.CRUISER]: {
@@ -352,6 +370,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🛳️',
+        requires: 'combustion',
         type: 'naval'
     },
     [UNIT_TYPES.BATTLESHIP]: {
@@ -366,6 +385,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🛥️',
+        requires: 'steel',
         type: 'naval'
     },
     [UNIT_TYPES.SUBMARINE]: {
@@ -380,6 +400,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🔱',
+        requires: 'combustion',
         type: 'naval'
     },
     [UNIT_TYPES.CARRIER]: {
@@ -394,6 +415,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '🛳️',
+        requires: 'flight',
         type: 'naval'
     },
     [UNIT_TYPES.SETTLER]: {
@@ -422,6 +444,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🎩',
+        requires: 'writing',
         type: 'civilian'
     },
     [UNIT_TYPES.CARAVAN]: {
@@ -436,6 +459,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🐫',
+        requires: 'trade',
         type: 'civilian'
     },
     [UNIT_TYPES.FERRY]: {
@@ -450,6 +474,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: true,
         icon: '⛴️',
+        requires: 'sailing',
         type: 'civilian'
     },
     [UNIT_TYPES.FIGHTER]: {
@@ -464,6 +489,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '✈️',
+        requires: 'flight',
         type: 'air'
     },
     [UNIT_TYPES.BOMBER]: {
@@ -478,6 +504,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '🛩️',
+        requires: 'flight',
         type: 'air'
     },
     [UNIT_TYPES.NUCLEAR]: {
@@ -492,6 +519,7 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         canWork: false,
         naval: false,
         icon: '☢️',
+        requires: 'nuclear_power',
         type: 'air'
     }
 };

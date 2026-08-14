@@ -278,7 +278,7 @@ describe('EconomicManager happiness & disorder', () => {
     expect(city.disorder).toBe(false);
   });
 
-  it('applyCityOutputs zeroes commerce output for a disordered city', () => {
+  it('applyCityOutputs zeroes treasury/research but keeps luxury for a disordered city', () => {
     const civ = makeCiv(0, { taxRate: 30, scienceRate: 50, luxuryRate: 20 });
     // population 7 > tolerance 2 → 5 unhappy; luxury 2 + base 2 = 4 < 5 → disorder.
     const city = makeCity(0, 10, 7);
@@ -289,7 +289,10 @@ describe('EconomicManager happiness & disorder', () => {
     expect(city.disorder).toBe(true);
     expect(city.tax).toBe(0);
     expect(city.science).toBe(0);
-    expect(city.luxury).toBe(0);
+    // Luxury is preserved so the city can recover — zeroing it would trap the
+    // city in a permanent disorder death spiral (even 100% luxury on a
+    // low-commerce map could never calm the citizens).
+    expect(city.luxury).toBe(2);
   });
 });
 

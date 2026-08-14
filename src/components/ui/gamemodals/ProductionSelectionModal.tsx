@@ -6,12 +6,41 @@ interface ProductionSelectionModalProps {
   show: boolean;
   onHide: () => void;
   onSelectProduction: (key: string) => void;
+  /** The owning civilization (must expose `technologies` as an array of tech ids). */
+  currentPlayer?: { technologies?: Array<string | Set<string>> | Set<string> } | null;
+}
+
+/** True when the civ has researched every tech in the (possibly single) requirement. */
+function hasRequiredTechs(
+  civ: { technologies?: Array<string | Set<string>> | Set<string> } | null | undefined,
+  requirement: string | string[] | null | undefined,
+): boolean {
+  if (!requirement) return true; // No tech required
+  if (!civ) return true; // Unknown civ → don't block
+  const techs = civ.technologies;
+  const techSet = new Set<string>();
+  if (Array.isArray(techs)) {
+    for (const t of techs) {
+      if (typeof t === 'string') {
+        techSet.add(t);
+      } else if (t instanceof Set) {
+        for (const inner of t) techSet.add(inner);
+      } else {
+        techSet.add(String(t));
+      }
+    }
+  } else if (techs instanceof Set) {
+    for (const t of techs) techSet.add(String(t));
+  }
+  const requirements = Array.isArray(requirement) ? requirement : [requirement];
+  return requirements.every((tech: string) => techSet.has(tech));
 }
 
 const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
   show,
   onHide,
-  onSelectProduction
+  onSelectProduction,
+  currentPlayer
 }) => {
   const handleSelect = (key: string) => {
     onSelectProduction(key);
@@ -43,11 +72,12 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                 <tbody>
                   {Object.keys(UNIT_PROPS).map(key => {
                     const unit = UNIT_PROPS[key];
-                    const requires = (unit as any).requires;
+                    const requires = (unit as { requires?: string | string[] }).requires;
+                    const canBuild = hasRequiredTechs(currentPlayer, requires);
                     const requiredTech = Array.isArray(requires) ? requires.join(', ') : requires || 'None';
                     const stats = `${unit.attack}/${unit.defense} (${unit.movement} moves)`;
                     return (
-                      <tr key={key}>
+                      <tr key={key} className={canBuild ? '' : 'text-muted'}>
                         <td>{unit.name}</td>
                         <td>{requiredTech}</td>
                         <td>{stats}</td>
@@ -56,9 +86,11 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                           <Button
                             variant="outline-primary"
                             size="sm"
+                            disabled={!canBuild}
+                            title={canBuild ? '' : `Requires ${requiredTech} technology`}
                             onClick={() => handleSelect(key)}
                           >
-                            Select
+                            {canBuild ? 'Select' : `Requires ${requiredTech}`}
                           </Button>
                         </td>
                       </tr>
@@ -81,23 +113,30 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.keys(BUILDING_PROPS).map(key => (
-                    <tr key={key}>
-                      <td>{BUILDING_PROPS[key].name}</td>
-                      <td>{BUILDING_PROPS[key].requiredTechnology || 'None'}</td>
-                      <td>{BUILDING_PROPS[key].description}</td>
-                      <td>{BUILDING_PROPS[key].cost}</td>
-                      <td>
-                        <Button
-                          variant="outline-success"
-                          size="sm"
-                          onClick={() => handleSelect(key)}
-                        >
-                          Select
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                  {Object.keys(BUILDING_PROPS).map(key => {
+                    const building = BUILDING_PROPS[key];
+                    const requiredTech = (building as { requiredTechnology?: string }).requiredTechnology || null;
+                    const canBuild = hasRequiredTechs(currentPlayer, requiredTech);
+                    return (
+                      <tr key={key} className={canBuild ? '' : 'text-muted'}>
+                        <td>{building.name}</td>
+                        <td>{requiredTech || 'None'}</td>
+                        <td>{building.description}</td>
+                        <td>{building.cost}</td>
+                        <td>
+                          <Button
+                            variant="outline-success"
+                            size="sm"
+                            disabled={!canBuild}
+                            title={canBuild ? '' : `Requires ${requiredTech} technology`}
+                            onClick={() => handleSelect(key)}
+                          >
+                            {canBuild ? 'Select' : `Requires ${requiredTech}`}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

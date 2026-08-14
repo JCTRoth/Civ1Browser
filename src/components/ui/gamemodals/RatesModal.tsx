@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Form, Alert } from 'react-bootstrap';
+import { Modal, Form, Alert } from 'react-bootstrap';
 import { useGameStore } from '@/stores/GameStore';
 import { gameLogger } from '@/utils/GameLogger';
 import { getGovernment } from '@/data/GovernmentData';
@@ -201,8 +201,16 @@ function RatesModal({ show, onHide, gameEngine }: RatesModalProps) {
         </div>
       </Modal.Body>
       <Modal.Footer className="rates-modal__footer">
-        <Button variant="secondary" onClick={onHide}>Cancel</Button>
-        <Button variant="success" onClick={handleApply}>Apply Rates</Button>
+        <button type="button" className="rates-modal__btn" onClick={onHide}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="rates-modal__btn rates-modal__btn--apply"
+          onClick={handleApply}
+        >
+          Apply Rates
+        </button>
       </Modal.Footer>
     </Modal>
   );

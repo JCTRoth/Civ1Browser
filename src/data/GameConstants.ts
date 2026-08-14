@@ -25,6 +25,8 @@ export interface UnitProperties {
     naval?: boolean;
     icon?: string;
     type?: 'civilian' | 'military' | 'siege' | 'naval' | 'scout' | 'air';
+    /** Technology required to produce this unit (null/undefined = no requirement). */
+    requires?: string | null;
 }
 
 export interface BuildingProperties {

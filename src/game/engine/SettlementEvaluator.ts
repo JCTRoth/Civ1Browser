@@ -423,6 +423,36 @@ export class SettlementEvaluator {
   }
 
   /**
+   * Score a single tile as a settlement location (same scoring as the
+   * 10x10 search, so callers can compare the settler's current tile against
+   * the best-found location). Returns null if the tile is not a valid
+   * settlement spot.
+   */
+  public static scoreLocation(
+    col: number,
+    row: number,
+    getTileAt: (col: number, row: number) => any,
+    getCityAt: (col: number, row: number) => any,
+    getUnitAt: (col: number, row: number) => any,
+    weights: SettlementWeights,
+    currentCivilizationId?: number,
+    settlerCol?: number,
+    settlerRow?: number
+  ): number | null {
+    if (!this.isValidSettlementLocation(col, row, getTileAt, getCityAt, getUnitAt, settlerCol, settlerRow)) {
+      return null;
+    }
+    return this.evaluateAreaWithCityPenalties(
+      col,
+      row,
+      getTileAt,
+      getCityAt,
+      weights,
+      currentCivilizationId
+    );
+  }
+
+  /**
    * Preset 1: Balanced Growth Strategy
    * Focus on food for early growth, with some production
    */

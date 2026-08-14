@@ -265,6 +265,13 @@ export class AIBuildingStrategy {
       const cityBuildings: string[] = city.buildings || [];
       if (cityBuildings.includes(wonderType)) continue;
 
+      // Tech + prerequisite gating — wonders require their era's technology
+      // (e.g. Pyramids need Masonry, Newton's needs University). Without this
+      // the AI queued every wonder from turn 1.
+      if (!canBuildBuilding(_civ, wonderType, props, cityBuildings, BUILDING_PREREQUISITES as Record<string, readonly string[]>)) {
+        continue;
+      }
+
       let priority = 5;
       const reasons: string[] = [];
 

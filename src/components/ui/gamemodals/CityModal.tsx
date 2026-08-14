@@ -489,6 +489,7 @@ const CityModal: React.FC<CityModalProps> = ({
       <ProductionSelectionModal
         show={showProductionModal}
         onHide={() => setShowProductionModal(false)}
+        currentPlayer={currentPlayer}
         onSelectProduction={key => {
           // Always queue the selected item when picking from the modal
           handleQueueProduction(key);

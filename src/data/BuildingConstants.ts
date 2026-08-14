@@ -159,6 +159,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Bank',
         cost: 120,
         maintenance: 1,
+        requiredTechnology: 'banking',
         effects: {
             trade: 2,
             corruptionReduction: 0.5
@@ -170,6 +171,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Cathedral',
         cost: 160,
         maintenance: 2,
+        requiredTechnology: 'monotheism',
         effects: {
             happiness: 3,
             culture: 2
@@ -181,6 +183,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'University',
         cost: 160,
         maintenance: 2,
+        requiredTechnology: 'university',
         effects: {
             science: 2,
             culture: 1
@@ -192,6 +195,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Colosseum',
         cost: 100,
         maintenance: 1,
+        requiredTechnology: 'construction',
         effects: {
             happiness: 2,
             culture: 1
@@ -203,6 +207,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Forge',
         cost: 80,
         maintenance: 1,
+        requiredTechnology: 'iron_working',
         effects: {
             production: 1,
             unitProduction: 1
@@ -214,6 +219,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Factory',
         cost: 200,
         maintenance: 3,
+        requiredTechnology: 'industrialization',
         effects: {
             production: 2,
             pollution: 2
@@ -236,6 +242,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Hydro Plant',
         cost: 240,
         maintenance: 2,
+        requiredTechnology: 'electronics',
         effects: {
             production: 1,
             pollution: -2
@@ -247,6 +254,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Mass Transit',
         cost: 160,
         maintenance: 2,
+        requiredTechnology: 'mass_production',
         effects: {
             happiness: 2,
             pollution: -1
@@ -258,6 +266,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Nuclear Plant',
         cost: 160,
         maintenance: 2,
+        requiredTechnology: 'nuclear_power',
         effects: {
             production: 2,
             pollution: 3
@@ -269,6 +278,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Power Plant',
         cost: 160,
         maintenance: 2,
+        requiredTechnology: 'electricity',
         effects: {
             production: 1,
             pollution: 2
@@ -280,6 +290,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Recycling Center',
         cost: 200,
         maintenance: 2,
+        requiredTechnology: 'mass_production',
         effects: {
             pollution: -3,
             production: 1
@@ -291,6 +302,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'SDI Defense',
         cost: 200,
         maintenance: 4,
+        requiredTechnology: 'space_flight',
         effects: {
             missileDefense: true,
             culture: 1
@@ -302,6 +314,7 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Stock Exchange',
         cost: 160,
         maintenance: 2,
+        requiredTechnology: 'banking',
         effects: {
             trade: 3,
             corruptionReduction: 0.8
@@ -316,6 +329,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Great Wall',
         cost: 300,
         maintenance: 0,
+        requiredTechnology: 'masonry',
         effects: {
             globalDefense: 1,
             culture: 2,
@@ -327,6 +341,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Hanging Gardens',
         cost: 300,
         maintenance: 0,
+        requiredTechnology: 'ceremonial_burial',
         effects: {
             globalHappiness: 1,
             culture: 2,
@@ -338,6 +353,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Lighthouse',
         cost: 200,
         maintenance: 0,
+        requiredTechnology: 'map_making',
         effects: {
             navalMovement: 1,
             trade: 1,
@@ -349,6 +365,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Oracle',
         cost: 300,
         maintenance: 0,
+        requiredTechnology: 'philosophy',
         effects: {
             science: 2,
             culture: 2,
@@ -360,6 +377,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Pyramids',
         cost: 300,
         maintenance: 0,
+        requiredTechnology: 'masonry',
         effects: {
             culture: 3,
             wonder: true
@@ -370,6 +388,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Magellan\'s Voyage',
         cost: 400,
         maintenance: 0,
+        requiredTechnology: 'navigation',
         effects: {
             navalMovement: 2,
             exploration: true,
@@ -381,6 +400,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Michelangelo\'s Chapel',
         cost: 400,
         maintenance: 0,
+        requiredTechnology: 'monotheism',
         effects: {
             culture: 3,
             wonder: true
@@ -391,6 +411,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Newton\'s University',
         cost: 400,
         maintenance: 0,
+        requiredTechnology: 'university',
         effects: {
             science: 3,
             wonder: true
@@ -401,6 +422,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'United Nations',
         cost: 600,
         maintenance: 0,
+        requiredTechnology: 'democracy',
         effects: {
             diplomacy: true,
             culture: 2,
@@ -412,6 +434,7 @@ export const WONDER_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Women\'s Suffrage',
         cost: 600,
         maintenance: 0,
+        requiredTechnology: 'democracy',
         effects: {
             happiness: 2,
             culture: 2,

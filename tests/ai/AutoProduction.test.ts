@@ -18,6 +18,19 @@ const createMockEngine = () => {
     { id: 'def', type: 'warrior', civilizationId: 1, col: 0, row: 0, attack: 1, defense: 1 }
   ];
 
+  // The civ already has 4 cities, so the (now higher-priority) settler
+  // expansion branch is skipped and the offensive-support branch is reachable.
+  const extraCities = [2, 3, 4].map((n) => ({
+    id: `city-${n}`,
+    name: `Testopolis ${n}`,
+    civilizationId: 1,
+    col: n,
+    row: n,
+    population: 3,
+    buildings: [],
+    autoProduction: true
+  }));
+
   const productionManager = {
     setCityProduction: vi.fn().mockReturnValue({ success: true })
   };
@@ -31,7 +44,7 @@ const createMockEngine = () => {
   };
 
   const engine: any = {
-    cities: [city],
+    cities: [city, ...extraCities],
     units,
     civilizations: [
       null,
@@ -80,7 +93,7 @@ describe('AutoProduction offensive support', () => {
  * count (<6 → 1, 6–11 → 2, >=12 → 3), always ranking below city defense.
  */
 describe('AutoProduction scout corps', () => {
-  const createScoutMockEngine = (totalTroops: number, scoutCount: number) => {
+  const createScoutMockEngine = (totalTroops: number, scoutCount: number, numCities: number = 1) => {
     const city = {
       id: 'city-1',
       name: 'Testopolis',
@@ -92,6 +105,22 @@ describe('AutoProduction scout corps', () => {
       currentProduction: null,
       autoProduction: true
     };
+
+    // Extra cities (when numCities > 1) skip the settler-expansion branch so
+    // the scout branch stays reachable for already-expanded civs.
+    const extraCities = [];
+    for (let n = 2; n <= numCities; n++) {
+      extraCities.push({
+        id: `city-${n}`,
+        name: `Testopolis ${n}`,
+        civilizationId: 1,
+        col: n,
+        row: n,
+        population: 3,
+        buildings: [],
+        autoProduction: true
+      });
+    }
 
     const units: any[] = [];
     // One defender in the city so the "needs defender" step is satisfied.
@@ -110,7 +139,7 @@ describe('AutoProduction scout corps', () => {
     const storage = { turnData: {} };
 
     const engine: any = {
-      cities: [city],
+      cities: [city, ...extraCities],
       units,
       civilizations: [
         null,
@@ -139,7 +168,7 @@ describe('AutoProduction scout corps', () => {
   const producedItem = (pm: any) => pm.setCityProduction.mock.calls[0][1];
 
   it('builds a scout for a small army (< 6 troops) with no scouts yet', () => {
-    const { engine, productionManager } = createScoutMockEngine(2, 0);
+    const { engine, productionManager } = createScoutMockEngine(2, 0, 4);
     new AutoProduction(engine).setAutoProduction('city-1');
 
     expect(productionManager.setCityProduction).toHaveBeenCalled();
@@ -147,14 +176,14 @@ describe('AutoProduction scout corps', () => {
   });
 
   it('builds a scout when 6+ troops want a second scout', () => {
-    const { engine, productionManager } = createScoutMockEngine(6, 0);
+    const { engine, productionManager } = createScoutMockEngine(6, 0, 4);
     new AutoProduction(engine).setAutoProduction('city-1');
 
     expect(producedItem(productionManager).itemType).toBe('scout');
   });
 
   it('builds a scout when 12+ troops want a third scout', () => {
-    const { engine, productionManager } = createScoutMockEngine(12, 0);
+    const { engine, productionManager } = createScoutMockEngine(12, 0, 4);
     new AutoProduction(engine).setAutoProduction('city-1');
 
     expect(producedItem(productionManager).itemType).toBe('scout');

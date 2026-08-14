@@ -385,15 +385,17 @@ export class EconomicManager {
    * Write per-city outputs + happiness back onto the city object. Returns the
    * combined outputs/happiness so callers can react without recomputing.
    *
-   * When a city is in disorder its commerce is lost to unrest (tax/science/
-   * luxury are zeroed) — the disorder self-reinforces until the player raises
-   * luxury or builds happiness buildings.
+   * When a city is in disorder its tax/science are lost to unrest (nothing
+   * reaches the treasury or the research pool), but LUXURY commerce is kept —
+   * otherwise the disorder self-reinforces into a permanent death spiral: the
+   * next turn would have even less luxury to calm the citizens, and a large
+   * city could never recover even at 100% luxury on a low-commerce map.
    */
   applyCityOutputs(city: City, civ: Civilization): CityEconomicOutputs & CityHappinessResult {
     const out = this.cityOutputs(city, civ);
     const happiness = this.cityHappiness(city, civ);
     const effective = happiness.disorder
-      ? { ...out, tax: 0, science: 0, luxury: 0, commerce: 0 }
+      ? { ...out, tax: 0, science: 0, commerce: 0 }
       : out;
     city.tax = effective.tax;
     city.science = effective.science;
