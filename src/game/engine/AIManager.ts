@@ -123,7 +123,21 @@ export class AIManager {
       }
     }
 
-    // ─── Phase 2b: AI Diplomacy ──────────────────────────────────────
+    // ─── Phase 2b: Government upgrade ───────────────────────────────
+    // When the civ has researched a better government tech, start a revolution.
+    // (No-op while already in anarchy / revolting.)
+    if (this.gameEngine.governmentManager) {
+      const govManager = this.gameEngine.governmentManager;
+      if (!govManager.isInRevolution(civ)) {
+        const bestGov = govManager.bestGovernmentForCiv(civ);
+        if (bestGov) {
+          console.log(`[AI] ${civ.name} adopts ${bestGov} government (revolution)`);
+          this.gameEngine.startRevolution(civilizationId, bestGov);
+        }
+      }
+    }
+
+    // ─── Phase 2c: AI Diplomacy ─────────────────────────────────────
     if (this.gameEngine.diplomacyManager) {
       this.gameEngine.diplomacyManager.processAIDiplomacy(civilizationId);
     }
@@ -165,6 +179,13 @@ export class AIManager {
         return;
       }
 
+      // Skip units that no longer exist (died in combat, disbanded for upkeep,
+      // or consumed by founding a city) — prevents the "Skip: Unit not found"
+      // warning spam and wasted processing on ghost units.
+      if (!this.gameEngine.units.includes(unit)) {
+        continue;
+      }
+
       console.log(`[AI] Processing unit ${unit.id} (${unit.type}) at (${unit.col},${unit.row}) with ${unit.movesRemaining} moves remaining`);
 
       // Safety: Prevent infinite loops by limiting iterations per unit
@@ -177,6 +198,15 @@ export class AIManager {
       // While this unit can move, pick targets and attempt actions
       while ((unit.movesRemaining || 0) > 0) {
         movementAttempts++;
+
+        // Turn-overlap guard: if the TurnManager force-ended our turn (AI
+        // timeout) and the next turn already started, STOP — otherwise we keep
+        // moving units on the next player's turn (teleporting, moves reset, and
+        // the stuck detector fires every turn).
+        if (this.gameEngine.activePlayer !== civilizationId || this.gameEngine.isPaused) {
+          console.log(`[AI] Turn ${civilizationId} ended mid-processing — stopping unit ${unit.id}`);
+          break;
+        }
 
         // Check if unit is stuck (moves not decreasing)
         if (unit.movesRemaining === previousMoves) {
@@ -202,6 +232,17 @@ export class AIManager {
           // No valid target, skip the unit's turn
           console.log(`[AI] No target found for unit ${unit.id}, skipping`);
           this.gameEngine.log('ai', `No target — ${civ.name} ${unit.type}(${unit.id}) skipped at (${unit.col},${unit.row})`);
+          this.gameEngine.skipUnit(unit.id);
+          break;
+        }
+
+        // Target is the unit's own tile — it's already where it wants to be
+        // (e.g. a scout garrisoning a threatened city via findScoutDefenseTarget).
+        // Trying to "move" there makes the AI loop pathfind-to-self forever and
+        // trip the stuck detector. Skip the unit cleanly instead.
+        if (target.col === unit.col && target.row === unit.row) {
+          console.log(`[AI] Unit ${unit.id} already at target (${target.col},${target.row}), skipping`);
+          this.gameEngine.log('ai', `Already at target — ${civ.name} ${unit.type}(${unit.id}) holds (${target.col},${target.row})`);
           this.gameEngine.skipUnit(unit.id);
           break;
         }
@@ -289,8 +330,12 @@ export class AIManager {
           }
         }
 
-        // Wait a little so moves are visible
-        await this.gameEngine.sleep(200);
+        // Wait a little so moves are visible (skip in headless AI-vs-AI — the
+        // 200ms per move adds up and trips the TurnManager AI timeout).
+        const isAIVsAI = this.gameEngine.gameSettings?.mapType === 'AI_VS_AI';
+        if (!isAIVsAI) {
+          await this.gameEngine.sleep(200);
+        }
       }
       console.log(`[AI] Finished processing unit ${unit.id}, final moves remaining: ${unit.movesRemaining}`);
     }
@@ -409,7 +454,7 @@ export class AIManager {
 
       // ── Patrol between cities when idle ──
       const patrolTarget = findPatrolWaypoint(
-        unit.col, unit.row,
+        unit, unit.col, unit.row,
         this.gameEngine.cities,
         unit.civilizationId,
         distFn
@@ -588,7 +633,11 @@ export class AIManager {
       unit.col,
       unit.row,
       (col, row) => this.gameEngine.squareGrid!.getNeighbors(col, row),
-      (col, row) => this.gameEngine.getTileAt(col, row)
+      (col, row) => this.gameEngine.getTileAt(col, row),
+      (col, row) => this.gameEngine.isTilePassable?.(col, row) ?? true,
+      (col, row) => typeof this.gameEngine.isExploredByPlayer === 'function'
+        ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
+        : !!this.gameEngine.getTileAt(col, row)?.explored
     );
     if (unexplored) {
       console.log(`[AI] Chose unexplored tile at (${unexplored.col},${unexplored.row})`);
@@ -849,8 +898,11 @@ export class AIManager {
 
     const zone = storage.scoutZones[scoutIndex];
 
-    // Find nearest unexplored tile within the scout's zone
-    let nearestUnexplored: { col: number; row: number } | null = null;
+    // Find the nearest unexplored, passable tiles within the scout's zone.
+    // Ties are broken RANDOMLY: the previous code kept the first (smallest
+    // row) — a systematic bias that made every scout drift toward the TOP map
+    // edge, where it then got stuck trying to reach impassable row-0 tiles.
+    let nearestCandidates: Array<{ col: number; row: number }> = [];
     let minDistance = Infinity;
 
     // Search within zone boundaries (limit search to avoid performance issues)
@@ -869,26 +921,35 @@ export class AIManager {
         if (!tile) continue;
 
         // Prefer per-player explored state so each scout targets ITS OWN
-        // unexplored areas. Dev mode (AI-vs-AI) marks everything explored
-        // per-player, so fall back to global tile.explored there.
-        const isExplored = !this.gameEngine.devMode && typeof this.gameEngine.isExploredByPlayer === 'function'
+        // unexplored areas. (AI reveals are stored per-player; the global
+        // `tile.explored` is never set for AI moves, so we must not fall back
+        // to it — that made every tile look unexplored and the scout oscillate
+        // between two tiles at the map edge.)
+        const isExplored = typeof this.gameEngine.isExploredByPlayer === 'function'
           ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
           : !!tile.explored;
         if (isExplored) continue;
 
-        {
-          const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
-          if (distance < minDistance) {
-            minDistance = distance;
-            nearestUnexplored = { col, row };
-          }
+        // Skip impassable targets (e.g. ocean) — sending scouts after them only
+        // wastes turns on failed moves (the old "move failed to row 0" spam).
+        if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
+
+        const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestCandidates = [{ col, row }];
+        } else if (distance === minDistance) {
+          nearestCandidates.push({ col, row });
         }
       }
     }
 
-    if (nearestUnexplored) {
-      console.log(`[AI-SCOUT] Found unexplored tile at (${nearestUnexplored.col},${nearestUnexplored.row}) in zone, distance: ${minDistance}`);
-      return nearestUnexplored;
+    if (nearestCandidates.length > 0) {
+      // Random tie-break so exploration fans out in all directions instead of
+      // always heading for the lowest row.
+      const pick = nearestCandidates[Math.floor(Math.random() * nearestCandidates.length)];
+      console.log(`[AI-SCOUT] Found unexplored tile at (${pick.col},${pick.row}) in zone, distance: ${minDistance}`);
+      return pick;
     }
 
     // If no unexplored tiles found in zone, move toward zone center to explore systematically
@@ -905,8 +966,10 @@ export class AIManager {
       for (const neighbor of neighbors) {
         if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, neighbor.col, neighbor.row)) continue;
 
-        const tile = this.gameEngine.getTileAt(neighbor.col, neighbor.row);
-        if (!tile || !tile.passable) continue;
+        // NOTE: MapTile has no `passable` field; use the engine's terrain check
+        // (the old `tile.passable` was always undefined, so this fallback never
+        // found a valid neighbor).
+        if (typeof this.gameEngine.isTilePassable !== 'function' || !this.gameEngine.isTilePassable(neighbor.col, neighbor.row)) continue;
 
         const distanceToCenter = Math.max(Math.abs(neighbor.col - zoneCenterCol), Math.abs(neighbor.row - zoneCenterRow));
         if (distanceToCenter < bestDistanceToCenter) {

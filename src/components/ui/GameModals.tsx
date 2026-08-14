@@ -4,6 +4,7 @@ import TechTreeView from './TechTreeView';
 import CityModal from './gamemodals/CityModal';
 import HexDetailModal from './gamemodals/HexDetailModal';
 import RatesModal from './gamemodals/RatesModal';
+import GovernmentModal from './gamemodals/GovernmentModal';
 import { useGameStore } from '@/stores/GameStore';
 import { UNIT_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
@@ -1570,6 +1571,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <CityModal show={uiState.activeDialog === 'city-details'} onHide={handleCloseDialog} selectedCity={selectedCity} gameEngine={gameEngine} actions={actions} currentPlayer={currentPlayer} isPlayerCity={isPlayerCity} />
       <HexDetailModal show={uiState.activeDialog === 'hex-details'} onHide={handleCloseDialog} selectedHex={selectedHex} map={map} units={units} cities={cities} />
       <RatesModal show={uiState.activeDialog === 'rates'} onHide={handleCloseDialog} gameEngine={gameEngine} />
+      <GovernmentModal show={uiState.activeDialog === 'government'} onHide={handleCloseDialog} gameEngine={gameEngine} />
       {renderCityProduction()}
       {renderCityPurchase()}
     </>

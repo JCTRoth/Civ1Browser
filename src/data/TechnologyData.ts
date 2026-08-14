@@ -22,6 +22,7 @@ export const TECHNOLOGIES_DATA: Technology[] = [
   { id: "monarchy", name: "Monarchy", researched: false, researching: false, cost: 60, description: "Allows Monarchy government type.", prerequisites: ["code_of_laws"] },
   { id: "republic", name: "Republic", researched: false, researching: false, cost: 80, description: "Enables Republic government type.", prerequisites: ["monarchy"] },
   { id: "democracy", name: "Democracy", researched: false, researching: false, cost: 120, description: "Enables Democracy government type.", prerequisites: ["theology", "philosophy"] },
+  { id: "communism", name: "Communism", researched: false, researching: false, cost: 160, description: "Enables Communism government type.", prerequisites: ["industrialization", "philosophy"] },
   { id: "construction", name: "Construction", researched: false, researching: false, cost: 70, description: "Enables Aqueducts.", prerequisites: ["masonry", "mathematics"] },
   { id: "theology", name: "Theology", researched: false, researching: false, cost: 100, description: "Allows Cathedrals.", prerequisites: ["monotheism"] },
   { id: "monotheism", name: "Monotheism", researched: false, researching: false, cost: 80, description: "Allows Crusader units and leads to Theology.", prerequisites: ["philosophy", "polytheism"] },

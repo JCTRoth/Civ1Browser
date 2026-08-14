@@ -75,10 +75,10 @@ function RatesModal({ show, onHide, gameEngine }: RatesModalProps) {
   const taxOverCap = currentPlayer ? rates.tax > gov.maxTaxRate : false;
   const sum = rates.tax + rates.science + rates.luxury;
 
-  // Live preview of what the selected rates would produce. Matches the
-  // engine: each city contributes max(yields.trade, city-center floor) commerce
-  // and the split is floor-based per city (corruption is applied on the real
-  // turn, so the preview is optimistic by that amount).
+  // Live preview of what the selected rates would produce. Uses the engine's
+  // real tile-based commerce (EconomicManager.calculateCityTrade) per city, and
+  // the split is floor-based per city (corruption is applied on the real turn,
+  // so the preview is optimistic by that amount).
   const preview = useMemo(() => {
     if (!currentPlayer || !gameEngine) {
       return { commerce: 0, tax: 0, science: 0, luxury: 0, upkeep: 0, net: 0, hasCities: false };
@@ -86,8 +86,11 @@ function RatesModal({ show, onHide, gameEngine }: RatesModalProps) {
     const cities = (gameEngine.cities ?? []).filter(
       (c) => c.civilizationId === currentPlayer.id,
     );
+    const econ = (gameEngine as { economicManager?: { calculateCityTrade: (c: unknown) => number } }).economicManager;
     const perCityCommerce = cities.map((c) =>
-      Math.max(c.yields?.trade ?? 0, CITY_CENTER_COMMERCE),
+      econ && typeof econ.calculateCityTrade === 'function'
+        ? econ.calculateCityTrade(c)
+        : Math.max((c as { yields?: { trade?: number } }).yields?.trade ?? 0, CITY_CENTER_COMMERCE),
     );
     const commerce = perCityCommerce.reduce((t, v) => t + v, 0);
     // Match the engine's upkeep model: each city costs 1 gold and supports one

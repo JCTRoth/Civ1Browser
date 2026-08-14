@@ -11,6 +11,7 @@ export const BUILDING_TYPES = {
     LIBRARY: 'library',
     COURTHOUSE: 'courthouse',
     CITY_WALLS: 'city_walls',
+    PALACE: 'palace',
 
     // Medieval Era
     AQUEDUCT: 'aqueduct',
@@ -128,6 +129,19 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         },
         description: 'Increases city defense but reduces happiness',
         icon: '🏰'
+    },
+    [BUILDING_TYPES.PALACE]: {
+        name: 'Palace',
+        cost: 80,
+        maintenance: 0,
+        requiredTechnology: undefined,
+        effects: {
+            isPalace: true,
+            happiness: 1,
+            corruptionReduction: 0.5
+        },
+        description: 'Designates this city as the seat of government (capital). Only one per civilization; building it elsewhere moves the capital.',
+        icon: '🏛️'
     },
     [BUILDING_TYPES.AQUEDUCT]: {
         name: 'Aqueduct',

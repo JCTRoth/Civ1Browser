@@ -1,8 +1,10 @@
+When ever possible use specific types instead of 'any'
+Put interfaces and types in the `types/` folder, and import them from there
+Always define function parameter with types and return types
 Keep TSX components purely presentational (JSX only)
 Move CSS → src/styles, static data → src/data, utility functions → src/utils, tests -> __tests__
-Always define function parameter with types and return types
 Assume npm server is already running at port 3000
-You are running on a Ubuntu system all command are available, Bash is Fish shell
+You are running on a Ubuntu/Fedora system all command are availablell, install what is missing if needed
 
 ## Playwright E2E Test Guidelines
 

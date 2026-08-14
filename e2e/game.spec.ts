@@ -277,6 +277,32 @@ test.describe('Rates', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Government (revolution / capital)
+// ---------------------------------------------------------------------------
+
+test.describe('Government', () => {
+  test('G key opens the government modal showing Despotism', async ({ page }) => {
+    await startGame(page);
+    await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', code: 'KeyG', bubbles: true })));
+
+    const modal = page.locator('.government-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal).toContainText('Government');
+    // Despotism is the starting government (its card is marked Current).
+    await expect(modal.getByRole('button', { name: /Despotism/ })).toBeVisible();
+    await expect(modal.locator('.government-modal__body')).toContainText('Despotism');
+  });
+
+  test('opens the government modal from the GAME menu', async ({ page }) => {
+    await startGame(page);
+    await openTopMenu(page, 'GAME');
+    await page.getByRole('button', { name: /Government/ }).click();
+    await expect(page.locator('.government-modal')).toBeVisible();
+    await expect(page.locator('.government-modal')).toContainText('revolution');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Keyboard Shortcuts
 // ---------------------------------------------------------------------------
 

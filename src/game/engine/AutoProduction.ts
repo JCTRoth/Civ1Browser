@@ -13,17 +13,31 @@ import {
   computeCityGarrisonStrength,
   type CityThreatAssessment
 } from './AIStrategy';
-import { canBuildUnit, type StrategyProfile, type AIState, createDefaultAIState } from './AITypes';
+import { canBuildUnit, type StrategyProfile, type AIState, createDefaultAIState, type BuildingPlan } from './AITypes';
 import { AIBuildingStrategy } from './AIBuildingStrategy';
-import type { City } from '../../../types/game';
+import type { City, Civilization, GameEngine, Unit } from '../../../types/game';
+
+/** A production item pushed onto a city's build queue. */
+interface ProductionItem {
+  type: 'unit' | 'building';
+  itemType: string;
+  name: string;
+  cost: number;
+}
+
+/** Minimal shape of a queued production entry. */
+interface QueueItem {
+  type?: string;
+  itemType?: string;
+}
 
 /** How many follow-up items auto-production keeps lined up in a city's queue. */
 const AUTO_QUEUE_TARGET = 3;
 
 export class AutoProduction {
-  private gameEngine: any;
+  private gameEngine: GameEngine;
 
-  constructor(gameEngine: any) {
+  constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
   }
 
@@ -34,7 +48,7 @@ export class AutoProduction {
     try {
       console.log('[AutoProduction] setAutoProduction called for city', cityId);
       
-      const city = this.gameEngine.cities.find((c: any) => c.id === cityId);
+      const city = this.gameEngine.cities.find((c: City) => c.id === cityId);
       if (!city) {
         console.warn('[AutoProduction] City not found:', cityId);
         return false;
@@ -82,18 +96,51 @@ export class AutoProduction {
    */
   ensureProductionQueue(cityId: string): void {
     try {
-      const city = this.gameEngine.cities.find((c: any) => c.id === cityId);
-      if (!city || !(city as any).autoProduction) return;
+      const city = this.gameEngine.cities.find((c: City) => c.id === cityId);
+      if (!city || !city.autoProduction) return;
       if (!this.gameEngine.productionManager) return;
 
       const threatAssessment = this.evaluateCityThreat(city);
-      const existingQueue: any[] = Array.isArray(city.buildQueue) ? city.buildQueue.slice() : [];
+      const existingQueue: QueueItem[] = Array.isArray(city.buildQueue) ? city.buildQueue.slice() : [];
       const plannedTypes: string[] = existingQueue
-        .map((q: any) => q.itemType || q.type)
+        .map((q: QueueItem) => q.itemType || q.type)
         .filter((t: string) => !!t);
 
       const slots = AUTO_QUEUE_TARGET - existingQueue.length;
       if (slots <= 0) return;
+
+      // ── Economy-aware unit cap ──
+      // Upkeep = max(totalUnits, cityCount). A civ can only afford to maintain
+      // as many units as its full-tax income pays for (beyond the free support
+      // of one unit per city). When the civ is already at/over that cap, stop
+      // queuing more units — it only produces an army it immediately disbands
+      // for upkeep (the AI-vs-AI produce→disband churn). Buildings are still
+      // allowed; only military/explorer/settler units are capped.
+      const civ = this.gameEngine?.civilizations?.[city.civilizationId];
+      const econ = this.gameEngine?.economicManager;
+      let unitCapExhausted = false;
+      if (civ && econ) {
+        const civCities = this.gameEngine.cities.filter(
+          (c: City) => c.civilizationId === city.civilizationId
+        );
+        const cityCount = civCities.length;
+        const currentUnits = this.gameEngine.units.filter(
+          (u: Unit) => u.civilizationId === city.civilizationId
+        ).length;
+        // Count units queued in EVERY city (not just this one) so the civ
+        // doesn't overshoot the cap by queuing across multiple cities.
+        const queuedUnits = civCities.reduce((n: number, c: City) => {
+          const inQueue = Array.isArray(c.buildQueue)
+            ? c.buildQueue.filter((q: QueueItem) => (q.type ?? q.itemType) === 'unit').length
+            : 0;
+          const inProgress = c.currentProduction?.type === 'unit' ? 1 : 0;
+          return n + inQueue + inProgress;
+        }, 0);
+        // Max sustainable units ≈ full-tax income minus the luxury the civ
+        // must keep for happiness (see EconomicManager.sustainableUnits).
+        const sustainableUnits = Math.max(cityCount, econ.sustainableUnits(civ));
+        unitCapExhausted = currentUnits + queuedUnits >= sustainableUnits;
+      }
 
       let added = 0;
       let guard = 0;
@@ -102,6 +149,18 @@ export class AutoProduction {
         if (!item) break;
         const itemType = item.itemType || item.type;
         if (!itemType) break;
+
+        // Skip unit items when the civ can't afford to maintain more units.
+        // (Fall back to a building so the city still has something to do.)
+        if (unitCapExhausted && item.type === 'unit') {
+          const building = this.determineFallbackBuilding(city, threatAssessment, plannedTypes);
+          if (!building) break;
+          const result = this.gameEngine.productionManager.setCityProduction(cityId, building, true);
+          if (!result || result.success === false) break;
+          plannedTypes.push(building.itemType || building.type);
+          added++;
+          continue;
+        }
 
         const result = this.gameEngine.productionManager.setCityProduction(cityId, item, true);
         if (!result || result.success === false) break;
@@ -117,8 +176,7 @@ export class AutoProduction {
   /**
    * Determine what production item a city should build
    */
-  private determineProductionItem(city: any, threatAssessment?: CityThreatAssessment | null, plannedTypes: string[] = []): any | null {
-    // Priority order:
+  private determineProductionItem(city: City, threatAssessment?: CityThreatAssessment | null, plannedTypes: string[] = []): ProductionItem | null {    // Priority order:
     // 1. Urgent defender if city has none
     // 2. Emergency reinforcements for threatened cities
     // 3. High-priority building (from AIBuildingStrategy)
@@ -136,7 +194,7 @@ export class AutoProduction {
 
     // Check for city defenders
     const unitsInCity = this.gameEngine.units.filter(
-      (u: any) => u.col === city.col && u.row === city.row && u.civilizationId === city.civilizationId
+      (u: Unit) => u.col === city.col && u.row === city.row && u.civilizationId === city.civilizationId
     );
     
     // A queued unit with defense also counts toward the garrison.
@@ -144,7 +202,7 @@ export class AutoProduction {
       const unitProps = UNIT_PROPS[t];
       return unitProps && (unitProps.defense || 0) > 0;
     });
-    const hasDefender = plannedHasDefender || unitsInCity.some((u: any) => {
+    const hasDefender = plannedHasDefender || unitsInCity.some((u: Unit) => {
       const unitProps = UNIT_PROPS[u.type];
       return unitProps && unitProps.defense > 0;
     });
@@ -168,13 +226,40 @@ export class AutoProduction {
       : [];
     // Never queue the same building twice.
     const availableBuildingPlans = buildingPlans.filter(
-      (p: any) => !plannedTypes.includes(p.buildingType)
+      (p: BuildingPlan) => !plannedTypes.includes(p.buildingType)
     );
+
+    // 3b. Happiness emergency: a city at (or near) disorder burns its whole
+    //     commerce on luxury — starving science and the treasury. Build a
+    //     happiness building (temple/colosseum/cathedral) BEFORE general
+    //     buildings so large cities stay content with less luxury.
+    const econ = this.gameEngine?.economicManager;
+    if (civ && econ) {
+      const happyState = econ.cityHappiness(city, civ);
+      if (happyState.disorder || happyState.unhappiness >= happyState.happiness) {
+        const happyPlan = availableBuildingPlans.find(
+          (p: BuildingPlan) => (BUILDING_PROPERTIES[p.buildingType]?.effects?.happiness ?? 0) > 0
+        );
+        if (happyPlan) {
+          const bProps = BUILDING_PROPS[happyPlan.buildingType] || BUILDING_PROPERTIES[happyPlan.buildingType];
+          if (bProps) {
+            console.log(`[AutoProduction] Happiness emergency: building ${happyPlan.buildingType} (unhappiness ${happyState.unhappiness} ≥ happiness ${happyState.happiness})`);
+            return {
+              type: 'building',
+              itemType: happyPlan.buildingType,
+              name: bProps.name,
+              cost: bProps.cost
+            };
+          }
+        }
+      }
+    }
+
     const buildingPlan = availableBuildingPlans.length > 0 ? availableBuildingPlans[0] : null;
 
-    const civCities = this.gameEngine.cities.filter((c: any) => c.civilizationId === city.civilizationId);
+    const civCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === city.civilizationId);
     const numMilitary = this.gameEngine.units.filter(
-      (u: any) => u.civilizationId === city.civilizationId && this.isOffensiveUnitType(u.type)
+      (u: Unit) => u.civilizationId === city.civilizationId && this.isOffensiveUnitType(u.type)
     ).length;
 
     // Check if building is high-priority enough to build over a unit
@@ -220,7 +305,7 @@ export class AutoProduction {
     if (civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
       const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
       const settlerCount = this.gameEngine.units.filter(
-        (u: any) => u.civilizationId === city.civilizationId && u.type === 'settler'
+        (u: Unit) => u.civilizationId === city.civilizationId && u.type === 'settler'
       ).length + plannedSettlers;
       const maxSettlers = civCities.length < 3 ? 2 : 1;
 
@@ -276,7 +361,7 @@ export class AutoProduction {
     const plannedDefensive = plannedTypes.filter((t: string) => this.isDefensiveUnitType(t)).length;
     const offensiveUnits = this.countOffensiveUnits(city.civilizationId) + plannedOffensive;
     const defenders = this.gameEngine.units.filter(
-      (u: any) => u.civilizationId === city.civilizationId && this.isDefensiveUnitType(u.type)
+      (u: Unit) => u.civilizationId === city.civilizationId && this.isDefensiveUnitType(u.type)
     ).length + plannedDefensive;
     const needsAttackers = offensiveUnits < defenders || this.shouldSupportOffensivePlan(city);
 
@@ -284,6 +369,68 @@ export class AutoProduction {
     return needsAttackers
       ? this.buildOffensiveProduction(city)
       : this.buildDefenderProduction(city, threatAssessment);
+  }
+
+  /**
+   * Pick a building for a city that has hit its sustainable unit cap — reuse
+   * the same AIBuildingStrategy evaluation used in `determineProductionItem`
+   * so the city keeps producing something useful instead of an unaffordable
+   * army. Returns null when no sensible building is available.
+   */
+  private determineFallbackBuilding(
+    city: City,
+    threatAssessment?: CityThreatAssessment | null,
+    plannedTypes: string[] = [],
+  ): ProductionItem | null {
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    if (!civ) return null;
+    const gameState = this.buildGameState(city.civilizationId);
+    gameState.isUnderThreat = !!threatAssessment?.needsDefense;
+    const strategy: StrategyProfile = this.getStrategyForCiv(city.civilizationId);
+
+    const buildingPlans = AIBuildingStrategy.evaluateBuildings(city, civ, strategy, gameState);
+    const available = buildingPlans.filter(
+      (p: BuildingPlan) => !plannedTypes.includes(p.buildingType)
+    );
+    if (available.length > 0) {
+      const plan = available[0];
+      const bProps = BUILDING_PROPS[plan.buildingType] || BUILDING_PROPERTIES[plan.buildingType];
+      if (bProps) {
+        return {
+          type: 'building',
+          itemType: plan.buildingType,
+          name: bProps.name,
+          cost: bProps.cost,
+        };
+      }
+    }
+
+    // No building worth building — fall back to a wonder if safe.
+    if (!threatAssessment?.needsDefense) {
+      const wonderPlans = AIBuildingStrategy.evaluateWonders(city, civ, strategy, gameState);
+      const wonderPlan = wonderPlans.find((p: BuildingPlan) => !plannedTypes.includes(p.buildingType));
+      if (wonderPlan) {
+        const wProps = WONDER_PROPERTIES[wonderPlan.buildingType];
+        if (wProps) {
+          return {
+            type: 'building',
+            itemType: wonderPlan.buildingType,
+            name: wProps.name,
+            cost: wProps.cost,
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Resolve the civ's current strategy profile (helper shared with the queue). */
+  private getStrategyForCiv(civilizationId: number): StrategyProfile {
+    const storage = typeof this.gameEngine.getPlayerStorage === 'function'
+      ? this.gameEngine.getPlayerStorage(civilizationId)
+      : undefined;
+    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+    return aiState.strategyProfile ?? 'balanced_growth';
   }
 
   private isDefensiveUnitType(unitType: string): boolean {
@@ -320,7 +467,7 @@ export class AutoProduction {
     });
   }
 
-  private isDefensiveProduction(currentProduction: any): boolean {
+  private isDefensiveProduction(currentProduction: { type?: string; itemType?: string }): boolean {
     if (!currentProduction || currentProduction.type !== 'unit') {
       return false;
     }
@@ -331,11 +478,11 @@ export class AutoProduction {
     return (unitProps.defense || 0) >= (unitProps.attack || 0);
   }
 
-  private buildDefenderProduction(city: City, threatAssessment?: CityThreatAssessment | null) {
+  private buildDefenderProduction(city: City, threatAssessment?: CityThreatAssessment | null): ProductionItem {
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
     const unitType = this.selectDefenderTypeForCiv(civ);
     const unitProps = UNIT_PROPS[unitType];
-    const production = {
+    const production: ProductionItem = {
       type: 'unit',
       itemType: unitType,
       name: unitProps.name,
@@ -350,7 +497,7 @@ export class AutoProduction {
   }
 
   /** Tech-gated defender selection using the given civ's technologies */
-  private selectDefenderTypeForCiv(civ: any): string {
+  private selectDefenderTypeForCiv(civ: Civilization | undefined): string {
     const defenderPreference = ['riflemen', 'musketeer', 'phalanx', 'archer', 'warrior'];
     for (const unitType of defenderPreference) {
       if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
@@ -374,7 +521,7 @@ export class AutoProduction {
   }
 
   private countOffensiveUnits(civilizationId: number): number {
-    return this.gameEngine.units.filter((unit: any) => unit.civilizationId === civilizationId && this.isOffensiveUnitType(unit.type)).length;
+    return this.gameEngine.units.filter((unit: Unit) => unit.civilizationId === civilizationId && this.isOffensiveUnitType(unit.type)).length;
   }
 
   /**
@@ -383,13 +530,13 @@ export class AutoProduction {
    */
   private countTotalTroops(civilizationId: number): number {
     return this.gameEngine.units.filter(
-      (unit: any) => unit.civilizationId === civilizationId && this.isMilitaryUnitType(unit.type)
+      (unit: Unit) => unit.civilizationId === civilizationId && this.isMilitaryUnitType(unit.type)
     ).length;
   }
 
   private isMilitaryUnitType(unitType: string): boolean {
     const props = UNIT_PROPS[unitType];
-    return !!props && (props as any).type === 'military';
+    return !!props && props.type === 'military';
   }
 
   /**
@@ -406,7 +553,7 @@ export class AutoProduction {
   /** Whether the civilization should build another scout to reach its target. */
   private needsScout(civilizationId: number, plannedScouts: number = 0): boolean {
     const scoutCount = this.gameEngine.units.filter(
-      (u: any) => u.civilizationId === civilizationId && u.type === 'scout'
+      (u: Unit) => u.civilizationId === civilizationId && u.type === 'scout'
     ).length + plannedScouts;
     return scoutCount < this.getDesiredScoutCount(civilizationId);
   }
@@ -419,7 +566,7 @@ export class AutoProduction {
     return (props.attack || 0) >= (props.defense || 0);
   }
 
-  private buildOffensiveProduction(city: City) {
+  private buildOffensiveProduction(city: City): ProductionItem {
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
     const unitType = this.selectOffensiveUnitTypeForCiv(civ);
     const unitProps = UNIT_PROPS[unitType];
@@ -432,7 +579,7 @@ export class AutoProduction {
   }
 
   /** Tech-gated offensive unit selection */
-  private selectOffensiveUnitTypeForCiv(civ: any): string {
+  private selectOffensiveUnitTypeForCiv(civ: Civilization | undefined): string {
     const offensivePreference = ['tank', 'cavalry', 'knights', 'chariot', 'legion', 'archer', 'warrior'];
     for (const unitType of offensivePreference) {
       if (UNIT_PROPS[unitType] && (!civ || canBuildUnit(civ, unitType))) {
@@ -457,7 +604,7 @@ export class AutoProduction {
     isUnderThreat: boolean;
     builtWonders: string[];
   } {
-    const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) || [];
+    const cities = this.gameEngine.cities?.filter((c: City) => c.civilizationId === civilizationId) || [];
     const civ = this.gameEngine.civilizations?.[civilizationId];
     const storage = typeof this.gameEngine.getPlayerStorage === 'function'
       ? this.gameEngine.getPlayerStorage(civilizationId)
@@ -466,7 +613,7 @@ export class AutoProduction {
     let knownEnemyCities = 0;
     if (storage?.enemyLocations) {
       for (const enemies of storage.enemyLocations.values()) {
-        knownEnemyCities += enemies.filter((e: any) => e.type === 'city').length;
+        knownEnemyCities += enemies.filter((e: { type?: string }) => e.type === 'city').length;
       }
     }
 
@@ -484,9 +631,9 @@ export class AutoProduction {
       currentYear: this.gameEngine.currentYear ?? -4000,
       roundNumber: this.gameEngine.roundManager?.getRoundNumber?.() ?? 0,
       numCities: cities.length,
-      totalPopulation: cities.reduce((sum: number, c: any) => sum + (c.population || 1), 0),
+      totalPopulation: cities.reduce((sum: number, c: City) => sum + (c.population || 1), 0),
       numMilitaryUnits: this.gameEngine.units?.filter(
-        (u: any) => u.civilizationId === civilizationId && (UNIT_PROPS[u.type]?.attack || 0) > 0
+        (u: Unit) => u.civilizationId === civilizationId && (UNIT_PROPS[u.type]?.attack || 0) > 0
       ).length ?? 0,
       isAtWar: civ?.warWith?.size > 0,
       knownEnemyCities,
@@ -503,11 +650,11 @@ export class AutoProduction {
     try {
       console.log('[AutoProduction] Processing auto-production for civilization', civilizationId);
       
-      const civCities = this.gameEngine.cities.filter((c: any) => c.civilizationId === civilizationId);
+      const civCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civilizationId);
       
       for (const city of civCities) {
         // Only set production if city has auto-production enabled
-        if ((city as any).autoProduction) {
+        if (city.autoProduction) {
           this.setAutoProduction(city.id);
         }
       }
@@ -524,7 +671,7 @@ export class AutoProduction {
       console.log('[AutoProduction] Processing auto-production for all AI');
       
       const aiCivilizations = this.gameEngine.civilizations.filter(
-        (civ: any) => civ.isAI || civ.id !== 0
+        (civ: Civilization) => civ.isAI || civ.id !== 0
       );
       
       for (const civ of aiCivilizations) {

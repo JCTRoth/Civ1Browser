@@ -218,12 +218,14 @@ describe('EconomicManager upkeep & treasury', () => {
 
     const result = econ.processTurn(civ);
     // upkeep = 1 city + 2 extra units = 3, income 0 → gold -33 < -9 → disband
-    // enough units to bring upkeep ≤ income (all 3 units) and forgive the debt.
+    // enough units to bring upkeep ≤ income, keeping one garrison per city
+    // (a civ that loses every unit to bankruptcy can never recover), and
+    // forgive the debt.
     expect(result.upkeep).toBe(3);
     expect(result.deficit).toBeGreaterThan(0);
-    expect(result.disbanded).toBe(3);
+    expect(result.disbanded).toBe(2); // 3 units − 1 city garrison
     expect(civ.resources.gold).toBe(0); // debt forgiven, treasury reset
-    expect(engine.units.filter((u: any) => u.civilizationId === 0).length).toBe(0);
+    expect(engine.units.filter((u: any) => u.civilizationId === 0).length).toBe(1);
   });
 });
 
@@ -304,5 +306,121 @@ describe('EconomicManager research (compounding fix)', () => {
     // Second turn: still 5 (per-turn), NOT 10 (would be cumulative / compounded)
     expect(civ.resources.science).toBe(5);
     expect(civ.resources.trade).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tile-based commerce
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeTileGrid(width = 10, height = 10): any {
+  return {
+    width,
+    height,
+    getSquaresInRange(col: number, row: number, range: number) {
+      const out: Array<{ col: number; row: number }> = [];
+      for (let c = col - range; c <= col + range; c++) {
+        for (let r = row - range; r <= row + range; r++) {
+          if (c >= 0 && c < width && r >= 0 && r < height) out.push({ col: c, row: r });
+        }
+      }
+      return out;
+    },
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function makeTile(type: string, overrides: any = {}): any {
+  return { type, resource: null, improvement: null, ...overrides };
+}
+
+describe('EconomicManager tile-based commerce', () => {
+  it('computes tile yields from terrain, resources and improvements', () => {
+    const civ = makeCiv(0);
+    const engine = makeEngine({ civilizations: [civ], cities: [], units: [] });
+    const econ = new EconomicManager(engine);
+
+    // Coast: 2F/0P/1T
+    expect(econ.tileYields(makeTile('coast'))).toEqual({ food: 2, production: 0, trade: 1 });
+    // Ocean (1F/0P/2T) + fish resource (2F/1T)
+    expect(econ.tileYields(makeTile('ocean', { resource: 'fish' }))).toEqual({ food: 3, production: 0, trade: 3 });
+    // Plains + road (trade +0.5)
+    expect(econ.tileYields(makeTile('plains', { improvement: 'road' }))).toEqual({ food: 1, production: 1, trade: 0.5 });
+    // Generic 'bonus' resource adds +1 trade
+    expect(econ.tileYields(makeTile('grassland', { resource: 'bonus' }))).toEqual({ food: 2, production: 1, trade: 1 });
+  });
+
+  it('works the city-center tile plus the best (pop-1) tiles in radius', () => {
+    const civ = makeCiv(0);
+    const tiles: Record<string, any> = {};
+    // center at (5,5) on coast
+    tiles['5,5'] = makeTile('coast');
+    // a high-trade ocean tile with fish within radius (total 6 → clearly best)
+    tiles['5,6'] = makeTile('ocean', { resource: 'fish' });
+    // everything else defaults to grassland
+    const grid = makeTileGrid();
+    const engine = makeEngine({
+      civilizations: [civ],
+      cities: [],
+      units: [],
+      squareGrid: grid,
+      getTileAt: (col: number, row: number) => tiles[`${col},${row}`] ?? makeTile('grassland'),
+    });
+    const econ = new EconomicManager(engine);
+
+    const city = makeCity(0, 0, 2); // pop 2 → center + 1 worked tile
+    city.col = 5;
+    city.row = 5;
+    // center (coast→1T) + fish ocean (3T) = 4 trade
+    expect(econ.calculateCityTrade(city)).toBe(4);
+  });
+
+  it('recomputeCityYields writes real yields and building bonuses onto the city', () => {
+    const civ = makeCiv(0);
+    const tiles: Record<string, any> = {};
+    tiles['5,5'] = makeTile('coast');
+    tiles['5,6'] = makeTile('ocean', { resource: 'fish' }); // clearly best tile
+    const engine = makeEngine({
+      civilizations: [civ],
+      cities: [],
+      units: [],
+      squareGrid: makeTileGrid(),
+      getTileAt: (col: number, row: number) => tiles[`${col},${row}`] ?? makeTile('grassland'),
+    });
+    const econ = new EconomicManager(engine);
+
+    const city = makeCity(0, 0, 2);
+    city.col = 5;
+    city.row = 5;
+    city.buildings = ['marketplace']; // effects.trade: +1, science: 0
+    econ.recomputeCityYields(city);
+
+    // center 1T + fish ocean 3T + marketplace 1T = 5 trade
+    expect(city.yields.trade).toBe(5);
+    expect(city.yields.food).toBeGreaterThanOrEqual(2);
+    expect(city.scienceBonus).toBe(0);
+  });
+
+  it('applies building science bonuses to the science output', () => {
+    const civ = makeCiv(0, { taxRate: 0, scienceRate: 100, luxuryRate: 0 });
+    const engine = makeEngine({ civilizations: [civ], cities: [], units: [] });
+    const econ = new EconomicManager(engine);
+
+    // No map → cityCommerce falls back to yields.trade (10) → science 10 + library 1
+    const city = makeCity(0, 10, 2);
+    city.scienceBonus = 1;
+    city.buildings = ['library'];
+    const out = econ.cityOutputs(city, civ);
+    expect(out.science).toBe(11);
+  });
+
+  it('falls back to the stored yield when the map is unavailable', () => {
+    const civ = makeCiv(0);
+    const engine = makeEngine({ civilizations: [civ], cities: [], units: [] });
+    const econ = new EconomicManager(engine);
+
+    const city = makeCity(0, 10, 2);
+    expect(econ.calculateCityTrade(city)).toBe(10); // max(10, floor 2)
   });
 });

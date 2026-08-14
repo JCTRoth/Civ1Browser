@@ -72,6 +72,10 @@ export class AIBuildingStrategy {
     };
 
     for (const [buildingType, props] of Object.entries(BUILDING_PROPERTIES)) {
+      // The Palace marks the capital — the AI gets a free one in its first
+      // city and never builds more (relocating the capital is a human choice).
+      if (buildingType === 'palace') continue;
+
       // Skip if already built
       if (cityBuildings.includes(buildingType)) continue;
 

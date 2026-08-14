@@ -20,7 +20,7 @@ describe('Human vs AI Debug v2', () => {
     }
   });
 
-  it('trace production accumulation over 10 rounds', async () => {
+  it('trace production accumulation over 20 rounds', async () => {
     engine = new GameEngine(null);
     (engine as any).sleep = () => Promise.resolve();
 
@@ -43,10 +43,10 @@ describe('Human vs AI Debug v2', () => {
     console.log(`\n=== TURN PROGRESSION ===`);
     
     let maxTurns = 0;
-    const maxIterations = 100;
+    const maxIterations = 200;
     let iter = 0;
     
-    while (maxTurns < 10 && iter < maxIterations) {
+    while (maxTurns < 20 && iter < maxIterations) {
       iter++;
       
       // Get the active civilization
@@ -77,7 +77,7 @@ describe('Human vs AI Debug v2', () => {
     }
 
     console.log(`\n=== FINAL STATE ===`);
-    console.log(`AI City production after 10 rounds: ${aiCity.productionStored}/${aiCity.currentProduction?.cost}`);
+    console.log(`AI City production after 20 rounds: ${aiCity.productionStored}/${aiCity.currentProduction?.cost}`);
     
     // Check units
     const scouts = engine.units.filter((u: any) => u.type === 'scout' && u.civilizationId === 1);

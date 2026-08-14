@@ -14,6 +14,7 @@ import { AIManager } from './AIManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
 import { EconomicManager } from './EconomicManager';
+import { GovernmentManager } from './GovernmentManager';
 import type { GameActions, Unit, City, Civilization } from '../../../types/game';
 
 interface GameSettings {
@@ -78,6 +79,7 @@ export default class GameEngine {
   productionManager: ProductionManager;
   autoProduction: AutoProduction;
   economicManager: EconomicManager;
+  governmentManager: GovernmentManager;
   playerStorage: Map<number, PlayerTurnStorage>; // Per-player persistent storage
   devMode: boolean; // Developer mode flag
   roundManager: TurnManager; // kept property name for compatibility
@@ -129,6 +131,7 @@ export default class GameEngine {
     this.productionManager = new ProductionManager(this);
     this.autoProduction = new AutoProduction(this);
     this.economicManager = new EconomicManager(this);
+    this.governmentManager = new GovernmentManager(this);
     this.roundManager = new TurnManager(this);
     this.goToManager = new GoToManager(this, this.roundManager);
     this.playerStorage = new Map();
@@ -1216,7 +1219,15 @@ export default class GameEngine {
     };
 
     this.cities.push(city);
-    
+
+    // First city (or a civ that lost its capital) becomes the seat of
+    // government with a free Palace. The Palace building marks the capital.
+    const civCapital = this.civilizations[civilizationId]?.capital;
+    const capitalStillExists = civCapital && this.cities.some(c => c.id === civCapital.id);
+    if (city.isCapital || !capitalStillExists) {
+      this.governmentManager?.designateCapital(civilizationId, city);
+    }
+
     // Remove settler unit that founded the city
     const settlerIdx = this.units.findIndex(u => 
       u.col === col && u.row === row && u.civilizationId === civilizationId && u.type === 'settler'
@@ -1459,6 +1470,17 @@ export default class GameEngine {
     // Check if there's an enemy city at target
     const targetCity = this.getCityAt(targetCol, targetRow);
     if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
+      // Civilian units (settlers, workers, diplomats, caravans, scouts) cannot
+      // attack or capture cities. Block the move — otherwise a wandering
+      // settler rolls a 50/50 capture against a size-1 city (resolveCityCombat
+      // treated attack 0 as strength 1 via `attack || 1`) and can wipe out an
+      // opponent's capital in the ancient era.
+      const civilianTypes = new Set(['settler', 'worker', 'caravan', 'diplomat', 'scout']);
+      if (civilianTypes.has(unit.type)) {
+        console.log(`[moveUnit] Civilian ${unit.type} cannot attack enemy city — blocked`);
+        return { success: false, reason: 'civilian_cannot_attack_city' };
+      }
+
       // Attacking an enemy city declares war (mirrors combatUnit behavior).
       if (this.diplomacyManager) {
         const dipStatus = this.diplomacyManager.getStatus(unit.civilizationId, targetCity.civilizationId);
@@ -1718,7 +1740,10 @@ export default class GameEngine {
    *   hands (or is destroyed if it had only 1 population).
    */
   private resolveCityCombat(attacker: any, city: any): 'captured' | 'hit' | 'city_destroyed' | 'defended' {
-    const attackerStrength = (attacker.attack || 1) * (attacker.health != null ? attacker.health / 100 : 1);
+    // Attack 0 units (civilians) must have zero strength — `attack || 1` would
+    // give a settler the same strength as a warrior and a 50/50 capture roll.
+    const attackerStrength = (attacker.attack && attacker.attack > 0 ? attacker.attack : 0)
+      * (attacker.health != null ? attacker.health / 100 : 1);
 
     // City defense: base = population; walls double it.
     let defense = Math.max(1, city.population || 1);
@@ -1737,8 +1762,13 @@ export default class GameEngine {
       const oldCiv = city.civilizationId;
       if ((city.population || 1) <= 1) {
         // City is destroyed rather than captured.
+        const wasCapital = city.isCapital === true;
         this.cities = this.cities.filter(c => c.id !== city.id);
         console.log(`[COMBAT] City ${city.name} (civ ${oldCiv}) destroyed by ${attacker.type}`);
+        if (wasCapital) {
+          // Capital lost — the civ re-establishes a seat of government.
+          this.governmentManager?.ensureCapital(oldCiv);
+        }
         if (this.onStateChange) {
           this.onStateChange('CITY_DESTROYED', { city, attacker });
         }
@@ -1749,6 +1779,14 @@ export default class GameEngine {
       city.population -= 1;
       city.civilizationId = attacker.civilizationId;
       city.buildings = city.buildings ?? [];
+      // A captured capital loses its Palace — the original civ must establish
+      // a new seat of government (the new owner's capital is elsewhere).
+      if (city.isCapital === true) {
+        city.isCapital = false;
+        const pIdx = city.buildings.indexOf('palace');
+        if (pIdx !== -1) city.buildings.splice(pIdx, 1);
+        this.governmentManager?.ensureCapital(oldCiv);
+      }
       console.log(`[COMBAT] City ${city.name} captured by civ ${attacker.civilizationId} (pop ${city.population})`);
       return 'captured';
     }
@@ -1820,6 +1858,14 @@ export default class GameEngine {
     };
 
     this.cities.push(city);
+
+    // First city (or a civ that lost its capital) becomes the seat of
+    // government with a free Palace.
+    const civCapitalRef = civ.capital;
+    const capitalExists = civCapitalRef && this.cities.some(c => c.id === civCapitalRef.id);
+    if (city.isCapital || !capitalExists) {
+      this.governmentManager?.designateCapital(civId, city);
+    }
 
     // Auto-production: line up follow-ups so the queue isn't empty right away.
     if (this.autoProduction && city.autoProduction) {
@@ -2007,6 +2053,34 @@ export default class GameEngine {
    */
   setGovernment(civId, government) {
     this.economicManager?.setGovernment(civId, government);
+  }
+
+  /**
+   * Begin a revolution (anarchy for ANARCHY_TURNS) toward a new government.
+   */
+  startRevolution(civId, government) {
+    return this.governmentManager?.startRevolution(civId, government) ?? false;
+  }
+
+  /**
+   * Governments currently unlocked by a civ's researched technologies.
+   */
+  getAvailableGovernments(civ) {
+    return this.governmentManager?.getAvailableGovernments(civ) ?? ['despotism'];
+  }
+
+  /**
+   * Make a city the seat of government (moves the Palace, updates flags).
+   */
+  designateCapital(civId, city) {
+    this.governmentManager?.designateCapital(civId, city);
+  }
+
+  /**
+   * Ensure the civ has a capital (replaces one lost to capture/destruction).
+   */
+  ensureCapital(civId) {
+    this.governmentManager?.ensureCapital(civId);
   }
 
   /**

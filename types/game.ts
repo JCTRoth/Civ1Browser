@@ -86,6 +86,7 @@ export interface Unit {
   movement?: number;
   attack?: number;
   defense?: number;
+  maintenance?: number;
   orders?: any;
   isFortified?: boolean;
   isSkipped?: boolean;
@@ -108,6 +109,7 @@ export interface City {
   // Per-turn economic outputs derived from the civ's Tax/Science/Luxury rates
   tax?: number;      // gold to treasury from this city's commerce
   luxury?: number;   // commerce spent on happiness
+  scienceBonus?: number; // direct science bonus from buildings (e.g. library)
   // Happiness points (luxury + building effects). The legacy `foundCity` path
   // used an object form { happy, content, unhappy } — kept for compatibility.
   happiness?: number | { happy: number; content: number; unhappy: number };
@@ -157,6 +159,12 @@ export interface Civilization {
   scienceRate?: number;
   luxuryRate?: number;
   government?: string;
+  // Revolution: >0 means the civ is in anarchy, counting down each turn before
+  // the pendingGovernment takes effect. 0/undefined means no revolution.
+  revolutionTurns?: number;
+  pendingGovernment?: string;
+  /** Set of civilization ids this civ is currently at war with. */
+  warWith?: Set<number>;
   leader?: string;
   leaderName?: string;
   cityNames?: string[];
@@ -177,7 +185,7 @@ export interface UIState {
   showTechTree: boolean;
   showDiplomacy: boolean;
   showGameMenu: boolean;
-  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | null;
+  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | null;
   sidebarCollapsed: boolean;
   notifications: Notification[];
   goToMode: boolean; // When true, next click will set destination for selected unit
@@ -334,6 +342,14 @@ export interface GameEngine {
   setRates(civId: number, tax: number, science: number, luxury: number): void;
   /** Switch a civilization's government and re-apply rate caps/anarchy rules. */
   setGovernment(civId: number, government: string): void;
+  /** Begin a revolution (anarchy for several turns) toward a new government. */
+  startRevolution(civId: number, government: string): boolean;
+  /** Governments currently unlocked by a civ's researched technologies. */
+  getAvailableGovernments(civ: Civilization): string[];
+  /** Make a city the seat of government (moves the Palace, updates flags). */
+  designateCapital(civId: number, city: City): void;
+  /** Ensure the civ has a capital (replaces one lost to capture/destruction). */
+  ensureCapital(civId: number): void;
   calculateCivScience(civId: number): number;
   calculateCivGold(civId: number): number;
   unitSleep(unitId: string): void;
@@ -352,6 +368,24 @@ export interface GameEngine {
   getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
   executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any;
   diplomacyManager: any;
+  /** Production manager for city build queues. */
+  productionManager: any;
+  /** Economic manager for tax/science/luxury rates and upkeep. */
+  economicManager: any;
+  /** Per-civilization persistent turn storage (AI state, explored tiles…). */
+  getPlayerStorage(civilizationId: number): any;
+  /** Square grid backing the map (null until a game is initialized). */
+  squareGrid: any;
+  /** Get the map tile at a grid position (null when out of bounds). */
+  getTileAt(col: number, row: number): any;
+  /** Turn/phase manager. */
+  roundManager: any;
+  /** Current in-game year (negative = BC). */
+  currentYear: number;
+  /** Current game settings (difficulty, map type, civilizations…). */
+  gameSettings: any;
+  /** Remove the active production item from a city. */
+  removeCurrentProduction(cityId: string): void;
   getAllUnits(): Unit[];
   getAllCities(): City[];
   restartCurrentGame(): Promise<void>;

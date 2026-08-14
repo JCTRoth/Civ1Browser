@@ -242,20 +242,30 @@ export class AIUtility {
   }
 
   /**
-   * Find nearby unexplored tile
+   * Find nearby unexplored tile.
+   * Skips impassable tiles (ocean etc.) — otherwise a scout camped at the map
+   * edge keeps picking an unreachable row-0 tile every turn ("Move failed to
+   * (col,0)" spam) and never explores anywhere else. Unexplored state comes
+   * from the per-player `isExplored` callback (AI tiles are stored per-player;
+   * the global `tile.explored` is never set for AI moves).
    */
   static findNearbyUnexplored(
     unitCol: number,
     unitRow: number,
     getNeighbors: (col: number, row: number) => SquareCoordinate[],
-    getTileAt: (col: number, row: number) => TileData | null | undefined
+    getTileAt: (col: number, row: number) => TileData | null | undefined,
+    isPassable?: (col: number, row: number) => boolean,
+    isExplored?: (col: number, row: number) => boolean
   ): SquareCoordinate | null {
     const neighbors = getNeighbors(unitCol, unitRow);
     for (const tilePos of neighbors) {
       const tile = getTileAt(tilePos.col, tilePos.row);
-      if (tile && !tile.explored) {
-        return tilePos;
-      }
+      if (!tile) continue;
+      const explored = isExplored ? isExplored(tilePos.col, tilePos.row) : !!tile.explored;
+      if (explored) continue;
+      // Never send a unit onto an impassable tile (row-0 ocean, mountains…).
+      if (isPassable && !isPassable(tilePos.col, tilePos.row)) continue;
+      return tilePos;
     }
     return null;
   }
@@ -579,6 +589,7 @@ export function findInterceptPosition(
  * Returns a position roughly midway along the border/frontier.
  */
 export function findPatrolWaypoint(
+  unit: any,
   unitCol: number,
   unitRow: number,
   cities: Array<{ col: number; row: number; civilizationId: number }>,
@@ -626,13 +637,28 @@ export function findPatrolWaypoint(
   // If unit is near the midpoint, send to one of the cities instead
   const distToMid = distanceFn(unitCol, unitRow, midCol, midRow);
   if (distToMid <= 2) {
+    // STICKY target: remember which city we're marching to and keep heading
+    // there until we arrive. Without this, moving one tile re-balances which
+    // city is "farther" and the unit ping-pongs between the two forever
+    // (wasting moves and tripping the AI "stuck" detector).
+    const sticky = (unit as any)._patrolTarget;
+    if (sticky && (sticky.col === cityA.col && sticky.row === cityA.row
+      || sticky.col === cityB.col && sticky.row === cityB.row)) {
+      const distToSticky = distanceFn(unitCol, unitRow, sticky.col, sticky.row);
+      if (distToSticky > 1) return { col: sticky.col, row: sticky.row };
+      // Arrived — clear the sticky target so we pick a new one next time.
+      delete (unit as any)._patrolTarget;
+    }
     const distToA = distanceFn(unitCol, unitRow, cityA.col, cityA.row);
     const distToB = distanceFn(unitCol, unitRow, cityB.col, cityB.row);
-    return distToA > distToB
+    const chosen = distToA >= distToB
       ? { col: cityA.col, row: cityA.row }
       : { col: cityB.col, row: cityB.row };
+    (unit as any)._patrolTarget = chosen;
+    return chosen;
   }
 
+  delete (unit as any)._patrolTarget;
   return { col: midCol, row: midRow };
 }
 

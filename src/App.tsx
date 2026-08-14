@@ -768,6 +768,11 @@ function App() {
             // Open tax/science/luxury rate sliders
             actions.showDialog('rates');
             break;
+          case 'g':
+          case 'G':
+            // Open government / revolution dialog
+            actions.showDialog('government');
+            break;
           case 'Escape':
             // Cancel action or close menus
             setActiveMenu(null);
@@ -959,6 +964,10 @@ function App() {
         }}
         onOpenRates={() => {
           actions.showDialog('rates');
+          setActiveMenu(null);
+        }}
+        onOpenGovernment={() => {
+          actions.showDialog('government');
           setActiveMenu(null);
         }}
         onQuit={handleQuit}

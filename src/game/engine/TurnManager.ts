@@ -563,9 +563,11 @@ export class TurnManager {
     const playerCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === playerId) || [];
     const civ = this.gameEngine.civilizations[playerId];
 
-    // Compute per-city economic outputs + happiness FIRST so disorder is known
+    // Compute real tile-based yields FIRST so production/growth use real
+    // food/production, then economic outputs + happiness so disorder is known
     // before production/growth is applied.
     playerCities.forEach((city: any) => {
+      this.gameEngine.economicManager?.recomputeCityYields(city);
       this.gameEngine.economicManager?.applyCityOutputs(city, civ);
     });
 
@@ -592,6 +594,9 @@ export class TurnManager {
 
     // Process civilization resources (rate-based income + upkeep) and research
     if (civ) {
+      // Advance any revolution (anarchy) countdown so the pending government
+      // applies BEFORE the economy is computed for this turn.
+      this.gameEngine.governmentManager?.processTurn(civ);
       const econResult = this.processCivilizationResources(civ);
       if (econResult && (econResult.upkeep > 0 || econResult.disbanded > 0)) {
         this.gameEngine.log('economy',
@@ -717,8 +722,19 @@ export class TurnManager {
 
   private addBuildingToCity(city: any, buildingType: string, isPurchased: boolean): void {
     if (!city.buildings) city.buildings = [];
+    // Buildings are one-per-city in Civ1 — never add a duplicate (the AI
+    // purchase + production paths could otherwise double-add the same item).
+    if (city.buildings.includes(buildingType)) {
+      console.log(`[TurnManager] Skipping duplicate building ${buildingType} in city ${city.name}`);
+      return;
+    }
     city.buildings.push(buildingType);
-    
+
+    // Building a Palace moves the seat of government to this city.
+    if (buildingType === 'palace') {
+      this.gameEngine.governmentManager?.designateCapital(city.civilizationId, city);
+    }
+
     console.log(`[TurnManager] Added ${isPurchased ? 'purchased' : 'produced'} building ${buildingType} to city ${city.name}`);
     
     this.emit(isPurchased ? 'BUILDING_PURCHASED' : 'BUILDING_COMPLETED', { 
