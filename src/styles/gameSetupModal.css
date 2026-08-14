@@ -92,7 +92,8 @@
   flex-direction: column;
   gap: 24px;
   max-height: 80vh;
-  overflow: hidden;
+  /* Keep visible so scrolling chains up to `.modal-body-custom` */
+  overflow: visible;
 }
 
 .setup-progress {
@@ -145,7 +146,8 @@
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
   max-height: 60vh;
-  overflow-y: auto;
+  /* Keep visible so scrolling chains up to `.modal-body-custom` */
+  overflow: visible;
 }
 
 /* Force each civ card to align icon/name consistently using a small grid */
@@ -587,17 +589,20 @@
    Mobile refinements — applied on ALL screen sizes (always-mobile layout)
    ========================================================================== */
 
-/* Let the setup content scroll instead of clipping inside the fullscreen modal */
+/* Let the setup content expand inside the fullscreen modal. `.modal-body-custom`
+   is the single scroll container — these wrappers must stay `overflow: visible`
+   so the mouse wheel / scroll chains up to the body instead of being swallowed
+   by a non-scrollable intermediate scroll container. */
 .setup-content {
   max-height: none;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible;
   overscroll-behavior: contain;
   padding-bottom: calc(24px + var(--safe-bottom, 0px));
 }
 
 .setup-civ-list {
   max-height: none;
+  overflow: visible;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
   padding-bottom: 8px;
