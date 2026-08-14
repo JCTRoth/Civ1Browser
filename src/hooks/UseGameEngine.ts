@@ -3,6 +3,7 @@ import { useGameStore } from '../stores/GameStore';
 import type { GameEngine } from '../../types/game';
 import { EngineEventRouter } from '../utils/EngineEventHandlers';
 import { gameLogger } from '../utils/GameLogger';
+import { gameProgression } from '../utils/GameProgression';
 
 /**
  * Custom hook to integrate GameEngine with Zustand state
@@ -20,10 +21,12 @@ export const useGameEngine = (gameEngine: GameEngine | null) => {
     }));
 
     // Set up state change callback via router, tapping every event into the
-    // game log first so moves/combat/turns are recorded in detail.
+    // game log first so moves/combat/turns are recorded in detail, and into
+    // the progression tracker so one snapshot is kept per round.
     const router = new EngineEventRouter(gameEngine as GameEngine);
     gameEngine.onStateChange = (eventType, eventData) => {
       gameLogger.record(eventType, eventData);
+      gameProgression.recordIfNewRound(gameEngine);
       router.handle(eventType, eventData);
     };
 

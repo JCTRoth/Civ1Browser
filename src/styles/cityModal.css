@@ -180,3 +180,84 @@
   color: #c6d2db;
   font-family: var(--font-mono, 'Cascadia Mono', Consolas, monospace);
 }
+
+/* ============================================================================
+   City modal — Production queue rework (mobile-first)
+   Queue items are movable (up/down) and removable with dedicated buttons.
+   ========================================================================== */
+
+/* Production + Queue: stacked vertically on ALL screen sizes — the Queue is
+   always below the Production section. */
+.production-queue-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.production-panel,
+.queue-panel {
+  min-width: 0;
+  width: 100%;
+}
+
+.production-panel h6,
+.queue-panel h6 {
+  margin-bottom: 0.75rem;
+}
+
+/* Production selector button */
+.production-select-btn {
+  max-width: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: normal;
+}
+
+/* Production dropdown selector (city-production modal) */
+.production-select {
+  width: 100%;
+  min-height: 44px;
+  background: var(--color-bg-input, #0f161d);
+  color: var(--color-text, #e8eef3);
+  border: 1px solid var(--color-border, #2c3b49);
+}
+
+.production-select:focus {
+  border-color: var(--color-accent, #f0c33c);
+  box-shadow: 0 0 0 0.2rem rgba(240, 195, 60, 0.25);
+}
+
+/* Queue item layout: content + action buttons (up / down / delete) beside it */
+.queue-item {
+  display: flex;
+  align-items: stretch;
+  cursor: pointer;
+}
+
+/* All three action buttons in a single horizontal row on every screen size */
+.queue-item-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
+
+.queue-action-btn {
+  min-width: 40px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.queue-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

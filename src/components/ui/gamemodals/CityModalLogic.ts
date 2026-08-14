@@ -93,6 +93,12 @@ export class CityModalLogic {
     }
   }
 
+  moveQueueItem(fromIndex: number, toIndex: number): void {
+    if (this.gameEngine && this.gameEngine.moveCityQueueItem) {
+      this.gameEngine.moveCityQueueItem(this.city.id, fromIndex, toIndex);
+    }
+  }
+
   getAvailableProductionKeys(): string[] {
     return Object.keys(UNIT_PROPS).filter((key) => {
       const u = UNIT_PROPS[key];

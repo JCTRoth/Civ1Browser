@@ -29,7 +29,6 @@ const CityModal: React.FC<CityModalProps> = ({
   const [selectedProductionKey, setSelectedProductionKey] = useState<string | null>(null);
   const [selectedQueueIndex, setSelectedQueueIndex] = useState<number | null>(null);
   const [showProductionModal, setShowProductionModal] = useState<boolean>(false);
-  const [, setAutoQueueOnSelect] = useState<boolean>(false);
   const [autoProduction, setAutoProduction] = useState<boolean>((selectedCity as any)?.autoProduction || false);
 
   // Sync local state when selectedCity changes
@@ -175,87 +174,92 @@ const CityModal: React.FC<CityModalProps> = ({
                         </label>
                       </div>
                     </div>
-                    <div className="mt-3">
-                      <h6>Production</h6>
-                      {(() => {
-                        const purchasedThisTurn = (selectedCity as any).purchasedThisTurn || [];
-                        if (purchasedThisTurn.length > 0) {
-                          return (
-                            <div className="alert alert-warning small mb-2">
-                              <i className="bi bi-exclamation-triangle"></i> Already purchased an item this turn. Purchase will be available next turn.
-                            </div>
-                          );
-                        }
-                        return null;
-                      })()}
-                      <div className="d-flex gap-2 align-items-center">
-                        {/* This button opens a modal with Units and Buildings tabs, listing all items. */}
-                        <button
-                          className="btn btn-secondary text-white"
-                          type="button"
-                          onClick={() => setShowProductionModal(true)}
-                          disabled={!isPlayerCity}
-                          style={{maxWidth: '420px', minWidth: '200px'}}
-                        >
-                          {selectedProductionKey ? `${UNIT_PROPS[selectedProductionKey]?.name || BUILDING_PROPS[selectedProductionKey]?.name} (${getSelectedProductionCost(selectedProductionKey)} shields)` : 'Select Production'}
-                        </button>
-                        {/* Add / Remove buttons next to production selector */}
-                        <div className="d-flex gap-1">
+                    <div className="production-queue-layout">
+                      <div className="production-panel">
+                        <h6>Production</h6>
+                        {(() => {
+                          const purchasedThisTurn = (selectedCity as any).purchasedThisTurn || [];
+                          if (purchasedThisTurn.length > 0) {
+                            return (
+                              <div className="alert alert-warning small mb-2">
+                                <i className="bi bi-exclamation-triangle"></i> Already purchased an item this turn. Purchase will be available next turn.
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                        <div className="d-flex gap-2 align-items-center">
+                          {/* This button opens a modal with Units and Buildings tabs, listing all items. */}
                           <button
+                            className="btn btn-secondary text-white production-select-btn"
                             type="button"
-                            className="btn btn-outline-light btn-sm"
-                            title="Add to queue"
-                            onClick={() => {
-                              if (!isPlayerCity) return;
-                              if (selectedProductionKey) {
-                                handleQueueProduction(selectedProductionKey);
-                                // keep selection visible after queuing
-                              } else {
-                                // open modal and auto-queue on selection
-                                setAutoQueueOnSelect(true);
-                                setShowProductionModal(true);
-                              }
-                            }}
+                            onClick={() => setShowProductionModal(true)}
+                            disabled={!isPlayerCity}
                           >
-                            <i className="bi bi-plus-lg"></i>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-light btn-sm"
-                            title="Remove from queue"
-                            onClick={() => {
-                              if (!isPlayerCity) return;
-                              if (selectedQueueIndex !== null && typeof selectedQueueIndex === 'number') {
-                                logic.removeQueueItem(selectedQueueIndex);
-                                setSelectedQueueIndex(null);
-                              } else if (logic.hasQueueItems()) {
-                                // remove first item if none selected
-                                logic.removeQueueItem(0);
-                              }
-                            }}
-                          >
-                            <i className="bi bi-dash-lg"></i>
+                            <i className="bi bi-plus-lg me-1"></i>
+                            {selectedProductionKey ? `${UNIT_PROPS[selectedProductionKey]?.name || BUILDING_PROPS[selectedProductionKey]?.name} (${getSelectedProductionCost(selectedProductionKey)} shields)` : 'Add to Queue'}
                           </button>
                         </div>
                       </div>
-                    </div>
-                    <div className="mt-3">
-                      <h6>Queue</h6>
-                      <div className="queue-box bg-dark border border-secondary rounded p-2" style={{maxHeight: '220px', overflowY: 'auto'}}>
-                        {logic.hasQueueItems() ? (
-                          logic.getQueueItems().map((q: any, i: number) => (
-                            <div key={i} className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'text-white' : 'text-white'}`} onClick={() => setSelectedQueueIndex(i)}>
-                              <div className="d-flex justify-content-between">
-                                <div><strong>{q.name}</strong></div>
-                                <div>{q.cost} shields</div>
+                      <div className="queue-panel">
+                        <h6>Queue</h6>
+                        <div className="queue-box bg-dark border border-secondary rounded p-2" style={{maxHeight: '240px', overflowY: 'auto'}}>
+                          {logic.hasQueueItems() ? (
+                            logic.getQueueItems().map((q: any, i: number) => (
+                              <div key={i} className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'text-white' : 'text-white'}`} onClick={() => setSelectedQueueIndex(i)}>
+                                <div className="d-flex justify-content-between align-items-center gap-2">
+                                  <div className="flex-grow-1">
+                                    <div><strong>{q.name}</strong></div>
+                                    <div className="small">#{i + 1} in queue · {q.cost} shields</div>
+                                    <div className="small text-muted">Turns: {ModalUtils.getTurnsRemaining(0, q.cost, logic.getProductionPerTurn())}</div>
+                                  </div>
+                                  <div className="queue-item-actions">
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-light btn-sm queue-action-btn"
+                                      title="Move up in queue"
+                                      disabled={i === 0}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        logic.moveQueueItem(i, i - 1);
+                                        setSelectedQueueIndex(i - 1);
+                                      }}
+                                    >
+                                      <i className="bi bi-arrow-up"></i>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-light btn-sm queue-action-btn"
+                                      title="Move down in queue"
+                                      disabled={i === logic.getQueueItems().length - 1}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        logic.moveQueueItem(i, i + 1);
+                                        setSelectedQueueIndex(i + 1);
+                                      }}
+                                    >
+                                      <i className="bi bi-arrow-down"></i>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-danger btn-sm queue-action-btn"
+                                      title="Remove from queue"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        logic.removeQueueItem(i);
+                                        setSelectedQueueIndex(null);
+                                      }}
+                                    >
+                                      <i className="bi bi-trash"></i>
+                                    </button>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="small">#{i + 1} in queue</div>
-                              <div className="small text-muted">Turns: {ModalUtils.getTurnsRemaining(0, q.cost, logic.getProductionPerTurn())}</div>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-white">Queue is empty</div>
-                        )}
+                            ))
+                          ) : (
+                            <div className="text-white">Queue is empty</div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </>
@@ -488,7 +492,6 @@ const CityModal: React.FC<CityModalProps> = ({
         onSelectProduction={key => {
           // Always queue the selected item when picking from the modal
           handleQueueProduction(key);
-          setAutoQueueOnSelect(false);
           // keep the selected production visible after queuing
           setSelectedProductionKey(key);
           setShowProductionModal(false);

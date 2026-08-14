@@ -47,6 +47,11 @@ export class AIManager {
       console.log(`[AI] processAITurn: Skipping civilization ${civilizationId} - is human player`);
       return;
     }
+    // Don't run AI while the game is paused
+    if (this.gameEngine.isPaused) {
+      console.warn(`[AI] processAITurn: Skipping civilization ${civilizationId} - game is paused`);
+      return;
+    }
     // CRITICAL: Only allow AI to act during its own turn
     if (this.gameEngine.activePlayer !== civilizationId) {
       console.warn(`[AI] processAITurn: Civilization ${civilizationId} attempted to act outside its turn (active player: ${this.gameEngine.activePlayer})`);
@@ -68,6 +73,11 @@ export class AIManager {
     // CRITICAL: Verify this is still the active player before proceeding
     if (this.gameEngine.activePlayer !== civilizationId) {
       console.warn(`[AI] runAITurn: Turn changed before AI could act (expected: ${civilizationId}, actual: ${this.gameEngine.activePlayer})`);
+      return;
+    }
+    // Don't run AI while the game is paused
+    if (this.gameEngine.isPaused) {
+      console.warn(`[AI] runAITurn: Skipping civilization ${civilizationId} - game is paused`);
       return;
     }
     console.log(`[AI] 🤖 Starting AI turn for civilization ${civilizationId} (${civ.name})`);
@@ -149,6 +159,11 @@ export class AIManager {
     console.log(`[AI] Found ${aiUnits.length} units with moves remaining for civilization ${civilizationId}`);
 
     for (const unit of aiUnits) {
+      // If the game was paused mid-AI-turn, stop processing further units.
+      if (this.gameEngine.isPaused) {
+        console.warn(`[AI] runAITurn: Game paused mid-turn — stopping AI for civ ${civilizationId}`);
+        return;
+      }
 
       console.log(`[AI] Processing unit ${unit.id} (${unit.type}) at (${unit.col},${unit.row}) with ${unit.movesRemaining} moves remaining`);
 

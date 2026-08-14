@@ -43,6 +43,9 @@ export class EngineEventRouter {
       case 'CITY_PRODUCTION_CHANGED':
         this.onCityProductionChanged(eventData);
         break;
+      case 'CITY_QUEUE_UPDATED':
+        this.onCityProductionChanged(eventData);
+        break;
       case 'TURN_PROCESSED':
         this.onTurnProcessed();
         break;
@@ -320,11 +323,11 @@ export class EngineEventRouter {
 
     // Do not auto-end the turn while the player is in a screen where they
     // might still make a decision: city management (details / production /
-    // purchase / citizens) and diplomacy (a leader may be awaiting a response)
-    // — or while a combat animation is still playing. The check is re-run when
-    // one of those screens closes (see GameModals.handleCloseDialog) or the
-    // combat animation ends (see onCombat). Other dialogs (WORLD menu, tech
-    // tree, help, hex details) do not block auto-end.
+    // purchase / citizens), diplomacy (a leader may be awaiting a response) or
+    // while paused — or while a combat animation is still playing. The check is
+    // re-run when one of those screens closes (see GameModals.handleCloseDialog)
+    // or the combat animation ends (see onCombat). Other dialogs (WORLD menu,
+    // tech tree, help, hex details) do not block auto-end.
     const activeDialog = state.uiState?.activeDialog;
     const decisionScreenOpen = activeDialog !== null &&
       activeDialog !== 'game-menu' &&

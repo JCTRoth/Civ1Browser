@@ -146,24 +146,45 @@ export class ProductionManager {
 
       const removed = buildQueue.splice(index, 1)[0];
 
-      // If we removed the first item in the queue (index 0), it should become the new current production
-      if (index === 0 && buildQueue.length > 0) {
-        const nextItem = buildQueue.shift(); // Remove from queue and use as current production
-        if (nextItem) {
-          (city as any).currentProduction = nextItem;
-          // Keep existing production progress when switching
-          console.log('[ProductionManager] started next queued item after removal', { cityId, currentProduction: (city as any).currentProduction });
-        }
-      } else if (index === 0 && buildQueue.length === 0) {
-        // Removed the last queue item, clear current production
-        console.log('[ProductionManager] cleared current production - queue is now empty');
-      }
+      // NOTE: Removing a queued item must ONLY remove that single item. The
+      // queue is separate from currentProduction; promoting the next queued
+      // item to current production happens in removeCurrentProduction (or when
+      // a production completes), NOT here. Previously this block shifted an
+      // EXTRA item out of the queue when index === 0, deleting two items at
+      // once.
 
       console.log('[ProductionManager] removed item from queue', { cityId, index, removed, remainingQueue: buildQueue });
       if (this.gameEngine.onStateChange) this.gameEngine.onStateChange('CITY_QUEUE_UPDATED', { cityId, removed, index });
       return { success: true, removed };
     } catch (e) {
       console.error('[ProductionManager] removeCityQueueItem error', e);
+      return { success: false, reason: 'exception' };
+    }
+  }
+
+  /**
+   * Move an item in a city's build queue from one index to another.
+   * Used by the city modal to reorder queued items (mobile-first UI).
+   */
+  moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number) {
+    try {
+      const city = this.gameEngine.cities.find(c => c.id === cityId) || ((this.gameEngine as any).map && (this.gameEngine as any).map.getCity(cityId));
+      if (!city) return { success: false, reason: 'city_not_found' };
+
+      const buildQueue = (city as any).buildQueue;
+      if (!Array.isArray(buildQueue)) return { success: false, reason: 'no_build_queue' };
+      if (fromIndex < 0 || fromIndex >= buildQueue.length) return { success: false, reason: 'invalid_from_index' };
+      if (toIndex < 0 || toIndex >= buildQueue.length) return { success: false, reason: 'invalid_to_index' };
+      if (fromIndex === toIndex) return { success: true };
+
+      const [moved] = buildQueue.splice(fromIndex, 1);
+      buildQueue.splice(toIndex, 0, moved);
+
+      console.log('[ProductionManager] moved queue item', { cityId, fromIndex, toIndex, moved, queue: buildQueue });
+      if (this.gameEngine.onStateChange) this.gameEngine.onStateChange('CITY_QUEUE_UPDATED', { cityId, fromIndex, toIndex });
+      return { success: true, moved };
+    } catch (e) {
+      console.error('[ProductionManager] moveCityQueueItem error', e);
       return { success: false, reason: 'exception' };
     }
   }

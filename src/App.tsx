@@ -8,6 +8,7 @@ import GameSetupModal from './components/ui/GameSetupModal';
 import EndTurnConfirmModal from './components/ui/EndTurnConfirmModal';
 import GameModals from './components/ui/GameModals';
 import GameResultOverlay from './components/ui/GameResultOverlay';
+import PauseScreen from './components/ui/PauseScreen';
 import TopBar from './components/ui/TopBar';
 import MobileBottomBar from './components/ui/MobileBottomBar';
 import GameMenuSheet, { type GameMenuName } from './components/ui/GameMenuSheet';
@@ -20,6 +21,7 @@ import { enrichMapForExport } from '@/utils/MapExportUtils';
 import { preloadAllUnitIcons } from '@/utils/UnitIconLoader';
 import { centerCameraOnTile, getGameViewport } from '@/utils/CameraUtils';
 import { gameLogger } from '@/utils/GameLogger';
+import { gameProgression } from '@/utils/GameProgression';
 
 function App() {
   const gameState = useGameStore(state => state.gameState);
@@ -127,6 +129,9 @@ function App() {
 
       const engine = new GameEngine(actions);
       await engine.initialize(gameSettings);
+
+      // Start the per-round progression tracker for this game session.
+      gameProgression.startSession(engine, gameSettings);
 
       // Mark the game as started once engine state is ready in the store
       actions.startGame();
@@ -284,6 +289,23 @@ function App() {
     }
   };
 
+  // Download the game progression list (per-round snapshots + full game log)
+  // for post-game analysis and AI improvement.
+  const handleDownloadProgression = async () => {
+    setActiveMenu(null);
+    if (!gameEngine) {
+      showToast('No active game to export', 'warning');
+      return;
+    }
+    try {
+      await gameProgression.download(gameEngine);
+      showToast('Game progression list downloaded', 'success');
+    } catch (e) {
+      console.error('handleDownloadProgression error', e);
+      showToast('Failed to download progression list', 'error');
+    }
+  };
+
   // Save game to a downloadable JSON file
   const handleSaveGame = () => {
     if (!gameEngine) {
@@ -385,6 +407,9 @@ function App() {
     }
     try {
       await gameEngine.restartCurrentGame();
+      // Restart the progression tracker for the fresh game.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      gameProgression.startSession(gameEngine, (gameEngine as any)?.gameSettings ?? {});
       actions.clearGameResult();
       setActiveMenu(null);
       setShowHexDetail(false);
@@ -482,8 +507,38 @@ function App() {
     setShowGameSetup(true);
   };
 
+  // Pause / resume the game. While paused, the PauseScreen overlay is shown,
+  // map interactions + end-turn are blocked, and the game engine halts turn
+  // processing / AI actions so nothing continues behind the overlay.
+  const isPaused = uiState.activeDialog === 'pause';
+
+  const handlePause = () => {
+    console.log('[App] Pausing game');
+    setActiveMenu(null);
+    // Halt the game engine first so no AI/turn processing happens mid-transition.
+    if (gameEngine && typeof gameEngine.setPaused === 'function') {
+      gameEngine.setPaused(true);
+    }
+    actions.showDialog('pause');
+  };
+
+  const handleResume = () => {
+    console.log('[App] Resuming game');
+    if (isPaused) {
+      actions.hideDialog();
+      if (gameEngine && typeof gameEngine.setPaused === 'function') {
+        gameEngine.setPaused(false);
+      }
+    }
+  };
+
   // Handle end turn request - show modal (manual button click)
   const handleEndTurnRequest = useCallback(() => {
+    // Ignore end-turn while the game is paused.
+    if (useGameStore.getState().uiState.activeDialog === 'pause') {
+      console.log('[App] End turn ignored — game is paused');
+      return;
+    }
     console.log('[App] End turn requested manually - showing confirmation modal');
     setIsEndTurnAutomatic(false);
     
@@ -529,7 +584,7 @@ function App() {
         'Enter', ' ', 
         't', 'Escape', 'F1', 'F2', 'F3', 'F4', 'F11'
       ].includes(key) ||
-      (ctrlKey && ['1','2','3','4','5','6','7','8','9','s','l','z'].includes(key)) ||
+      (ctrlKey && ['1','2','3','4','5','6','7','8','9','p','s','l','z'].includes(key)) ||
       (key === '+' || key === '-');
 
       if (shouldPreventDefault) {
@@ -788,6 +843,14 @@ function App() {
               gameEngine.undoLastAction();
             }
             break;
+          case 'p':
+            // Pause / resume the game (Ctrl+P)
+            if (isPaused) {
+              handleResume();
+            } else {
+              handlePause();
+            }
+            break;
         }
       }
     };
@@ -801,7 +864,7 @@ function App() {
         window.removeEventListener('keydown', handleKeyDown);
       }
     };
-  }, [gameEngine, camera, setCamera, handleEndTurnRequest, activeMenu, showHexDetail, showSettings]);
+  }, [gameEngine, camera, setCamera, handleEndTurnRequest, activeMenu, showHexDetail, showSettings, isPaused, handlePause, handleResume]);
 
   if (error) {
     return (
@@ -889,6 +952,7 @@ function App() {
         onNewGame={handleNewGame}
         onSaveGame={handleSaveGame}
         onLoadGame={handleLoadGame}
+        onPause={handlePause}
         onOpenSettings={() => {
           setShowSettings(true);
           setActiveMenu(null);
@@ -898,6 +962,7 @@ function App() {
           handleDownloadMap();
           setActiveMenu(null);
         }}
+        onDownloadProgression={handleDownloadProgression}
         onHelp={() => {
           actions.showDialog('help');
           setActiveMenu(null);
@@ -968,6 +1033,14 @@ function App() {
 
       {/* Game Modals */}
       <GameModals gameEngine={gameEngine} />
+
+      {/* Pause overlay */}
+      <PauseScreen
+        show={isPaused}
+        onResume={handleResume}
+        currentTurn={gameState.currentTurn}
+        currentYear={gameState.currentYear != null ? GameUtils.formatYear(gameState.currentYear) : undefined}
+      />
 
       <GameResultOverlay
         result={gameResult}

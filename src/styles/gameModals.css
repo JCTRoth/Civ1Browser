@@ -130,20 +130,28 @@
    ========================================================================== */
 @media (min-width: 992px) {
   .modal-dialog.city-details-modal,
-  .modal-dialog.production-selection-modal {
+  .modal-dialog.production-selection-modal,
+  .modal-dialog.city-production-modal {
     max-width: min(900px, 92vw);
   }
 
-  .city-details-modal .modal-content,
-  .production-selection-modal .modal-content {
+  .modal-dialog.city-details-modal .modal-content,
+  .modal-dialog.production-selection-modal .modal-content,
+  .modal-dialog.city-production-modal .modal-content {
     display: flex;
     flex-direction: column;
-    max-height: calc(100dvh - 3.5rem);
-    min-height: 0;
+    /* Fixed height keeps the dialog the same size across tabs (Buildings tab is
+       short; Overview/Resources are tall). The body scrolls internally.
+       Generous height so the modal fills most of the desktop window. */
+    height: min(86vh, 860px);
+    max-height: calc(100dvh - 2.5rem);
+    /* Subtle corners — not the strongly-rounded default */
+    border-radius: var(--radius-md, 10px);
   }
 
-  .city-details-modal .modal-body,
-  .production-selection-modal .modal-body {
+  .modal-dialog.city-details-modal .modal-body,
+  .modal-dialog.production-selection-modal .modal-body,
+  .modal-dialog.city-production-modal .modal-body {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;

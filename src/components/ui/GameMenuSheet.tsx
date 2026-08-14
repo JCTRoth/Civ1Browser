@@ -9,9 +9,11 @@ interface GameMenuSheetProps {
   onNewGame: () => void;
   onSaveGame: () => void;
   onLoadGame: () => void;
+  onPause: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
   onDownloadMap: () => void;
+  onDownloadProgression: () => void;
   onHelp: () => void;
   onDiplomacy: () => void;
   onTechTree: () => void;
@@ -47,9 +49,11 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
   onNewGame,
   onSaveGame,
   onLoadGame,
+  onPause,
   onOpenSettings,
   onQuit,
   onDownloadMap,
+  onDownloadProgression,
   onHelp,
   onDiplomacy,
   onTechTree,
@@ -84,6 +88,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
           <>
             <MenuItem icon="🆕" label="New Game" onClick={onNewGame} />
             <MenuItem icon="💾" label="Save Game" onClick={onSaveGame} />
+            <MenuItem icon="⏸️" label="Pause" onClick={onPause} />
             <MenuItem icon="📁" label="Load Game" onClick={onLoadGame} />
             <MenuItem icon="⚙️" label="Settings" onClick={onOpenSettings} />
             <MenuItem icon="🚪" label="Quit" onClick={onQuit} danger />
@@ -100,6 +105,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
         {activeMenu === 'INFO' && (
           <>
             <MenuItem icon="🗺️" label="Download Map" onClick={onDownloadMap} />
+            <MenuItem icon="📜" label="Download Game Progression List" onClick={onDownloadProgression} />
             <MenuItem icon="❓" label="Help" onClick={onHelp} />
           </>
         )}

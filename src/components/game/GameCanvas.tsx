@@ -299,10 +299,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         if (actions && typeof actions.selectUnit === 'function') {
           actions.selectUnit(playerSettler.id);
         }
-        // Auto-enter GoTo mode if unit has moves
+        // Auto-enter GoTo mode if unit has moves. Sync the store as well so the
+        // store->local effect keeps both in agreement (otherwise the cursor can
+        // stay stuck as "crosshair" when the goto is later cleared).
         if ((playerSettler.movesRemaining || 0) > 0) {
           setGotoMode(true);
           setGotoUnit(playerSettler);
+          if (actions?.setGoToMode) {
+            actions.setGoToMode(true, playerSettler.id);
+          }
           if (actions?.addNotification) {
             actions.addNotification({
               type: 'info',
@@ -369,6 +374,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     );
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore unit-action keys while the game is paused.
+      if (useGameStore.getState().uiState.activeDialog === 'pause') {
+        return;
+      }
       const handled = keyboardHandler.handleKeyDown(event);
       if (handled) {
         triggerRender();
@@ -671,6 +680,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
   // Handle mouse events
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Only the primary (left) button starts a drag-pan. Right/middle clicks
+    // open the context menu instead — starting a drag for them would leave
+    // `isDragging` stuck as true (the context menu's backdrop swallows the
+    // matching mouseup), fixating the cursor on the "grabbing" hand.
+    if (e.button !== 0) {
+      return;
+    }
     // Don't allow dragging in Go To mode
     if (gotoMode) {
       return;
@@ -1118,7 +1134,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
   const handleRightClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    
+
+    // Right-click never starts a drag — ensure any stale drag state is cleared
+    // so the cursor doesn't stay stuck on the "grabbing" hand.
+    setIsDragging(false);
+
     // If in Go To mode, right click exits GoTo mode and deselects unit
     if (gotoMode) {
       console.log('[RightClick] Exiting GoTo mode');
@@ -1417,6 +1437,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       case 'found_city':
         if (unit && gameEngine?.foundCityWithSettler) {
           console.log(`[ContextMenu] Found city action for unit ${unit.id}`);
+          // The settler is consumed — leave GoTo mode so the cursor isn't left
+          // stuck in "crosshair"/drag state with no unit to move.
+          if (actions?.setGoToMode) {
+            actions.setGoToMode(false, null);
+          }
+          setGotoMode(false);
+          setGotoUnit(null);
           const result = gameEngine.foundCityWithSettler(unit.id);
           if (result) {
             if (actions?.updateCities) actions.updateCities(getAllCitiesFromEngine());
@@ -1815,6 +1842,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         onMouseDown={minimap ? null : handleMouseDown}
         onMouseMove={minimap ? null : handleMouseMove}
         onMouseUp={minimap ? null : handleMouseUp}
+        onMouseLeave={minimap ? null : () => setIsDragging(false)}
         onClick={handleClick}
         onContextMenu={minimap ? null : handleRightClick}
         onWheel={minimap ? null : handleWheel}

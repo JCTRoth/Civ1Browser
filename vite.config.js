@@ -1,6 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { mkdirSync, appendFileSync } from 'node:fs'
+import { mkdirSync, appendFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -15,6 +15,27 @@ function gameLogPlugin() {
     name: 'game-log-writer',
     configureServer(server) {
       server.middlewares.use('/__game_log', (req, res, next) => {
+        // GET /__game_log?session=<sessionId> returns the full persisted log
+        // for that session as a JSON array (used by the progression exporter).
+        if (req.method === 'GET') {
+          const url = new URL(req.url, 'http://localhost')
+          const session = String(url.searchParams.get('session') || 'game').replace(/[^a-zA-Z0-9._-]/g, '_')
+          const file = join(process.cwd(), 'game-logs', `${session}.log`)
+          res.setHeader('Content-Type', 'application/json')
+          if (existsSync(file)) {
+            const entries = readFileSync(file, 'utf8')
+              .split('\n')
+              .filter(Boolean)
+              .map((l) => { try { return JSON.parse(l) } catch { return null } })
+              .filter(Boolean)
+            res.statusCode = 200
+            res.end(JSON.stringify(entries))
+          } else {
+            res.statusCode = 404
+            res.end(JSON.stringify({ ok: false, error: 'no log for session' }))
+          }
+          return
+        }
         if (req.method !== 'POST') return next()
         let body = ''
         req.on('data', (chunk) => { body += chunk })

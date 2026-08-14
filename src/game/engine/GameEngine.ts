@@ -82,6 +82,7 @@ export default class GameEngine {
   goToManager: GoToManager;
   victoryManager: VictoryManager;
   isGameOver: boolean;
+  isPaused: boolean; // When true, turn processing and AI actions are halted
   scoutMemory: ScoutMemory; // Phase 3.1: Scout persistence across turns
   aiManager: AIManager;
   unitTurnQueue: UnitTurnQueue; // Unit turn queue for managing unit order
@@ -135,7 +136,17 @@ export default class GameEngine {
     this.devMode = false;
     this.victoryManager = new VictoryManager(this);
     this.isGameOver = false;
+    this.isPaused = false;
     this.victoryManager.syncStoreActions(this.storeActions);
+  }
+
+  /**
+   * Pause the game: halts turn processing, auto-end and AI actions until
+   * resume() is called. The UI shows the pause screen while paused.
+   */
+  setPaused(paused: boolean): void {
+    this.isPaused = paused;
+    console.log(`[GameEngine] ${paused ? '⏸️ Paused' : '▶ Resumed'}`);
   }
 
   /**
@@ -330,6 +341,13 @@ export default class GameEngine {
    */
   removeCityQueueItem(cityId: string, index: number) {
     return this.productionManager.removeCityQueueItem(cityId, index);
+  }
+
+  /**
+   * Move an item in a city's build queue from one index to another.
+   */
+  moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number) {
+    return this.productionManager.moveCityQueueItem(cityId, fromIndex, toIndex);
   }
 
   /**
@@ -1836,6 +1854,13 @@ export default class GameEngine {
   checkAndEndTurnIfNoMoves() {
     console.log('[TURN] checkAndEndTurnIfNoMoves: Checking active player', this.activePlayer);
     
+    // Don't auto-end the turn while the game is paused — the player paused
+    // because they want the action to stop, not to skip ahead.
+    if (this.isPaused) {
+      console.log('[TURN] ⏸️ Skipping auto-end check - game is paused');
+      return;
+    }
+    
     // Don't trigger auto-end while GoTo paths are being processed
     if (this.roundManager?.isProcessingGoTo?.()) {
       console.log('[TURN] ⏸️ Skipping auto-end check - GoTo paths still being processed');
@@ -1937,6 +1962,11 @@ export default class GameEngine {
 
     if (this.isGameOver) {
       console.log('[GameEngine] processTurn: Ignored because the game has concluded');
+      return;
+    }
+
+    if (this.isPaused) {
+      console.log('[GameEngine] processTurn: Ignored because the game is paused');
       return;
     }
     

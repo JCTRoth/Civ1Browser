@@ -193,7 +193,35 @@ test.describe('Top Menu', () => {
   test('opens INFO menu', async ({ page }) => {
     await openTopMenu(page, 'INFO');
     await expect(page.getByRole('button', { name: /Download Map/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Download Game Progression List/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Help/ })).toBeVisible();
+  });
+
+  test('downloads the game progression list from INFO menu', async ({ page }) => {
+    await openTopMenu(page, 'INFO');
+    const downloadPromise = page.waitForEvent('download', { timeout: 10_000 });
+    await page.getByRole('button', { name: /Download Game Progression List/ }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^civ1-progression-.*\.json$/);
+    // The exported payload should contain the meta/progression/log structure.
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
+    const payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    expect(payload).toHaveProperty('meta');
+    expect(payload).toHaveProperty('summary');
+    expect(payload).toHaveProperty('progression');
+    expect(payload).toHaveProperty('log');
+    expect(Array.isArray(payload.progression)).toBe(true);
+    // Each round snapshot should contain the full per-player city JSONs.
+    if (payload.progression.length > 0) {
+      const firstRound = payload.progression[0];
+      const someCiv = Object.values(firstRound.civs ?? {})[0] as
+        | { cityData?: unknown[] }
+        | undefined;
+      expect(someCiv).toBeDefined();
+      expect(Array.isArray(someCiv?.cityData)).toBe(true);
+    }
   });
 
   test('opens settings modal from GAME menu', async ({ page }) => {

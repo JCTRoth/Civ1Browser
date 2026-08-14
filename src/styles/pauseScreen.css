@@ -1,0 +1,121 @@
+/* ============================================================================
+   Pause screen — full-screen overlay shown while the game is paused.
+   ========================================================================== */
+
+.pause-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 12, 16, 0.88);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: pause-screen-fade 0.18s ease-out;
+}
+
+@keyframes pause-screen-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pause-screen__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4, 1rem);
+  text-align: center;
+  padding: var(--space-7, 3rem) var(--space-6, 2rem);
+  max-width: 420px;
+  width: calc(100% - 32px);
+  background: var(--color-bg-elevated, #16202a);
+  border: 1px solid var(--color-border, #2c3b49);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.pause-screen__icon {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.pause-screen__title {
+  margin: 0;
+  font-size: var(--text-2xl, 1.75rem);
+  font-weight: 700;
+  color: var(--color-text, #e8eef3);
+  letter-spacing: 0.02em;
+}
+
+.pause-screen__status {
+  margin: 0;
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #ffffff);
+  opacity: 0.8;
+}
+
+.pause-screen__hint {
+  margin: 0;
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #ffffff);
+  opacity: 0.6;
+}
+
+.pause-screen__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 0.75rem);
+  width: 100%;
+  margin-top: var(--space-3, 0.75rem);
+}
+
+.pause-screen__button {
+  min-height: 48px;
+  padding: 12px 20px;
+  font-size: var(--text-base, 1rem);
+  font-weight: 600;
+  color: var(--color-text, #e8eef3);
+  background: var(--color-bg-overlay, #1d2935);
+  border: 1px solid var(--color-border, #2c3b49);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.pause-screen__button:hover,
+.pause-screen__button:focus-visible {
+  background: var(--color-bg-input, #0f161d);
+  border-color: var(--color-border-strong, #3d5163);
+  outline: none;
+}
+
+.pause-screen__button:active {
+  transform: scale(0.98);
+}
+
+.pause-screen__button--primary {
+  background: var(--color-accent, #f0c33c);
+  color: var(--color-accent-ink, #141006);
+  border-color: var(--color-accent, #f0c33c);
+}
+
+.pause-screen__button--primary:hover,
+.pause-screen__button--primary:focus-visible {
+  background: var(--color-accent-strong, #ffd75e);
+  border-color: var(--color-accent-strong, #ffd75e);
+}
+
+/* Desktop: horizontal action row (wraps so buttons never overflow the box) */
+@media (min-width: 768px) {
+  .pause-screen__actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pause-screen__button {
+    min-width: 130px;
+    flex: 1 1 auto;
+  }
+}

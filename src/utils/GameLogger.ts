@@ -190,6 +190,36 @@ class GameLogger {
     await this.flush();
   }
 
+  /**
+   * Return the full session log: the lines persisted by the dev server merged
+   * with any lines still buffered in memory (deduped by ts/event/message).
+   * Falls back to the in-memory buffer when the server is unreachable.
+   */
+  async getAllEntries(): Promise<GameLogEntry[]> {
+    const merged = new Map<string, GameLogEntry>();
+    for (const e of this.pending) {
+      merged.set(`${e.ts}|${e.event}|${e.message}`, e);
+    }
+    if (this.sessionId && !this.serverUnreachable) {
+      try {
+        const res = await fetch(`/__game_log?session=${encodeURIComponent(this.sessionId)}`);
+        if (res.ok) {
+          const entries = await res.json();
+          if (Array.isArray(entries)) {
+            for (const e of entries) {
+              if (e && typeof e === 'object' && typeof e.ts === 'string') {
+                merged.set(`${e.ts}|${e.event}|${e.message}`, e as GameLogEntry);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[GameLogger] could not fetch full session log:', err);
+      }
+    }
+    return [...merged.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+  }
+
   /** Download the in-memory buffer as a file (fallback when no server). */
   downloadLog(filename = 'game-log.jsonl'): void {
     const blob = new Blob(

@@ -133,6 +133,12 @@ export class TurnManager {
 
   // --- Turn lifecycle ---
   startTurn(civilizationId: number): void {
+    // Don't start a new turn while the game is paused — otherwise the AI would
+    // keep playing through paused turns (e.g. AI-vs-AI auto mode).
+    if (this.gameEngine.isPaused) {
+      console.warn(`[TurnManager] startTurn: Game paused — deferring turn start for civ ${civilizationId}`);
+      return;
+    }
     this.currentPlayer = civilizationId;
     this.currentPhase = TurnPhase.START;
     this.playerRegistered = false;
@@ -408,6 +414,13 @@ export class TurnManager {
    */
   advanceTurn(): void {
     console.log('[TurnManager] advanceTurn: Advancing from player', this.currentPlayer);
+    
+    // Do not advance to the next player while paused — this freezes the whole
+    // turn cycle (human AND AI) so nothing continues behind the pause screen.
+    if (this.gameEngine.isPaused) {
+      console.warn('[TurnManager] advanceTurn: Game paused — deferring turn advance');
+      return;
+    }
     
     const previousPlayer = this.currentPlayer;
     
