@@ -117,6 +117,10 @@ export class AIManager {
       if (!storage.turnData) storage.turnData = {};
       if (!storage.turnData.aiState) {
         storage.turnData.aiState = createDefaultAIState();
+        // Seed the research strategy from the civ's fixed production profile so
+        // the AI researches in the same direction it produces.
+        storage.turnData.aiState.strategyProfile =
+          this.gameEngine.civilizations?.[civilizationId]?.productionProfile ?? 'balanced_growth';
       }
     }
     const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();

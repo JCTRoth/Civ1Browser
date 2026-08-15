@@ -97,6 +97,26 @@ export function createDefaultAIState(): AIState {
   };
 }
 
+/**
+ * Fixed per-civilization AI identity, assigned by civ index at game start.
+ * AutoProduction (and the initial research strategy) key off this profile, so
+ * each civ builds — and therefore behaves — differently. Index 0 is the human
+ * player's civ in normal games; in AI-vs-AI every slot is AI-controlled.
+ */
+export const CIV_PRODUCTION_PROFILES: StrategyProfile[] = [
+  'early_expansion',
+  'military_expansion',
+  'science_focus',
+  'defensive_turtle',
+  'wonder_rush',
+  'balanced_growth',
+];
+
+/** Deterministically resolve a civ's production profile by its index. */
+export function getCivProductionProfile(civilizationId: number): StrategyProfile {
+  return CIV_PRODUCTION_PROFILES[civilizationId % CIV_PRODUCTION_PROFILES.length] ?? 'balanced_growth';
+}
+
 // ---------------------------------------------------------------------------
 // Technology category mapping for AI research scoring
 // ---------------------------------------------------------------------------

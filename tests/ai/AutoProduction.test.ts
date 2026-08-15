@@ -15,7 +15,11 @@ const createMockEngine = () => {
   };
 
   const units = [
-    { id: 'def', type: 'warrior', civilizationId: 1, col: 0, row: 0, attack: 1, defense: 1 }
+    { id: 'def', type: 'warrior', civilizationId: 1, col: 0, row: 0, attack: 1, defense: 1 },
+    // Satisfied settler corps (balanced_growth @4 cities wants 2) so the
+    // expansion branch doesn't pre-empt the offensive-support branch.
+    { id: 's1', type: 'settler', civilizationId: 1, col: 5, row: 5 },
+    { id: 's2', type: 'settler', civilizationId: 1, col: 6, row: 5 },
   ];
 
   // The civ already has 4 cities, so the (now higher-priority) settler
@@ -93,7 +97,7 @@ describe('AutoProduction offensive support', () => {
  * count (<6 → 1, 6–11 → 2, >=12 → 3), always ranking below city defense.
  */
 describe('AutoProduction scout corps', () => {
-  const createScoutMockEngine = (totalTroops: number, scoutCount: number, numCities: number = 1) => {
+  const createScoutMockEngine = (totalTroops: number, scoutCount: number, numCities: number = 1, settlers: number = 0) => {
     const city = {
       id: 'city-1',
       name: 'Testopolis',
@@ -125,6 +129,12 @@ describe('AutoProduction scout corps', () => {
     const units: any[] = [];
     // One defender in the city so the "needs defender" step is satisfied.
     units.push({ id: 'def', type: 'warrior', civilizationId: 1, col: 0, row: 0, attack: 1, defense: 1 });
+    // A satisfied settler corps (balanced_growth @4 cities wants 2) keeps the
+    // expansion branch from pre-empting the scout branch; @1 city (default 0
+    // settlers) the expansion branch is expected to fire instead.
+    for (let i = 0; i < settlers; i++) {
+      units.push({ id: `settler${i}`, type: 'settler', civilizationId: 1, col: 8, row: 8 });
+    }
     // Fill the remaining troop budget with warriors (military type).
     const extraTroops = Math.max(0, totalTroops - 1 - scoutCount);
     for (let i = 0; i < extraTroops; i++) {
@@ -168,7 +178,7 @@ describe('AutoProduction scout corps', () => {
   const producedItem = (pm: any) => pm.setCityProduction.mock.calls[0][1];
 
   it('builds a scout for a small army (< 6 troops) with no scouts yet', () => {
-    const { engine, productionManager } = createScoutMockEngine(2, 0, 4);
+    const { engine, productionManager } = createScoutMockEngine(2, 0, 4, 2);
     new AutoProduction(engine).setAutoProduction('city-1');
 
     expect(productionManager.setCityProduction).toHaveBeenCalled();
@@ -176,14 +186,14 @@ describe('AutoProduction scout corps', () => {
   });
 
   it('builds a scout when 6+ troops want a second scout', () => {
-    const { engine, productionManager } = createScoutMockEngine(6, 0, 4);
+    const { engine, productionManager } = createScoutMockEngine(6, 0, 4, 2);
     new AutoProduction(engine).setAutoProduction('city-1');
 
     expect(producedItem(productionManager).itemType).toBe('scout');
   });
 
   it('builds a scout when 12+ troops want a third scout', () => {
-    const { engine, productionManager } = createScoutMockEngine(12, 0, 4);
+    const { engine, productionManager } = createScoutMockEngine(12, 0, 4, 2);
     new AutoProduction(engine).setAutoProduction('city-1');
 
     expect(producedItem(productionManager).itemType).toBe('scout');

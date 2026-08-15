@@ -141,6 +141,18 @@ export interface City {
   processTurn?: (gameMap: any, turn: number) => void;
 }
 
+/**
+ * Fixed per-civilization AI identity that drives production (and later
+ * research). See CIV_PRODUCTION_PROFILES in src/game/engine/AITypes.ts.
+ */
+export type AIProductionProfile =
+  | 'military_expansion'
+  | 'science_focus'
+  | 'balanced_growth'
+  | 'defensive_turtle'
+  | 'wonder_rush'
+  | 'early_expansion';
+
 export interface Civilization {
   id: number;
   name: string;
@@ -175,6 +187,8 @@ export interface Civilization {
   score?: number;
   isHuman?: boolean;
   isAI?: boolean;
+  /** Fixed per-civ AI identity — drives AutoProduction (and seeds research). */
+  productionProfile?: AIProductionProfile;
   icon?: string;
 }
 
@@ -372,6 +386,8 @@ export interface GameEngine {
   getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
   executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any;
   diplomacyManager: any;
+  /** Auto-production manager for AI/human city queues. */
+  autoProduction: any;
   /** Production manager for city build queues. */
   productionManager: any;
   /** Economic manager for tax/science/luxury rates and upkeep. */

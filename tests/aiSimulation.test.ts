@@ -52,6 +52,29 @@ describe('AI scout enemy search integration', () => {
       engine.civilizations[0].isHuman = false;
       engine.civilizations[0].isAI = true;
 
+      // The AI now expands first (settler before scout), so it won't build a
+      // scout on its own within 40 rounds — seed one so the scout →
+      // EnemySearcher integration is still exercised.
+      const civ0Start = engine.units.find((u: any) => u.civilizationId === 0);
+      engine.units.push({
+        id: 'seed_scout',
+        type: 'scout',
+        civilizationId: 0,
+        col: civ0Start ? Math.min(civ0Start.col + 1, 19) : 2,
+        row: civ0Start ? Math.min(civ0Start.row + 1, 19) : 2,
+        health: 1,
+        movesRemaining: 2,
+        maxMoves: 2,
+        isVeteran: false,
+        attack: 0,
+        defense: 0,
+        icon: 'scout',
+        orders: 'none',
+        homeCityId: '',
+        areTurnsDone: false,
+        isSkipped: false,
+      });
+
       const spy = vi.spyOn(EnemySearcher, 'findNearestEnemy');
 
       const TARGET_ROUNDS = 40;

@@ -21,12 +21,14 @@ export const useGameEngine = (gameEngine: GameEngine | null) => {
     }));
 
     // Set up state change callback via router, tapping every event into the
-    // game log first so moves/combat/turns are recorded in detail, and into
-    // the progression tracker so one snapshot is kept per round.
+    // game log first so moves/combat/turns are recorded in detail, into the
+    // progression tracker so one snapshot is kept per round, and into
+    // auto-production so it can react to war/capture/completions immediately.
     const router = new EngineEventRouter(gameEngine as GameEngine);
     gameEngine.onStateChange = (eventType, eventData) => {
       gameLogger.record(eventType, eventData);
       gameProgression.recordIfNewRound(gameEngine);
+      gameEngine.autoProduction?.onGameEvent?.(eventType, eventData);
       router.handle(eventType, eventData);
     };
 

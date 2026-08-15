@@ -83,6 +83,29 @@ describe('Human vs AI - 50 Round Test', () => {
       aiCiv.isHuman = false;
       aiCiv.isAI = true;
 
+      // The AI now expands first (settler before scout), so seed one scout so
+      // the scout-movement assertions are deterministic instead of depending
+      // on whether the AI reaches scout production within 50 rounds.
+      const aiCapital = engine.cities.find((c: any) => c.civilizationId === aiCiv.id);
+      engine.units.push({
+        id: 'seed_ai_scout',
+        type: 'scout',
+        civilizationId: aiCiv.id,
+        col: aiCapital ? Math.max(0, aiCapital.col - 2) : 2,
+        row: aiCapital ? Math.max(0, aiCapital.row - 2) : 2,
+        health: 1,
+        movesRemaining: 2,
+        maxMoves: 2,
+        isVeteran: false,
+        attack: 0,
+        defense: 0,
+        icon: 'scout',
+        orders: 'none',
+        homeCityId: aiCapital?.id ?? '',
+        areTurnsDone: false,
+        isSkipped: false,
+      });
+
       // Run 50 rounds by advancing through phases
       const TARGET_ROUNDS = 50;
       const MAX_ITERATIONS = TARGET_ROUNDS * 200; // ~4 phases per turn, 2 civs = ~400 iterations per round

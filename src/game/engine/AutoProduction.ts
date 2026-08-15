@@ -34,6 +34,24 @@ interface QueueItem {
 /** How many follow-up items auto-production keeps lined up in a city's queue. */
 const AUTO_QUEUE_TARGET = 3;
 
+/**
+ * Per-profile expansion cadence. A civ always keeps a small settler corps so
+ * expansion NEVER hard-stops; the corps size scales with the civ's city count
+ * (`ceil(cities / settlersPerCities)`, clamped to [minSettlers, maxSettlers]).
+ * `earlyBonus` adds one extra settler while the civ is still tiny (<3 cities).
+ * Expansionist profiles keep more settlers (→ more cities); defensive civs
+ * keep fewer. The economy unit-cap in `ensureProductionQueue` is the real
+ * brake against settler/army spam.
+ */
+const EXPANSION_PARAMS: Record<StrategyProfile, { settlersPerCities: number; minSettlers: number; maxSettlers: number; earlyBonus: boolean }> = {
+  early_expansion: { settlersPerCities: 2, minSettlers: 1, maxSettlers: 6, earlyBonus: true },
+  military_expansion: { settlersPerCities: 3, minSettlers: 1, maxSettlers: 4, earlyBonus: false },
+  balanced_growth: { settlersPerCities: 3, minSettlers: 1, maxSettlers: 4, earlyBonus: true },
+  science_focus: { settlersPerCities: 4, minSettlers: 1, maxSettlers: 3, earlyBonus: false },
+  wonder_rush: { settlersPerCities: 4, minSettlers: 1, maxSettlers: 3, earlyBonus: false },
+  defensive_turtle: { settlersPerCities: 5, minSettlers: 1, maxSettlers: 3, earlyBonus: false },
+};
+
 export class AutoProduction {
   private gameEngine: GameEngine;
 
@@ -194,11 +212,7 @@ export class AutoProduction {
     // 7. Default military unit
 
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
-    const storage = typeof this.gameEngine.getPlayerStorage === 'function'
-      ? this.gameEngine.getPlayerStorage(city.civilizationId)
-      : undefined;
-    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
-    const strategy: StrategyProfile = aiState.strategyProfile ?? 'balanced_growth';
+    const strategy: StrategyProfile = this.getStrategyForCiv(city.civilizationId);
 
     // Check for city defenders
     const unitsInCity = this.gameEngine.units.filter(
@@ -242,17 +256,25 @@ export class AutoProduction {
     //    grows. Previously buildings (and the happiness-emergency path) ran
     //    before this branch, so a civ with 1 city queued forge/colosseum/
     //    factory/… forever and never produced a second settler.
-    //    Cadence: 1 settler per city until 4 cities, with a second settler
-    //    allowed while still under 3 cities so expansion doesn't stall.
-    if (!needsHappiness && civCities.length < 4 && city.population >= 2 && strategy !== 'defensive_turtle') {
+    //    Expansion never hard-stops: each profile keeps a settler corps that
+    //    scales with the civ's city count (EXPANSION_PARAMS), so a big empire
+    //    still replaces consumed settlers instead of freezing at a city cap.
+    //    A city may start a settler at population 1 so a fresh capital builds
+    //    a settler, not a hospital.
+    const expansion = EXPANSION_PARAMS[strategy] ?? EXPANSION_PARAMS.balanced_growth;
+    const desiredSettlers = Math.min(
+      expansion.maxSettlers,
+      Math.max(expansion.minSettlers, Math.ceil(civCities.length / expansion.settlersPerCities)) +
+        (civCities.length < 3 && expansion.earlyBonus ? 1 : 0),
+    );
+    if (!needsHappiness && city.population >= 1) {
       const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
       const settlerCount = this.gameEngine.units.filter(
         (u: Unit) => u.civilizationId === city.civilizationId && u.type === 'settler'
       ).length + plannedSettlers;
-      const maxSettlers = civCities.length < 3 ? 2 : 1;
 
-      if (settlerCount < maxSettlers) {
-        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s), building another (max ${maxSettlers})`);
+      if (settlerCount < desiredSettlers) {
+        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s), building another (target ${desiredSettlers}, profile ${strategy})`);
         return {
           type: 'unit',
           itemType: 'settler',
@@ -440,8 +462,15 @@ export class AutoProduction {
     return null;
   }
 
-  /** Resolve the civ's current strategy profile (helper shared with the queue). */
+  /**
+   * Resolve the civ's production strategy. The civ's fixed production profile
+   * (assigned per civ at game start) is the source of truth so each AI keeps
+   * a distinct identity; fall back to the AI-managed strategy state when no
+   * profile is set.
+   */
   private getStrategyForCiv(civilizationId: number): StrategyProfile {
+    const civ = this.gameEngine.civilizations?.[civilizationId];
+    if (civ?.productionProfile) return civ.productionProfile;
     const storage = typeof this.gameEngine.getPlayerStorage === 'function'
       ? this.gameEngine.getPlayerStorage(civilizationId)
       : undefined;
@@ -695,6 +724,52 @@ export class AutoProduction {
       }
     } catch (e) {
       console.error('[AutoProduction] processAutoProductionForAI error', e);
+    }
+  }
+
+  /**
+   * React to key game events by refreshing production decisions:
+   *  - UNIT_PRODUCED / BUILDING_COMPLETED → top up the queue immediately
+   *    (instead of waiting for the next production phase).
+   *  - CITY_CAPTURED / CITY_DESTROYED → re-pick production for the affected
+   *    civ(s) so they rebuild or reinforce.
+   *  - WAR_DECLARED → re-pick production for both sides (fresh threat eval).
+   * Wired from the engine event tap in `src/hooks/UseGameEngine.ts`.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onGameEvent(eventType: string, data: any): void {
+    try {
+      switch (eventType) {
+        case 'UNIT_PRODUCED':
+        case 'BUILDING_COMPLETED': {
+          const cityId = data?.cityId;
+          if (typeof cityId === 'string') this.ensureProductionQueue(cityId);
+          break;
+        }
+        case 'CITY_CAPTURED': {
+          const originalCiv = data?.originalCiv;
+          const capturedBy = data?.capturedBy;
+          if (typeof originalCiv === 'number') this.processAutoProductionForCivilization(originalCiv);
+          if (typeof capturedBy === 'number') this.processAutoProductionForCivilization(capturedBy);
+          break;
+        }
+        case 'CITY_DESTROYED': {
+          const owner = data?.city?.civilizationId;
+          if (typeof owner === 'number') this.processAutoProductionForCivilization(owner);
+          break;
+        }
+        case 'WAR_DECLARED': {
+          const aggressor = data?.aggressorId ?? data?.civilizationId;
+          const target = data?.targetId ?? data?.targetCivilizationId;
+          if (typeof aggressor === 'number') this.processAutoProductionForCivilization(aggressor);
+          if (typeof target === 'number' && target !== aggressor) this.processAutoProductionForCivilization(target);
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (e) {
+      console.error('[AutoProduction] onGameEvent error', e);
     }
   }
 }

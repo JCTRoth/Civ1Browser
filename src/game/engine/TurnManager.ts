@@ -816,6 +816,10 @@ export class TurnManager {
           
           console.log(`[TurnManager] Civilization ${civ.name} completed research: ${completedTechId}`);
 
+          // Newly researched techs may unlock units/buildings — refresh the
+          // civ's production queues so it can build the newest options.
+          this.gameEngine.autoProduction?.processAutoProductionForCivilization(civ.id);
+
           // AI auto-selects next research via AIResearch module
           if (!civ.isHuman && typeof this.gameEngine.setResearch === 'function') {
             try {

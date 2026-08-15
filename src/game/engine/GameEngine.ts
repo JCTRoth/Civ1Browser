@@ -14,6 +14,7 @@ import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
+import { getCivProductionProfile } from './AITypes';
 import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
 import type { GameActions, Unit, City, Civilization } from '../../../types/game';
@@ -814,6 +815,7 @@ export default class GameEngine {
         taxRate: 50,
         luxuryRate: 0,
         government: 'despotism',
+        productionProfile: getCivProductionProfile(i),
         score: 0
       };
 
@@ -1179,10 +1181,10 @@ export default class GameEngine {
   }
 
   /**
-   * Decide an AI city's first production item. The first city builds a scout
-   * for exploration; subsequent cities build a defender (warrior) so the AI
-   * stops flooding the map with scouts (previously every city defaulted to a
-   * scout, causing heavy scout over-production).
+   * Decide an AI city's first production item. The first city starts a
+   * settler so the civ expands instead of building infrastructure (hospital/…)
+   * in a 1-city empire; subsequent cities build a scout (once) for exploration
+   * or a defender, so the AI stops flooding the map with scouts.
    */
   private pickInitialAIProduction(civId: number): { type: string; itemType: string; name: string; cost: number } {
     const scoutCount = this.units.filter(
@@ -1190,7 +1192,10 @@ export default class GameEngine {
     ).length;
     const cityCount = this.cities.filter((c) => c.civilizationId === civId).length;
 
-    if (scoutCount === 0 && cityCount <= 1) {
+    if (cityCount <= 1) {
+      return { type: 'unit', itemType: 'settler', name: UNIT_PROPS.settler?.name || 'Settler', cost: UNIT_PROPS.settler?.cost || 40 };
+    }
+    if (scoutCount === 0) {
       return { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 };
     }
     return { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 };
