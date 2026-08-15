@@ -1,8 +1,19 @@
 # Game Progression Export
 
 The **Info → Download Game Progression List** action exports the current game
-as a single JSON file (`civ1-progression-<sessionId>.json`) intended for
-post-game analysis and AI improvement.
+as a single compact JSON file (`civ1-progression-<sessionId>.json`) intended
+for post-game analysis and AI improvement. The file is deliberately slim so an
+LLM can analyse it to optimise the computer player:
+
+- **Minified JSON** — no whitespace, minimal token cost.
+- **Delta-encoded `progression`** — civ fields that did not change since the
+  previous round are omitted (`summary.encoding: "delta"`); the reader carries
+  them forward.
+- **Slim cities** — each city uses `CompactCity` (redundant / derivable fields
+  dropped; production items are `itemType` strings — name/cost are game
+  constants).
+- **Filtered `log`** — only analysis-relevant events; the per-turn full-city
+  payloads (which duplicated `progression.cityData`) are removed.
 
 ## What the file contains
 
@@ -20,16 +31,17 @@ post-game analysis and AI improvement.
   "summary": {
     "roundsRecorded": 42,
     "civilizations": ["Germans", "Russians"],
+    "encoding": "delta",            // omitted civ fields carry forward
     "eventCounts": { "UNIT_MOVED": 1234, "COMBAT_VICTORY": 12, /* ... */ }
   },
   "progression": [
     {
-      "round": 1,
+      "round": 1,                   // first round: full state per civ
       "year": -3980,
       "yearLabel": "3980 BC",
       "civs": {
         "0": {
-          "id": "0",
+          "id": 0,
           "name": "Germans",
           "leaderName": "Frederick the Great",
           "color": "...",
@@ -50,16 +62,13 @@ post-game analysis and AI improvement.
               "col": 12,
               "row": 8,
               "population": 1,
-              "production": 0,
-              "food": 0,
-              "gold": 0,
-              "science": 0,
-              "productionProgress": 0.25,
-              "currentProduction": "warrior",
               "isCapital": true,
+              "yields": { "food": 2, "production": 1, "trade": 0 },
               "foodStored": 0,
               "foodNeeded": 2,
               "productionStored": 0,
+              "currentProduction": "warrior",   // itemType only
+              "buildQueue": [],                 // itemTypes only
               "buildings": [],
               "autoProduction": false
             }
@@ -74,6 +83,19 @@ post-game analysis and AI improvement.
           "priorities": { "militaryUnits": 20, "settlers": 35, /* ... */ }
         }
       }
+    },
+    {
+      "round": 2,                   // later rounds: only changed fields
+      "year": -3960,
+      "yearLabel": "3960 BC",
+      "civs": {
+        "0": {
+          "id": 0,
+          "gold": 62,               // gold/science always present
+          "science": 18,
+          "cityData": [ /* slim city list — always present */ ]
+        }
+      }
     }
   ],
   "log": [
@@ -83,31 +105,7 @@ post-game analysis and AI improvement.
       "player": 0,
       "event": "TURN_START",
       "message": "▶ Turn start — civ 0 (round 1)",
-      "detail": {
-        "data": { "civilizationId": 0, "roundNumber": 1, "cities": "[array:1]" },
-        "cities": [
-          {
-            "id": "city-3",
-            "name": "Berlin",
-            "civilizationId": 0,
-            "col": 12,
-            "row": 8,
-            "population": 1,
-            "production": 0,
-            "food": 0,
-            "gold": 0,
-            "science": 0,
-            "productionProgress": 0.25,
-            "currentProduction": "warrior",
-            "isCapital": true,
-            "foodStored": 0,
-            "foodNeeded": 2,
-            "productionStored": 0,
-            "buildings": [],
-            "autoProduction": false
-          }
-        ]
-      }
+      "detail": { "data": { "civilizationId": 0, "roundNumber": 1 } }
     },
     { "ts": "...", "round": 1, "player": 0, "event": "UNIT_MOVED", "message": "...", "detail": { } }
   ]
@@ -118,39 +116,59 @@ post-game analysis and AI improvement.
 
 - **`src/utils/GameProgression.ts`** — singleton tracker. Hooks into the engine
   event tap in `src/hooks/UseGameEngine.ts` and records **one snapshot per
-  round** (cities, units, techs, gold, science, research, diplomacy, AI
-  personality/priorities per civilisation). Each snapshot also includes the
-  full per-player city JSONs under `civs.<id>.cityData` (all cities owned by
-  that civ at that round, JSON-safe and stripped of function references), so
-  the progression file regularly contains the city state of every player.
-  `startSession()` is called from `App.tsx` on game start and on auto-restart.
+  round**. `buildRound()` captures each civ's metrics (gold, science, rates,
+  government, cities, units, techs, research, diplomacy, AI
+  personality/priorities) and the slim per-player city list under
+  `civs.<id>.cityData`; `computeCivDelta()` then omits fields unchanged since
+  the previous round (see `summary.encoding: "delta"`). `startSession()` is
+  called from `App.tsx` on game start and on auto-restart; `reset()` clears the
+  delta baseline.
 - **`src/utils/GameLogger.ts` → `getAllEntries()`** — returns the full session
   log by fetching `GET /__game_log?session=<id>` and merging with any lines
-  still buffered in memory.
+  still buffered in memory. The raw log on disk keeps the full detail (city
+  payloads etc.) for debugging; the slimming happens at export time.
+- **`filterLogEntries()`** (in `GameProgression.ts`) — drops engine-internal
+  noise (`PHASE_CHANGE`, `AI_FINISHED`, `RESEARCH_PHASE`, and noisy `GAME_LOG`
+  categories like `[turn]`/`[map]`) and strips `detail.city` / `detail.cities`
+  (city state lives in `progression`). Kept: per-move trace, war, city
+  lifecycle, combat, economy, diplomacy, rates and AI decisions.
+- **`src/utils/CitySnapshots.ts` → `serializeCityCompact()`** — the slim
+  `CompactCity` shape used in `progression` (full `serializeCity()` is still
+  used by the raw debug log).
 - **`vite.config.js`** — the dev-server middleware already persisted log lines
   (POST `/__game_log`); it now also serves them back (GET) as a JSON array.
 - **`src/components/ui/GameMenuSheet.tsx`** — the `INFO` menu item
   "📜 Download Game Progression List" triggers the export in `App.tsx`.
+- **Types** — all progression types live in `types/progression.ts`.
 
 ## Using it for AI analysis
 
 - `summary.eventCounts` gives a quick overview (how many moves, combats, cities
-  founded/captured/destroyed, war declarations, …).
-- `progression` is the timeline: compare how each civ's cities/units/techs grow
-  round by round, who fell behind in research, when wars started, etc.
-- `civs.<id>.cityData` carries the full JSON of each city per round, so you can
-  track individual city growth (population, buildings, production queue, food
-  storage) turn by turn — not just counts.
-- `log` is the raw event stream with timestamps for deep-dive debugging.
-  City-related entries carry the full JSON-safe city snapshot under
-  `detail.city`, and every `TURN_START` / `TURN_END` carries the active
-  player's complete city JSONs under `detail.cities` — so the log regularly
-  contains the full city state of every player.
-- Economy events: `RATES_CHANGED` (Tax/Science/Luxury changes), `CITY_DISORDER`
+  founded/captured/destroyed, war declarations, …) of the events **present in
+  the filtered log**.
+- `summary.encoding: "delta"` — in `progression`, a civ field omitted from a
+  round is unchanged from the previous round. `gold`, `science` and `cityData`
+  are always present; everything else (rates, government, techs, war, AI
+  personality/priorities, city/unit counts) appears only when it changed.
+- `civs.<id>.cityData` carries the slim JSON of each city per round, so you can
+  track individual city growth (population, buildings, food, production
+  progress toward `currentProduction`) turn by turn — not just counts.
+  `currentProduction` / `buildQueue` are `itemType` strings; their names and
+  costs are the game constants (`UnitConstants`, `BuildingConstants`, …).
+- `log` is the filtered event stream with timestamps for deep-dive debugging.
+  Messages are human-readable summaries; `detail.data` keeps the structured
+  scalars (tech, upkeep, deficit, coordinates, …). Full city payloads are not
+  repeated here — they live in `progression`.
+- Economy signals: `RATES_CHANGED` (Tax/Science/Luxury changes), `CITY_DISORDER`
   (city enters/leaves disorder), `UNIT_DISBANDED` (upkeep bankruptcy), and
-  `economy` log lines (per-turn upkeep/deficit/disbanded totals). Each civ
+  `economy` GAME_LOG lines (per-turn upkeep/deficit/disbanded totals). Each civ
   snapshot also carries `taxRate` / `scienceRate` / `luxuryRate` / `government`
-  so you can correlate rate choices with research and gold over time.
+  (when changed) so you can correlate rate choices with research and gold over
+  time.
+- AI behaviour: `[ai]` GAME_LOG lines record the AI's own decisions (research
+  selection, priorities, …), `warWith` / `WAR_DECLARED` / `DIPLOMACY_EVENT`
+  track diplomacy, and `personality` / `priorities` expose the AI's tuning when
+  they change.
 
 ## Notes
 
@@ -158,3 +176,5 @@ post-game analysis and AI improvement.
   dedicated `aivsai-<timestamp>` session id (see `App.tsx`).
 - If the dev server is unreachable, `getAllEntries()` falls back to the
   in-memory buffer, so the export still works (with fewer log lines).
+- The raw debug log in `game-logs/<sessionId>.log` is unaffected by the export
+  slimming — only the downloaded progression file is compact.

@@ -73,6 +73,66 @@ export function serializeCities(cities: any[]): CitySnapshot[] {
   return (cities ?? []).map((c) => serializeCity(c));
 }
 
+/**
+ * Slim city snapshot used by the compact AI-optimised progression export.
+ * Redundant / derivable fields are dropped (e.g. `productionProgress` duplicates
+ * `productionStored`; item names & costs are game constants reachable via
+ * itemType), keeping the per-city growth timeline while minimising size.
+ */
+export interface CompactCity {
+  id: string;
+  name: string;
+  civilizationId: number;
+  col: number;
+  row: number;
+  population: number;
+  isCapital?: boolean;
+  yields?: { food: number; production: number; trade: number };
+  foodStored?: number;
+  foodNeeded?: number;
+  productionStored?: number;
+  /** Current production item (itemType only; name/cost are game constants). */
+  currentProduction?: string | null;
+  /** Production queue as itemType strings (name/cost are game constants). */
+  buildQueue?: string[];
+  buildings?: string[];
+  autoProduction?: boolean;
+}
+
+/** Extract the item id from a queue/current-production entry (object or string). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function productionItemId(item: any): string {
+  if (item == null) return '';
+  if (typeof item === 'string') return item;
+  return String(item.itemType ?? item.type ?? item.name ?? '');
+}
+
+/** Convert a live City object into a compact, analysis-focused snapshot. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function serializeCityCompact(city: any): CompactCity {
+  return {
+    id: String(city?.id ?? ''),
+    name: city?.name ?? '',
+    civilizationId: city?.civilizationId ?? 0,
+    col: city?.col ?? 0,
+    row: city?.row ?? 0,
+    population: city?.population ?? 0,
+    isCapital: city?.isCapital,
+    yields: city?.yields ? { ...city.yields } : undefined,
+    foodStored: city?.foodStored,
+    foodNeeded: city?.foodNeeded,
+    // productionProgress and productionStored track the same value; keep one.
+    productionStored: city?.productionStored ?? city?.productionProgress,
+    currentProduction: city?.currentProduction ? productionItemId(city.currentProduction) : undefined,
+    buildQueue:
+      Array.isArray(city?.buildQueue) && city.buildQueue.length > 0
+        ? city.buildQueue.map(productionItemId).filter(Boolean)
+        : undefined,
+    buildings: city?.buildings ? [...city.buildings] : undefined,
+    autoProduction: city?.autoProduction,
+  };
+}
+
 /** Engine event names whose payload carries a city object. */
 export const CITY_EVENTS: ReadonlySet<string> = new Set<string>([
   'CITY_FOUNDED',
