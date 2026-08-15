@@ -2,7 +2,7 @@ import { SquareGrid } from '../HexGrid';
 import { Constants, TERRAIN_PROPS, UNIT_PROPS } from '@/utils/Constants';
 import { CIVILIZATIONS, TECHNOLOGIES } from '@/data/GameData';
 import { TECHNOLOGIES_DATA } from '@/data/TechnologyData';
-import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_REQUIREMENTS } from '@/data/TileImprovementConstants';
+import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_REQUIREMENTS, IMPROVEMENT_TYPES } from '@/data/TileImprovementConstants';
 import { ProductionManager } from './ProductionManager';
 import { AutoProduction } from './AutoProduction';
 import { UnitActionManager } from './UnitActionManager';
@@ -1921,6 +1921,27 @@ export default class GameEngine {
   }
 
   /**
+   * Whether a settler could found a city on the tile it is standing on (land
+   * tile, not too close to an existing city). Read-only — mirrors the checks
+   * of `foundCityWithSettler`.
+   */
+  canFoundCity(settlerId: string): boolean {
+    const settler = this.units.find((u) => u.id === settlerId);
+    if (!settler || settler.type !== 'settler') return false;
+
+    const tile = this.getTileAt(settler.col, settler.row);
+    if (!tile || tile.type === Constants.TERRAIN.OCEAN) return false;
+
+    for (const city of this.cities) {
+      if (this.squareGrid.squareDistance(settler.col, settler.row, city.col, city.row) < 3) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * Check if current player has any units with moves remaining, and end turn if not
    * Only considers ACTIVE units (not sleeping or fortified) for auto-end turn
    */
@@ -2561,7 +2582,8 @@ export default class GameEngine {
    * Build an improvement (road, farm, etc.)
    */
   buildImprovement(unitId: string, improvementType: string): boolean {
-    console.log(`[GameEngine] buildImprovement called: unitId=${unitId}, type=${improvementType}`);
+    const type = GameEngine.canonicalImprovementType(improvementType);
+    console.log(`[GameEngine] buildImprovement called: unitId=${unitId}, type=${type}`);
     
     const unit = this.units.find(u => u.id === unitId);
     if (!unit) {
@@ -2578,7 +2600,7 @@ export default class GameEngine {
     });
 
     // Get improvement properties to determine build time
-    const improvementProps = IMPROVEMENT_PROPERTIES[improvementType];
+    const improvementProps = IMPROVEMENT_PROPERTIES[type];
     const buildTurns = improvementProps?.turns || 1; // Default to 1 if not found
     console.log(`[GameEngine] Build: Improvement props:`, improvementProps, 'turns:', buildTurns);
 
@@ -2608,16 +2630,16 @@ export default class GameEngine {
     if (improvementProps?.terrainRestrictions) {
       const terrain = tile.terrain || tile.type;
       if (!improvementProps.terrainRestrictions.includes(terrain)) {
-        console.warn(`[GameEngine] Build: Terrain ${terrain} not valid for ${improvementType} (requires: ${improvementProps.terrainRestrictions.join(', ')})`);
+        console.warn(`[GameEngine] Build: Terrain ${terrain} not valid for ${type} (requires: ${improvementProps.terrainRestrictions.join(', ')})`);
         return false;
       }
     }
 
     // Check if this improvement requires a prerequisite improvement (upgrade path)
-    const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[improvementType];
+    const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[type];
     if (requiredBase) {
       if (tile.improvement !== requiredBase) {
-        console.warn(`[GameEngine] Build: ${improvementType} requires existing ${requiredBase}, tile has: ${tile.improvement}`);
+        console.warn(`[GameEngine] Build: ${type} requires existing ${requiredBase}, tile has: ${tile.improvement}`);
         return false;
       }
       // Upgrade: replace the existing improvement
@@ -2628,16 +2650,16 @@ export default class GameEngine {
     }
 
     // Build the improvement
-    tile.improvement = improvementType;
+    tile.improvement = type;
     unit.movesRemaining = (unit.movesRemaining || 0) - buildTurns;
 
     // Update turn done status
     this.updateUnitTurnsDoneFlag(unit);
 
-    console.log(`[GameEngine] Unit ${unit.id} built ${improvementType} at (${unit.col},${unit.row}) in ${buildTurns} turns. Moves remaining: ${unit.movesRemaining}`);
+    console.log(`[GameEngine] Unit ${unit.id} built ${type} at (${unit.col},${unit.row}) in ${buildTurns} turns. Moves remaining: ${unit.movesRemaining}`);
 
     if (this.onStateChange) {
-      this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType });
+      this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
     }
 
     // Remove the worker from the turn queue if it spent all its moves, so the
@@ -2650,6 +2672,61 @@ export default class GameEngine {
     this.checkAndEndTurnIfNoMoves();
 
     return true;
+  }
+
+  /**
+   * Map action-facing improvement ids to the canonical constant keys. The UI
+   * and keyboard send 'mine' (singular) while TileImprovementConstants uses
+   * 'mines'. Canonicalizing keeps terrain restrictions and stored ids correct.
+   */
+  private static canonicalImprovementType(type: string): string {
+    return type === 'mine' ? IMPROVEMENT_TYPES.MINES : type;
+  }
+
+  /**
+   * Whether a unit could currently build an improvement on the tile it is
+   * standing on (tile, terrain restrictions, upgrade prerequisite, existing
+   * improvement). Read-only — mirrors the feasibility checks of
+   * `buildImprovement` without consuming movement. Movement is checked
+   * separately via `hasMovesForImprovement`.
+   */
+  canBuildImprovement(unitId: string, improvementType: string): boolean {
+    const type = GameEngine.canonicalImprovementType(improvementType);
+    const unit = this.units.find((u) => u.id === unitId);
+    if (!unit) return false;
+
+    const tile = this.getTileAt(unit.col, unit.row);
+    if (!tile) return false;
+
+    const props = IMPROVEMENT_PROPERTIES[type];
+    if (!props) return false;
+
+    if (props.terrainRestrictions) {
+      const terrain = tile.terrain || tile.type;
+      if (!props.terrainRestrictions.includes(terrain)) return false;
+    }
+
+    const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[type];
+    if (requiredBase) {
+      if (tile.improvement !== requiredBase) return false;
+    } else if (tile.improvement) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Whether the unit has enough movement (and is not fortified) to build an
+   * improvement right now. Mirrors the `canPerformAction` check inside
+   * `buildImprovement`.
+   */
+  hasMovesForImprovement(unitId: string, improvementType: string): boolean {
+    const type = GameEngine.canonicalImprovementType(improvementType);
+    const unit = this.units.find((u) => u.id === unitId);
+    if (!unit) return false;
+    const buildTurns = IMPROVEMENT_PROPERTIES[type]?.turns || 1;
+    return UnitActionManager.canPerformAction(unit, 'build_improvement', buildTurns);
   }
 
   /**

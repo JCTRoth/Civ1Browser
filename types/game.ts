@@ -356,8 +356,12 @@ export interface GameEngine {
   unitWake(unitId: string): void;
   unitFortify(unitId: string): void;
   skipUnit(unitId: string): void;
-  buildImprovement(unitId: string, improvement: string): boolean;
-  cleanPollution(unitId: string): boolean;
+  buildImprovement(unitId: string, improvement: string): boolean;  /** Whether a unit could build this improvement on its current tile (ignores moves). */
+  canBuildImprovement(unitId: string, improvementType: string): boolean;
+  /** Whether the unit has enough moves (and isn't fortified) to build this improvement now. */
+  hasMovesForImprovement(unitId: string, improvementType: string): boolean;
+  /** Whether a settler can found a city on its current tile. */
+  canFoundCity(settlerId: string): boolean;  cleanPollution(unitId: string): boolean;
   disbandUnit(unitId: string): boolean;
   rushCityProduction(cityId: string): boolean;
   cycleUnitsInTile(unitId: string): string | null;

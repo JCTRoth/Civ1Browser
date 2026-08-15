@@ -17,6 +17,22 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
 
   const canAct = (unit: { movesRemaining?: number } | null) => (unit?.movesRemaining ?? 0) > 0;
 
+  // Settler action availability — mirrors the engine's buildImprovement /
+  // foundCityWithSettler checks so only genuinely possible options are shown.
+  const improvementStatus = (type: string): { possible: boolean; executable: boolean } => {
+    const unit = contextMenu.unit;
+    if (!unit || !gameEngine) return { possible: false, executable: false };
+    const possible = gameEngine.canBuildImprovement?.(unit.id, type) ?? false;
+    const executable = possible && (gameEngine.hasMovesForImprovement?.(unit.id, type) ?? false);
+    return { possible, executable };
+  };
+
+  const foundCityAvailable = (): boolean => {
+    const unit = contextMenu.unit;
+    if (!unit || !gameEngine) return false;
+    return gameEngine.canFoundCity?.(unit.id) ?? false;
+  };
+
   return (
     <>
       {/* Backdrop for click-outside / tap-outside dismissal */}
@@ -77,50 +93,59 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
 
               {contextMenu.unit.type === 'settler' && (
                 <>
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    disabled={!canAct(contextMenu.unit)}
-                    onClick={() => handleAction('found_city')}
-                  >
-                    <span aria-hidden="true">🏛️</span>Found City
-                  </button>
+                  {foundCityAvailable() && (
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      onClick={() => handleAction('found_city')}
+                    >
+                      <span aria-hidden="true">🏛️</span>Found City
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    disabled={!canAct(contextMenu.unit)}
-                    onClick={() => handleAction('build_road')}
-                  >
-                    <span aria-hidden="true">🛣️</span>Build Road
-                  </button>
+                  {improvementStatus('road').possible && (
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      disabled={!improvementStatus('road').executable}
+                      onClick={() => handleAction('build_road')}
+                    >
+                      <span aria-hidden="true">🛣️</span>Build Road
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    disabled={!canAct(contextMenu.unit)}
-                    onClick={() => handleAction('build_irrigation')}
-                  >
-                    <span aria-hidden="true">🌾</span>Build Irrigation
-                  </button>
+                  {improvementStatus('irrigation').possible && (
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      disabled={!improvementStatus('irrigation').executable}
+                      onClick={() => handleAction('build_irrigation')}
+                    >
+                      <span aria-hidden="true">🌾</span>Build Irrigation
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    disabled={!canAct(contextMenu.unit)}
-                    onClick={() => handleAction('build_mine')}
-                  >
-                    <span aria-hidden="true">⛏️</span>Build Mine
-                  </button>
+                  {improvementStatus('mine').possible && (
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      disabled={!improvementStatus('mine').executable}
+                      onClick={() => handleAction('build_mine')}
+                    >
+                      <span aria-hidden="true">⛏️</span>Build Mine
+                    </button>
+                  )}
 
-                  <button
-                    type="button"
-                    className="context-menu-item"
-                    disabled={!canAct(contextMenu.unit)}
-                    onClick={() => handleAction('build_railroad')}
-                  >
-                    <span aria-hidden="true">🚆</span>Build Railroad
-                  </button>
+                  {improvementStatus('railroad').possible && (
+                    <button
+                      type="button"
+                      className="context-menu-item"
+                      disabled={!improvementStatus('railroad').executable}
+                      onClick={() => handleAction('build_railroad')}
+                    >
+                      <span aria-hidden="true">🚆</span>Build Railroad
+                    </button>
+                  )}
                 </>
               )}
 
