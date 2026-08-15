@@ -235,6 +235,8 @@ export interface Technology {
   description?: string;
   cost?: number;
   prerequisites?: string[];
+  /** Emoji/icon shown on research-complete notifications (fallback 🧪). */
+  icon?: string;
 }
 
 export interface GameStoreState {
@@ -247,6 +249,12 @@ export interface GameStoreState {
   uiState: UIState;
   settings: Settings;
   technologies: Technology[];
+  /** Ordered tech ids the human player selected to research (the "path"). */
+  researchPath: string[];
+  /** Saved research progress per tech id (kept when switching research). */
+  techProgress: Record<string, number>;
+  /** Tech that just finished researching — drives the notification modal. */
+  lastResearchedTech: Technology | null;
   actions: GameActions;
   currentPlayer: Civilization | null;
   playerResources: {
@@ -322,6 +330,10 @@ export interface GameActions {
   updateCities: (cities: City[]) => void;
   updateCivilizations: (civilizations: Civilization[]) => void;
   updateTechnologies: (technologies: Technology[]) => void;
+  setResearchPath: (path: string[]) => void;
+  saveTechProgress: (techId: string, progress: number) => void;
+  notifyTechResearched: (tech: Technology) => void;
+  dismissTechNotification: () => void;
   updateGameState: (updates: Partial<GameState>) => void;
   updateSettings: (updates: Partial<Settings>) => void;
   setGameResult: (result: GameResult | null) => void;
@@ -351,7 +363,7 @@ export interface GameEngine {
   checkAndEndTurnIfNoMoves(): void;
   foundCity(col: number, row: number, civilizationId: number, customName?: string | null): any;
   foundCityWithSettler(settlerId: string): boolean;
-  setResearch(civId: number, techId: string): void;
+  setResearch(civId: number, techId: string, savedProgress?: number): void;
   /** Set Tax/Science/Luxury rates (sum always 100). */
   setRates(civId: number, tax: number, science: number, luxury: number): void;
   /** Switch a civilization's government and re-apply rate caps/anarchy rules. */

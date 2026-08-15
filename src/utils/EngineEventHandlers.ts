@@ -1,6 +1,7 @@
 import { useGameStore } from '../stores/GameStore';
 import { centerCameraOnTile, getGameViewport } from './CameraUtils';
-import type { GameEngine } from '../../types/game';
+import { firstUnresearchedInPath } from './ResearchPath';
+import type { GameEngine, Technology } from '../../types/game';
 
 // The human player is always civilization 0 (mirrors the store's fog of war).
 const HUMAN_PLAYER_ID = 0;
@@ -75,6 +76,9 @@ export class EngineEventRouter {
         break;
       case 'RESEARCH_PHASE':
         this.onResearchPhase(eventData);
+        break;
+      case 'TECH_RESEARCHED':
+        this.onTechResearched(eventData);
         break;
       case 'PLAYER_REGISTERED':
         this.onPlayerRegistered(eventData);
@@ -387,6 +391,36 @@ export class EngineEventRouter {
     console.log('[EngineEventRouter] RESEARCH_PHASE for civ', eventData?.civilizationId);
     // Update UI to show research phase
     this.actions.updateGameState({ currentTurn: useGameStore.getState().gameState.currentTurn });
+  }
+
+  private onTechResearched(eventData: any) {
+    const { civilizationId, techId } = eventData || {};
+    const tech = this.gameEngine.technologies?.find((t: Technology) => t.id === techId);
+    if (!tech) return;
+
+    // Keep the UI copies of techs/civs in sync with the engine (researched
+    // flags + currentResearch may have changed).
+    this.actions.updateTechnologies([...(this.gameEngine.technologies || [])]);
+    this.actions.updateCivilizations([...(this.gameEngine.civilizations || [])]);
+
+    // The research-complete notification is for the human player.
+    if (civilizationId !== HUMAN_PLAYER_ID) return;
+    this.actions.notifyTechResearched({ ...tech } as Technology);
+
+    // Auto-advance along the player's selected research path.
+    this.advanceResearchPath(civilizationId);
+  }
+
+  /** After a tech completes, continue with the next available tech in the path. */
+  private advanceResearchPath(civId: number) {
+    const state = useGameStore.getState();
+    const path = state.researchPath;
+    if (!path || path.length === 0) return;
+    const nextId = firstUnresearchedInPath(this.gameEngine.technologies || [], path);
+    if (!nextId || !this.gameEngine.setResearch) return;
+    // Restore the tech's saved progress (progress is kept across switches).
+    this.gameEngine.setResearch(civId, nextId, state.techProgress[nextId] ?? 0);
+    this.actions.updateCivilizations([...(this.gameEngine.civilizations || [])]);
   }
 
   private onPlayerRegistered(eventData: any) {

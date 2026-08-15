@@ -142,6 +142,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   // Technology State
   technologies: [],
 
+  // Research state (human player): selected path + saved per-tech progress +
+  // the tech that just completed (drives the research-complete notification).
+  researchPath: [],
+  techProgress: {},
+  lastResearchedTech: null,
+
   // Actions
   actions: {
     startGame: () => set(state => ({
@@ -579,6 +585,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     updateTechnologies: (technologies) => set({ technologies }),
 
+    setResearchPath: (path) => set({ researchPath: path }),
+
+    saveTechProgress: (techId, progress) => set(state => ({
+      techProgress: { ...state.techProgress, [techId]: progress }
+    })),
+
+    notifyTechResearched: (tech) => set({ lastResearchedTech: tech }),
+
+    dismissTechNotification: () => set({ lastResearchedTech: null }),
+
     updateGameState: (updates) => set(state => ({
       gameState: { ...state.gameState, ...updates }
     })),
@@ -618,6 +634,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       cities: [],
       civilizations: [],
       technologies: [],
+      researchPath: [],
+      techProgress: {},
+      lastResearchedTech: null,
       uiState: createInitialUIState(),
       combatAnimations: []
     })),

@@ -816,6 +816,9 @@ export class TurnManager {
           
           console.log(`[TurnManager] Civilization ${civ.name} completed research: ${completedTechId}`);
 
+          // Notify listeners (UI research-complete modal, log, progression…).
+          this.emit('TECH_RESEARCHED', { civilizationId: civ.id, techId: completedTechId });
+
           // Newly researched techs may unlock units/buildings — refresh the
           // civ's production queues so it can build the newest options.
           this.gameEngine.autoProduction?.processAutoProductionForCivilization(civ.id);

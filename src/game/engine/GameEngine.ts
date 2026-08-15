@@ -2157,6 +2157,12 @@ export default class GameEngine {
     }
 
     this.technologies.forEach(tech => {
+      // Mark techs any civ has completed as researched on the shared tree so
+      // the UI (tech tree colors, research path, completion modal) stays in
+      // sync when research finishes during a turn.
+      if (researched.has(String(tech.id))) {
+        tech.researched = true;
+      }
       if (!tech.researched && !tech.available) {
         const prereqs = tech.prerequisites ?? [];
         const hasPrereqs = prereqs.length === 0 || prereqs.every(prereq => researched.has(prereq));
@@ -2168,15 +2174,16 @@ export default class GameEngine {
   }
 
   /**
-   * Set current research for civilization
+   * Set current research for civilization. `savedProgress` lets the UI restore
+   * a tech's previously-saved progress when switching research (default 0).
    */
-  setResearch(civId, techId) {
+  setResearch(civId, techId, savedProgress = 0) {
     const civ = this.civilizations[civId];
     const tech = this.technologies.find(t => t.id === techId);
     
     if (civ && tech && tech.available && !tech.researched) {
       civ.currentResearch = tech;
-      civ.researchProgress = 0;
+      civ.researchProgress = savedProgress || 0;
     }
   }
 

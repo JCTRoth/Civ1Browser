@@ -78,3 +78,14 @@
   z-index: 1000;
   max-width: 300px;
 }
+
+/* Currently-researched tech node: golden glow so the player can see at a
+   glance which tech is being researched and how far along it is. */
+.tech-tree-node.is-researching rect {
+  animation: tech-research-glow 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes tech-research-glow {
+  from { filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.5)); }
+  to   { filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.9)); }
+}

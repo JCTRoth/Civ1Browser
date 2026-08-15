@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Modal, Button, Tab, Tabs, Card, ListGroup } from 'react-bootstrap';
 import TechTreeView from './TechTreeView';
+import { getTechIcon } from '@/data/TechnologyIcons';
+import { findPathToTech } from '@/utils/ResearchPath';
 import CityModal from './gamemodals/CityModal';
 import HexDetailModal from './gamemodals/HexDetailModal';
 import RatesModal from './gamemodals/RatesModal';
@@ -25,6 +27,9 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   const selectedCityId: string | null = useGameStore(state => state.gameState.selectedCity);
   const cities = useGameStore(state => state.cities);
   const technologies = useGameStore(state => state.technologies);
+  const researchPath = useGameStore(state => state.researchPath);
+  const techProgress = useGameStore(state => state.techProgress);
+  const lastResearchedTech = useGameStore(state => state.lastResearchedTech);
   const currentPlayer = useGameStore(state => state.civilizations[state.gameState.activePlayer] || null);
 
   const units = useGameStore(state => state.units);
@@ -314,26 +319,130 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     </Modal>
   );
 
+  /**
+   * Player picked a tech in the tree: remember the selected path, save the
+   * progress of the currently-researched tech, and start the first available
+   * tech in the new path (restoring its saved progress).
+   */
+  const handleSelectTech = (techId: string) => {
+    const ge = gameEngine;
+    if (!ge) return;
+    const civ = ge.civilizations?.[0];
+    if (!civ) return;
+    const techs = technologies.length > 0 ? technologies : ge.technologies;
+    const path = findPathToTech(techs, techId) ?? [techId];
+
+    // Save the current research's progress before switching away from it.
+    const currentId = civ.currentResearch
+      ? (typeof civ.currentResearch === 'object' ? (civ.currentResearch as { id?: string }).id : civ.currentResearch)
+      : null;
+    if (currentId && (civ.researchProgress || 0) > 0) {
+      actions.saveTechProgress(currentId, civ.researchProgress || 0);
+    }
+
+    actions.setResearchPath(path);
+
+    // Start researching the first available, unresearched tech in the path.
+    const firstResearchable = path.find(id => {
+      const t = techs.find(x => x.id === id);
+      return t && t.available && !t.researched;
+    });
+    if (firstResearchable) {
+      const saved = useGameStore.getState().techProgress[firstResearchable] ?? 0;
+      ge.setResearch(0, firstResearchable, saved);
+      actions.updateCivilizations([...(ge.civilizations || [])]);
+    }
+  };
+
   // Technology Tree Modal
-  const renderTechTree = () => (
-    <Modal 
-      show={uiState.activeDialog === 'tech'} 
-      onHide={handleCloseDialog} 
-      fullscreen
-      dialogClassName="tech-tree-modal"
-    >
-      <Modal.Header closeButton className="bg-dark text-white">
-        <Modal.Title>
-          <i className="bi bi-lightbulb"></i> Technology Tree
-        </Modal.Title>
-      </Modal.Header>
-      <Modal.Body className="bg-dark text-white tech-tree-modal-body">
-        <React.Suspense fallback={<div className="text-white p-3">Loading tree...</div>}>
-          <TechTreeView technologies={technologies} width={Math.max(window.innerWidth - 32, 320)} />
-        </React.Suspense>
-      </Modal.Body>
-    </Modal>
-  );
+  const renderTechTree = () => {
+    const civ = gameEngine?.civilizations?.[0];
+    const currentTechId = civ?.currentResearch
+      ? (typeof civ.currentResearch === 'object' ? (civ.currentResearch as { id?: string }).id : civ.currentResearch)
+      : null;
+    return (
+      <Modal 
+        show={uiState.activeDialog === 'tech'} 
+        onHide={handleCloseDialog} 
+        fullscreen
+        dialogClassName="tech-tree-modal"
+      >
+        <Modal.Header closeButton className="bg-dark text-white">
+          <Modal.Title>
+            <i className="bi bi-lightbulb"></i> Technology Tree
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="bg-dark text-white tech-tree-modal-body">
+          <React.Suspense fallback={<div className="text-white p-3">Loading tree...</div>}>
+            <TechTreeView
+              technologies={technologies}
+              width={Math.max(window.innerWidth - 32, 320)}
+              researchPath={researchPath}
+              currentResearchId={currentTechId}
+              researchProgress={civ?.researchProgress ?? 0}
+              onSelectTech={handleSelectTech}
+            />
+          </React.Suspense>
+        </Modal.Body>
+      </Modal>
+    );
+  };
+
+  /**
+   * Notification shown when a technology is finished: emoji/icon + description,
+   * plus a "continue researching" button (path has more techs) or a "choose a
+   * new research path" button (path exhausted).
+   */
+  const renderResearchComplete = () => {
+    if (!lastResearchedTech) return null;
+    const remainingPath = researchPath.filter(id => {
+      const t = technologies.find(x => x.id === id);
+      return t && !t.researched;
+    });
+    const nextTechId = remainingPath.length > 0 ? remainingPath[0] : null;
+    const nextTech = nextTechId ? technologies.find(t => t.id === nextTechId) : null;
+    return (
+      <Modal show onHide={actions.dismissTechNotification} dialogClassName="research-complete-modal">
+        <Modal.Header closeButton className="bg-dark text-white">
+          <Modal.Title>🔬 Research Complete</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="bg-dark text-white">
+          <div className="text-center research-complete-icon">{getTechIcon(lastResearchedTech.id)}</div>
+          <h4 className="text-center mt-2">{lastResearchedTech.name}</h4>
+          <p className="text-center text-muted mb-0">
+            {lastResearchedTech.description || 'A new technology has been unlocked.'}
+          </p>
+          <div className="d-grid gap-2 mt-3">
+            {nextTech && nextTechId ? (
+              <Button
+                variant="success"
+                onClick={() => {
+                  if (gameEngine) {
+                    const saved = techProgress[nextTechId] ?? 0;
+                    gameEngine.setResearch(0, nextTechId, saved);
+                    actions.updateCivilizations([...(gameEngine.civilizations || [])]);
+                  }
+                  actions.dismissTechNotification();
+                }}
+              >
+                Continue Researching: {nextTech.name}
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  actions.dismissTechNotification();
+                  actions.showDialog('tech');
+                }}
+              >
+                Choose New Research Path
+              </Button>
+            )}
+          </div>
+        </Modal.Body>
+      </Modal>
+    );
+  }
 
   // Diplomacy Modal — Civ I–style negotiation interface with leader portraits
   const [selectedDiploCiv, setSelectedDiploCiv] = useState<number | null>(null);
@@ -1565,6 +1674,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     <>
       {renderGameMenu()}
       {renderTechTree()}
+      {renderResearchComplete()}
       {renderDiplomacy()}
       {renderDiplomacyReport()}
       {renderHelp()}

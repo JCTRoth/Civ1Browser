@@ -346,3 +346,9 @@
 .corruption-amount {
   color: #f59e0b !important;
 }
+
+/* Research-complete notification modal */
+.research-complete-modal .research-complete-icon {
+  font-size: 3.5rem;
+  line-height: 1;
+}

@@ -13,9 +13,17 @@ type Props = {
   nodeHeight?: number;
   verticalSpacing?: number;
   horizontalSpacing?: number;
+  /** The player's selected research path (persisted in the store). */
+  researchPath?: string[] | null;
+  /** Tech id currently being researched — its node is highlighted. */
+  currentResearchId?: string | null;
+  /** Current research progress (absolute science points). */
+  researchProgress?: number;
+  /** Called when the player picks a tech to research. */
+  onSelectTech?: (techId: string) => void;
 };
 
-const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWidth = 200, nodeHeight = 56, verticalSpacing = 80, horizontalSpacing = 40 }) => {
+const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWidth = 200, nodeHeight = 56, verticalSpacing = 80, horizontalSpacing = 40, researchPath = null, currentResearchId = null, researchProgress = 0, onSelectTech }) => {
   // If store hasn't populated technologies yet, fall back to static data
   const techs = (technologies && technologies.length > 0) ? technologies : TECHNOLOGIES_DATA;
   // compute depth per tech
@@ -64,7 +72,8 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
   const svgHeight = Math.max(200, (depths.length) * (nodeHeight + verticalSpacing) + 80);
   const svgWidth = Math.max(width, maxRowWidth + 40);
   // selected path state and helpers for finding path from roots
-  const [selectedPath, setSelectedPath] = useState<string[] | null>(null);
+  // (initialized/kept in sync with the persisted research path).
+  const [selectedPath, setSelectedPath] = useState<string[] | null>(researchPath ?? null);
   const [animatingNodes, setAnimatingNodes] = useState<Set<string>>(new Set());
   const [hoveredTech, setHoveredTech] = useState<Technology | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
@@ -110,8 +119,8 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
     // Ignore clicks that end a drag-pan gesture (so you can pan by dragging)
     if (panDeltaRef.current > 5) return;
     const path = findPathTo(techId);
-    if (path) setSelectedPath(path);
-    else setSelectedPath([techId]);
+    setSelectedPath(path ?? [techId]);
+    onSelectTech?.(techId);
   };
 
   const handleNodeMouseEnter = (tech: Technology, event: React.MouseEvent) => {
@@ -186,6 +195,11 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
   }, []);
 
   useEffect(() => {
+    // Keep the highlighted path in sync with the persisted research path.
+    setSelectedPath(researchPath ?? null);
+  }, [researchPath]);
+
+  useEffect(() => {
     if (selectedPath) {
       const unresearchedInPath = selectedPath.filter(id => {
         const tech = techs.find(t => t.id === id);
@@ -250,7 +264,11 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
           const pos = positions[tech.id];
           if (!pos) return null;
           const isAnimating = animatingNodes.has(tech.id);
+          const isCurrentResearch = tech.id === currentResearchId;
           const fill = isAnimating ? 'url(#unresearchedPattern)' : (tech.researched ? '#2f855a' : tech.available ? '#1e90ff' : '#444');
+          const progress = isCurrentResearch && (tech.cost ?? 0) > 0
+            ? Math.min(1, (researchProgress || 0) / (tech.cost || 1))
+            : 0;
           return (
             <g 
               key={tech.id} 
@@ -258,11 +276,16 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
               onClick={() => handleNodeClick(tech.id)} 
               onMouseEnter={(e) => handleNodeMouseEnter(tech, e)}
               onMouseLeave={handleNodeMouseLeave}
-              className={`tech-tree-node ${isAnimating ? 'pulse' : ''}`}
+              className={`tech-tree-node ${isAnimating ? 'pulse' : ''} ${isCurrentResearch ? 'is-researching' : ''}`}
             >
-              <rect width={nodeWidth} height={nodeHeight} rx={6} ry={6} fill={fill} stroke="#0b00a4ff" />
+              <rect width={nodeWidth} height={nodeHeight} rx={6} ry={6} fill={fill} stroke={isCurrentResearch ? '#ffd700' : '#0b00a4ff'} strokeWidth={isCurrentResearch ? 3 : 1} />
               <text x={12} y={20} className="tech-tree-node-text">{tech.name}</text>
-              <text x={12} y={36} className="tech-tree-node-cost">{tech.cost} sci</text>
+              <text x={12} y={36} className="tech-tree-node-cost">
+                {isCurrentResearch ? `${researchProgress || 0}/${tech.cost} sci` : `${tech.cost} sci`}
+              </text>
+              {isCurrentResearch && progress > 0 && (
+                <rect x={4} y={nodeHeight - 6} width={(nodeWidth - 8) * progress} height={4} rx={2} fill="#ffd700" />
+              )}
             </g>
           );
         })}

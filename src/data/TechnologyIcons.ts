@@ -1,0 +1,55 @@
+// Emoji icons for researched technologies (notifications / tech tree).
+// Falls back to a generic 🧪 when no fitting icon exists.
+
+const TECH_ICONS: Record<string, string> = {
+  pottery: '🏺',
+  bronze_working: '🪓',
+  iron_working: '⚒️',
+  alphabet: '🔤',
+  writing: '✍️',
+  literacy: '📚',
+  the_wheel: '🛞',
+  masonry: '🧱',
+  sailing: '⛵',
+  mathematics: '📐',
+  map_making: '🗺️',
+  philosophy: '🧠',
+  engineering: '🛠️',
+  metallurgy: '🔥',
+  ceremonial_burial: '🪦',
+  code_of_laws: '⚖️',
+  currency: '💰',
+  trade: '🛒',
+  monarchy: '👑',
+  republic: '🏛️',
+  democracy: '🗳️',
+  communism: '🚩',
+  construction: '🏗️',
+  theology: '⛪',
+  monotheism: '🕊️',
+  polytheism: '🕉️',
+  horseback_riding: '🐎',
+  gunpowder: '💥',
+  navigation: '🧭',
+  astronomy: '🔭',
+  university: '🎓',
+  banking: '🏦',
+  industrialization: '🏭',
+  railroad: '🚂',
+  steel: '🛡️',
+  electricity: '⚡',
+  science_theory: '🔬',
+  combustion: '🚗',
+  flight: '✈️',
+  space_flight: '🚀',
+  computers: '💻',
+  electronics: '🔌',
+  nuclear_power: '☢️',
+  mass_production: '🏭',
+  moonshot: '🌕',
+};
+
+/** Emoji for a tech id, or 🧪 when there is no fitting icon. */
+export function getTechIcon(techId: string): string {
+  return TECH_ICONS[techId] ?? '🧪';
+}
