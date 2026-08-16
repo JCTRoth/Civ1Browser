@@ -267,6 +267,35 @@ export class AIManager {
           }
         }
 
+        // Civ1: an AI settler founds a city, improves its tile, or explores.
+        // The settlement search runs here (cached for chooseAITarget below) so
+        // founding takes priority; without a settlement spot the settler builds
+        // a road/irrigation/mine/railroad on its current tile instead of
+        // wandering. Multi-turn construction continues automatically each turn
+        // (advanceUnitWork), so starting is enough.
+        if (unit.type === 'settler' && !unit.workTarget) {
+          let settlement: { col: number; row: number; score: number } | null = null;
+          try {
+            settlement = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
+          } catch (error) {
+            console.error('[AI-SETTLER] Error in settlement search:', error);
+          }
+          if (!this.gameEngine.units.includes(unit)) break; // consumed by founding
+          (unit as any)._aiSettlement = settlement;
+
+          if (!settlement) {
+            const improvement = this.chooseImprovementForSettler(unit);
+            if (improvement) {
+              const started = this.gameEngine.buildImprovement(unit.id, improvement);
+              if (started) {
+                console.log(`[AI-SETTLER] ${civ.name} settler ${unit.id} builds ${improvement} at (${unit.col},${unit.row})`);
+                this.gameEngine.log('ai', `Settler improves — ${civ.name} builds ${improvement} at (${unit.col},${unit.row})`);
+                break; // the settler worked its turn
+              }
+            }
+          }
+        }
+
         const target = this.chooseAITarget(unit);
         if (!target) {
           // No valid target, skip the unit's turn
@@ -563,20 +592,16 @@ export class AIManager {
       // No known foreign city — fall through and explore like other civilians.
     }
 
-    // Special handling for settlers: use SettlementEvaluator to find best city location
+    // Special handling for settlers: the movement loop's settler interception
+    // already ran the settlement search this turn and cached the result here,
+    // so founding a city takes priority over everything else. When no spot was
+    // found (and no improvement to build) the settler falls through and
+    // explores like any other civilian.
     if (unit.type === 'settler') {
-      console.log(`[AI-SETTLER] Settler detected at (${unit.col}, ${unit.row}), using SettlementEvaluator`);
-
-      try {
-        const bestLocation = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
-        if (bestLocation) {
-          console.log(`[AI-SETTLER] SettlementEvaluator found best location at (${bestLocation.col}, ${bestLocation.row}) with score ${bestLocation.score}`);
-          return { col: bestLocation.col, row: bestLocation.row };
-        } else {
-          console.log(`[AI-SETTLER] SettlementEvaluator found no suitable location, settler will explore randomly`);
-        }
-      } catch (error) {
-        console.error(`[AI-SETTLER] Error calling SettlementEvaluator:`, error);
+      const cached = (unit as any)._aiSettlement;
+      if (cached) {
+        console.log(`[AI-SETTLER] Settler ${unit.id} heading to settlement (${cached.col},${cached.row})`);
+        return { col: cached.col, row: cached.row };
       }
     }
 
@@ -935,6 +960,57 @@ export class AIManager {
     }
 
     this.gameEngine.log?.('ai', `Diplomat — ${civName} ${action.replace(/_/g, ' ')} with ${targetCiv?.name ?? targetCivId}`);
+  }
+
+  /**
+   * Decide whether an AI settler should improve the tile it stands on (Civ1),
+   * returning the improvement type or null. Only tiles near a friendly city
+   * are improved (so the effort feeds the economy instead of decorating the
+   * wilderness), and the civ keeps an improvement budget so settlers don't
+   * spend forever re-rolling the same tiles.
+   *
+   * Priority: production (mines on hills/mountains) > food (irrigation near
+   * fresh water on fertile tiles) > railroad > road.
+   */
+  private chooseImprovementForSettler(unit: any): string | null {
+    const civId = unit.civilizationId;
+    const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+    if (!tile) return null;
+    const terrain = tile.terrain || tile.type || '';
+    if (terrain === 'ocean' || terrain === 'arctic') return null;
+
+    // Only improve tiles within a few tiles of a friendly city (working radius
+    // plus a small margin) — roads/farms/mines there actually feed the civ.
+    const nearCity = this.gameEngine.cities.some((c: City) =>
+      c.civilizationId === civId &&
+      this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, c.col, c.row) <= 4
+    );
+    if (!nearCity) return null;
+
+    // Improvement budget: at most ~2 improvements per city, so a big civ does
+    // not funnel every spare settler into endless road building.
+    const friendlyCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civId).length;
+    const budget = Math.max(2, friendlyCities * 2);
+    const ownImprovements = (this.gameEngine.map?.tiles ?? []).filter((t: any) =>
+      !!t.improvement && ['road', 'railroad', 'mines', 'irrigation', 'fortress'].includes(t.improvement) &&
+      this.gameEngine.cities.some((c: City) =>
+        c.civilizationId === civId &&
+        this.gameEngine.squareGrid.squareDistance(t.col, t.row, c.col, c.row) <= 4
+      )
+    ).length;
+    if (ownImprovements >= budget) return null;
+
+    if ((terrain === 'hills' || terrain === 'mountains') &&
+        this.gameEngine.canBuildImprovement(unit.id, 'mine')) {
+      return 'mine';
+    }
+    if (['grassland', 'plains', 'desert', 'jungle', 'swamp'].includes(terrain) &&
+        this.gameEngine.canBuildImprovement(unit.id, 'irrigation')) {
+      return 'irrigation';
+    }
+    if (this.gameEngine.canBuildImprovement(unit.id, 'railroad')) return 'railroad';
+    if (this.gameEngine.canBuildImprovement(unit.id, 'road')) return 'road';
+    return null;
   }
 
   /**
