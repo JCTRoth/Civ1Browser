@@ -311,7 +311,7 @@ describe('City capture & destruction', () => {
     expect(captured?.population).toBe(1);
     // The defender is destroyed (kept briefly for the death animation) and
     // the (consumed) attacker is gone from the unit list.
-    const garrison = engine.units.find((u: any) => u.id === 'garrison1');
+    const garrison: any = engine.units.find((u: any) => u.id === 'garrison1');
     expect(garrison).toBeDefined();
     expect(garrison.isDefeated).toBe(true);
     expect(engine.units.some((u: any) => u.id === 'atkD')).toBe(false);

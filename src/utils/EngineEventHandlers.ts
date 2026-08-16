@@ -16,6 +16,12 @@ export class EngineEventRouter {
     this.gameEngine = gameEngine;
   }
 
+  /** True in AI-vs-AI mode (every civilization is AI-controlled). */
+  private get isAIVsAI(): boolean {
+    const civs = this.gameEngine?.civilizations ?? [];
+    return civs.length > 0 && civs.every((c) => !(c as any).isHuman);
+  }
+
   handle(eventType: string, eventData: any) {
     switch (eventType) {
       case 'TURN_START':
@@ -171,6 +177,9 @@ export class EngineEventRouter {
   private onUnitMoved(eventData: any) {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
+    // In AI-vs-AI mode don't follow AI moves — no auto-selection or camera
+    // centering between players (the board still updates above).
+    if (this.isAIVsAI) return;
     const moved = eventData && eventData.unit ? eventData.unit : null;
     if (moved) {
       const movesLeft = moved.movesRemaining || 0;
@@ -248,7 +257,10 @@ export class EngineEventRouter {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     if (eventData && eventData.unit) {
-      this.actions.selectUnit(eventData.unit.id);
+      // Don't auto-open the unit panel for AI-produced units in AI-vs-AI mode.
+      if (!this.isAIVsAI) {
+        this.actions.selectUnit(eventData.unit.id);
+      }
       this.actions.addNotification({ type: 'success', message: `${eventData.unit.type} ready to move!` });
     }
   }
@@ -264,7 +276,8 @@ export class EngineEventRouter {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateCivilizations(this.gameEngine.civilizations);
     this.actions.updateVisibility();
-    if (eventData.city.civilizationId === 0) this.actions.selectCity(eventData.city.id);
+    // Don't auto-open the city panel in AI-vs-AI mode (nobody is managing it).
+    if (!this.isAIVsAI && eventData.city.civilizationId === 0) this.actions.selectCity(eventData.city.id);
     this.actions.addNotification({ type: 'info', message: `${eventData.city.name} founded!` });
   }
 
@@ -540,6 +553,9 @@ export class EngineEventRouter {
     const unit = eventData?.unit;
     if (unit) {
       this.actions.setCurrentQueueUnitId(unit.id);
+      // In AI-vs-AI mode the queue unit is an AI unit — don't select it or
+      // swing the camera to it.
+      if (this.isAIVsAI) return;
       this.actions.selectUnit(unit.id);
       this.focusOnUnit(unit);
     }

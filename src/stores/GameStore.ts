@@ -224,6 +224,13 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     }),
 
     focusOnNextUnit: () => set(state => {
+      // AI-vs-AI mode: every civilization is AI-controlled, so nobody needs
+      // the camera to follow the "active" player or the UI to auto-open the
+      // unit / city panel between AI turns.
+      if (state.civilizations.length > 0 && state.civilizations.every(civ => !civ.isHuman)) {
+        return state;
+      }
+
       // Prevent multiple calls in quick succession
       const now = Date.now();
       if (state._lastFocusCall && now - state._lastFocusCall < 100) {
