@@ -33,98 +33,98 @@ export const CIVILIZATIONS: Civilization[] = [
     name: 'Americans',
     leader: 'Abraham Lincoln',
     color: '#0000FF', // Blue - stars and stripes
-    cityNames: ['Washington', 'New York', 'Boston', 'Philadelphia', 'Atlanta', 'Chicago', 'Seattle', 'San Francisco', 'Los Angeles', 'Detroit'],
+    cityNames: ['Washington', 'New York', 'Boston', 'Philadelphia', 'Atlanta', 'Chicago', 'Seattle', 'San Francisco', 'Los Angeles', 'Detroit', 'Denver', 'Miami', 'Houston', 'Dallas', 'Phoenix', 'San Diego', 'Minneapolis', 'Cleveland', 'St. Louis', 'Baltimore'],
     icon: '🦅'
   },
   {
     name: 'Aztecs',
     leader: 'Montezuma',
     color: '#009220ff', // Teal - Jungle gree
-    cityNames: ['Tenochtitlan', 'Texcoco', 'Tlatelolco', 'Teotihuacan', 'Tlaxcala', 'Cholula', 'Xochicalco', 'Tula'],
+    cityNames: ['Tenochtitlan', 'Texcoco', 'Tlatelolco', 'Teotihuacan', 'Tlaxcala', 'Cholula', 'Xochicalco', 'Tula', 'Cempoala', 'Huexotla', 'Cuauhnahuac', 'Cholula', 'Mixcoac', 'Calixtlahuaca', 'Malinalco', 'Oaxtepec', 'Tepeapulco', 'Zacatepec', 'Tepozotlan'],
     icon: '🐆'
   },
   {
     name: 'Babylonians',
     leader: 'Hammurabi',
     color: '#ff954fff', // Lime - ancient Mesopotamian gold/yellow-green
-    cityNames: ['Babylon', 'Ur', 'Nineveh', 'Ashur', 'Eridu', 'Uruk', 'Lagash', 'Nippur'],
+    cityNames: ['Babylon', 'Ur', 'Nineveh', 'Ashur', 'Eridu', 'Uruk', 'Lagash', 'Nippur', 'Isin', 'Larsa', 'Sippar', 'Eshnunna', 'Kish', 'Mari', 'Harran', 'Dur-Kurigalzu', 'Shuruppak', 'Adab', 'Girsu', 'Ebla'],
     icon: '🏺'
   },
   {
     name: 'Chinese',
     leader: 'Mao Tse Tung',
     color: '#fbff00ff', // Green - traditional Chinese color
-    cityNames: ['Beijing', 'Shanghai', 'Guangzhou', 'Nanjing', 'Xian', 'Chengdu', 'Hangzhou', 'Tianjin', 'Wuhan'],
+    cityNames: ['Beijing', 'Shanghai', 'Guangzhou', 'Nanjing', 'Xian', 'Chengdu', 'Hangzhou', 'Tianjin', 'Wuhan', 'Shenyang', 'Chongqing', 'Suzhou', 'Qingdao', 'Dalian', 'Harbin', 'Jinan', 'Fuzhou', 'Zhengzhou', 'Changsha', 'Kunming'],
     icon: '🐉'
   },
   {
     name: 'Egyptians',
     leader: 'Ramesses II',
     color: '#ffbb00ff', // Yellow - Egyptian gold/sand
-    cityNames: ['Thebes', 'Memphis', 'Heliopolis', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Karnak'],
+    cityNames: ['Thebes', 'Memphis', 'Heliopolis', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Karnak', 'Abydos', 'Edfu', 'Dendera', 'Kom Ombo', 'Philae', 'Esna', 'Amarna', 'Saqqara', 'Tanis', 'Bubastis', 'Hermopolis', 'Avaris'],
     icon: '🐪'
   },
   {
     name: 'English',
     leader: 'Elizabeth I',
     color: '#ff0000ff', // Red was on two of their historical flags
-    cityNames: ['London', 'York', 'Nottingham', 'Oxford', 'Cambridge', 'Canterbury', 'Coventry', 'Warwick', 'Newcastle'],
+    cityNames: ['London', 'York', 'Nottingham', 'Oxford', 'Cambridge', 'Canterbury', 'Coventry', 'Warwick', 'Newcastle', 'Bristol', 'Liverpool', 'Manchester', 'Birmingham', 'Leeds', 'Sheffield', 'Southampton', 'Plymouth', 'Exeter', 'Norwich', 'Gloucester'],
     icon: '🇬🇧'
   },
   {
     name: 'Germans',
     leader: 'Frederick the Great',
     color: '#949494',
-    cityNames: ['Berlin', 'Leipzig', 'Hamburg', 'Bremen', 'Frankfurt', 'Bonn', 'Nuremberg', 'Cologne', 'Munich', 'Darmstadt', 'Mannheim','Heidelberg'],
+    cityNames: ['Berlin', 'Leipzig', 'Hamburg', 'Bremen', 'Frankfurt', 'Bonn', 'Nuremberg', 'Cologne', 'Munich', 'Darmstadt', 'Mannheim','Heidelberg', 'Stuttgart', 'Dresden', 'Kiel', 'Dusseldorf', 'Wiesbaden', 'Aachen', 'Freiburg', 'Regensburg', 'Wurzburg', 'Ingolstadt', 'Augsburg', 'Bielefeld', 'Bochum', 'Kassel', 'Magdeburg', 'Mainz', 'Oldenburg', 'Potsdam', 'Rostock'],
     icon: '✠'
   },
   {
     name: 'French',
     leader: 'Napoleon Bonaparte',
     color: '#fffffff6', // capitulation white
-    cityNames: ['Paris', 'Orleans', 'Lyon', 'Tours', 'Marseille', 'Chartres', 'Avignon', 'Rouen', 'Grenoble'],
+    cityNames: ['Paris', 'Orleans', 'Lyon', 'Aix en Provence ', 'Courbevoie', 'Tours', 'Marseille', 'Chartres', 'Avignon', 'Rouen', 'Grenoble', 'Reims', 'Dijon', 'Nantes', 'Bordeaux', 'Toulouse', 'Nice', 'Strasbourg', 'Montpellier', 'Lille', 'Brest', 'Caen', 'Clermont-Ferrand', 'Limoges', 'Saint-Etienne', 'Le Havre', 'Angers', 'Metz', 'Besancon', 'Perpignan'],
     icon: '🇫🇷🥖'
   },
   {
     name: 'Greeks',
     leader: 'Alexander the Great',
     color: '#1269c5', 
-    cityNames: ['Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Ephesus', 'Rhodes', 'Byzantium', 'Pergamon'],
+    cityNames: ['Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Ephesus', 'Rhodes', 'Byzantium', 'Pergamon', 'Olympia', 'Knossos', 'Mycenae', 'Delos', 'Syracuse', 'Miletus', 'Halicarnassus', 'Samos', 'Chios', 'Lesbos', 'Naxos', 'Eretria'],
     icon: '🏛️'
   },
   {
     name: 'Indians',
     leader: 'Mahatma Gandhi',
     color: '#ff681a',
-    cityNames: ['Delhi', 'Bombay', 'Madras', 'Bangalore', 'Calcutta', 'Lahore', 'Karachi', 'Hyderabad'],
+    cityNames: ['Delhi', 'Bombay', 'Madras', 'Bangalore', 'Calcutta', 'Lahore', 'Karachi', 'Hyderabad', 'Udaipur', 'Jaipur', 'Lucknow', 'Varanasi', 'Agra', 'Pune', 'Ahmedabad', 'Chennai', 'Kolkata', 'Bhopal', 'Patna', 'Indore'],
     icon: '🇮🇳'
   },
   {
     name: 'Huns',
     leader: 'Dschingis Khan',
     color: '#00ADC3',
-    cityNames: ['Almaty', 'Shymkent', 'Karaganda', 'Taraz', 'Aktobe', 'Pavlodar', 'Oskemen', 'Semey', 'Oral', 'Astana'],
+    cityNames: ['Almaty', 'Shymkent', 'Karaganda', 'Taraz', 'Aktobe', 'Pavlodar', 'Oskemen', 'Semey', 'Oral', 'Astana', 'Kyzylorda', 'Atyrau', 'Kostanay', 'Taldykorgan', 'Zhezkazgan', 'Kokshetau', 'Petropavl', 'Temirtau', 'Turkistan', 'Ekibastuz'],
     icon: '🐎🏹'
   },
   {
     name: 'Romans',
     leader: 'Julius Caesar',
     color: '#080308ff',
-    cityNames: ['Rome', 'Capua', 'Veii', 'Pompeii', 'Antium', 'Cumae', 'Neapolis', 'Ravenna', 'Verona'],
+    cityNames: ['Rome', 'Capua', 'Veii', 'Pompeii', 'Antium', 'Cumae', 'Neapolis', 'Ravenna', 'Verona', 'Syracuse', 'Tarentum', 'Brundisium', 'Carthage', 'Massalia', 'Alexandria', 'Byzantium', 'Ephesus', 'Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Pergamon', 'Rhodes'],
     icon: '⚔️'
   },
   {
     name: 'Russians',
     leader: 'Joseph Stalin',
     color: '#D00000',
-    cityNames: ['Kiev','Novgorod','Chernigov','Smolensk','Moscow', 'Leningrad', 'Minsk', 'Odessa', 'Sevastopol', 'Tula', 'Stalingrad'],
+    cityNames: ['Kiev','Novgorod','Chernigov','Smolensk','Moscow', 'Leningrad', 'Minsk', 'Odessa', 'Sevastopol', 'Tula', 'Stalingrad', 'Kazan', 'Rostov', 'Vladivostok', 'Irkutsk', 'Yakutsk', 'Murmansk', 'Khabarovsk', 'Kaliningrad', 'Perm', 'Yekaterinburg', 'Nizhny Novgorod', 'Samara', 'Volgograd', 'Krasnoyarsk', 'Novosibirsk', 'Omsk', 'Chelyabinsk', 'Ufa', 'Krasnodar', 'Voronezh', 'Saratov'],
     icon: '☭'
   },
   {
     name: 'Zulus',
     leader: 'Shaka',
     color: '#8B4513',
-    cityNames: ['Zimbabwe', 'Ulundi', 'Bapedi', 'Hlobane', 'Isandhlwana', 'Intombe', 'Mpondo', 'Swazi'],
+    cityNames: ['Zimbabwe', 'Ulundi', 'Bapedi', 'Hlobane', 'Isandhlwana', 'Intombe', 'Mpondo', 'Swazi', 'Ndebele', 'Venda', 'Tswana', 'Sotho', 'Tsonga', 'Shangaan', 'Xhosa', 'Zulu', 'Swazi', 'Ndebele', 'Venda', 'Tswana', 'Sotho', 'Tsonga', 'Shangaan', 'Xhosa'],
     icon: '🛡️'
   }
 ];

@@ -236,10 +236,10 @@ test.describe('Top Menu', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Rates', () => {
-  test('opens the rates modal from GAME menu and keeps the sum at 100%', async ({ page }) => {
+  test('opens the rates modal from the WORLD menu and keeps the sum at 100%', async ({ page }) => {
     await startGame(page);
 
-    await openTopMenu(page, 'GAME');
+    await openTopMenu(page, 'WORLD');
     await page.getByRole('button', { name: /Rates/ }).click();
 
     const modal = page.locator('.rates-modal');
@@ -293,9 +293,9 @@ test.describe('Government', () => {
     await expect(modal.locator('.government-modal__body')).toContainText('Despotism');
   });
 
-  test('opens the government modal from the GAME menu', async ({ page }) => {
+  test('opens the government modal from the WORLD menu', async ({ page }) => {
     await startGame(page);
-    await openTopMenu(page, 'GAME');
+    await openTopMenu(page, 'WORLD');
     await page.getByRole('button', { name: /Government/ }).click();
     await expect(page.locator('.government-modal')).toBeVisible();
     await expect(page.locator('.government-modal')).toContainText('revolution');

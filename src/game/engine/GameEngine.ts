@@ -1004,9 +1004,9 @@ export default class GameEngine {
       const tile = this.getTileAt(pos.col, pos.row);
       
       if (tile && tile.type !== Constants.TERRAIN.OCEAN && tile.type !== Constants.TERRAIN.MOUNTAINS) {
-        // Get city name
-        const cityName = civ.cityNames[civ.nextCityNameIndex] || `City ${civ.nextCityNameIndex + 1}`;
-        civ.nextCityNameIndex++;
+        // City name: sequential from the civ's list (civ may not be in
+        // this.civilizations yet at init, so pass it explicitly).
+        const cityName = this.getNextCityName(civId, civ);
         
         const cityId = `city_${civId}_${this.cities.length}`;
         const city = {
@@ -1173,15 +1173,41 @@ export default class GameEngine {
   }
 
   /**
-   * Get next city name for a civilization
+   * Get the next city name for a civilization.
+   *
+   * Civ1 behaviour: cities are named ONE AFTER ANOTHER from the civilization's
+   * `cityNames` list (e.g. Berlin → Hamburg → Munich…), advancing the index as
+   * each name is consumed. Names already in use (renamed cities, or an index
+   * that drifted out of sync with the real city list) are skipped so no two
+   * cities share a name; once the list is exhausted it falls back to
+   * "<Civ> City N" with an unused number.
    */
-  getNextCityName(civilizationId) {
-    const civ = this.civilizations[civilizationId];
+  getNextCityName(civilizationId, civOverride = null) {
+    const civ = civOverride || this.civilizations[civilizationId];
     if (!civ) return 'City';
-    
-    const name = civ.cityNames[civ.nextCityNameIndex] || `${civ.name} City ${civ.nextCityNameIndex + 1}`;
-    civ.nextCityNameIndex++;
-    return name;
+
+    const cityNames = Array.isArray(civ.cityNames) ? civ.cityNames : [];
+    const usedNames = new Set(
+      this.cities
+        .filter((c: any) => c.civilizationId === civilizationId)
+        .map((c: any) => String(c.name)),
+    );
+
+    while (civ.nextCityNameIndex < cityNames.length) {
+      const candidate = cityNames[civ.nextCityNameIndex];
+      civ.nextCityNameIndex++;
+      if (!usedNames.has(String(candidate))) {
+        return candidate;
+      }
+    }
+
+    let fallback = `${civ.name} City ${civ.nextCityNameIndex + 1}`;
+    let n = civ.nextCityNameIndex + 1;
+    while (usedNames.has(fallback)) {
+      n++;
+      fallback = `${civ.name} City ${n}`;
+    }
+    return fallback;
   }
 
   /**
@@ -2020,11 +2046,11 @@ export default class GameEngine {
       }
     }
 
-    // Generate city name
+    // Generate city name — sequential from the civ's city-name list (Civ1),
+    // e.g. Berlin → Hamburg → Munich instead of "Germans City N".
     const civId = settler.civilizationId;
     const civ = this.civilizations[civId];
-    const cityNumber = this.cities.filter(c => c.civilizationId === civId).length + 1;
-    const cityName = `${civ.name} City ${cityNumber}`;
+    const cityName = this.getNextCityName(civId);
 
     // Create new city
     const city = {
