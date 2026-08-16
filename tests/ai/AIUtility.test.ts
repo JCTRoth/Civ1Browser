@@ -277,17 +277,18 @@ describe('AIUtility', () => {
     });
 
     it('should give defensive bonus to hills and forests', () => {
-      const grassTile = { type: 'grassland' };
+      const plainsTile = { type: 'plains' };
       const hillTile = { type: 'hills' };
       const forestTile = { type: 'forest' };
 
-      const grassValue = AIUtility.evaluatePosition(0, 0, () => grassTile, 1);
+      const plainsValue = AIUtility.evaluatePosition(0, 0, () => plainsTile, 1);
       const hillValue = AIUtility.evaluatePosition(0, 0, () => hillTile, 1);
       const forestValue = AIUtility.evaluatePosition(0, 0, () => forestTile, 1);
 
-      // Hills and forests should have higher or equal value due to defensive bonus
-      expect(hillValue).toBeGreaterThanOrEqual(grassValue);
-      expect(forestValue).toBeGreaterThanOrEqual(grassValue);
+      // Civ1 yields: grassland (2/1/0) is the best base terrain. Hills and
+      // forests receive a +2 defensive bonus on top of their own base value.
+      expect(hillValue).toBeGreaterThan(plainsValue);   // hills 4 > plains 3.5
+      expect(forestValue).toBeGreaterThan(plainsValue); // forest 7 > plains 3.5
     });
   });
 

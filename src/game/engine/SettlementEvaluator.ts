@@ -48,10 +48,10 @@ export class SettlementEvaluator {
   }
 
   /**
-   * Check if a tile is water (ocean or coast)
+   * Check if a tile is water (ocean)
    */
   private static isWaterTile(terrainType: string): boolean {
-    return terrainType === Constants.TERRAIN.OCEAN || terrainType === 'coast' || terrainType === 'sea';
+    return terrainType === Constants.TERRAIN.OCEAN || terrainType === 'sea';
   }
 
   /**

@@ -116,9 +116,49 @@ export class EngineEventRouter {
       case 'DIPLOMACY_EVENT':
         this.onDiplomacyEvent(eventData);
         break;
+      case 'ALLIANCE_BROKEN':
+        this.onAllianceBroken(eventData);
+        break;
+      case 'AI_DIPLOMACY_OFFER':
+        this.onAIDiplomacyOffer(eventData);
+        break;
+      case 'VILLAGE_RESULT':
+        this.onVillageResult(eventData);
+        break;
       default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
+  }
+
+  /**
+   * A village (goody hut) was encountered. Refresh the store from the engine
+   * (the map/units/cities/civs/techs may all have changed) and, for the human
+   * player, open the village-result modal.
+   */
+  private onVillageResult(eventData: any): void {
+    if (this.isAIVsAI) return;
+    // Only the human's own encounters open a modal (AI huts resolve silently).
+    if (eventData.civId !== HUMAN_PLAYER_ID) return;
+
+    this.actions.updateMap?.(this.gameEngine.map);
+    this.actions.updateUnits?.(this.gameEngine.getAllUnits());
+    this.actions.updateCities?.(this.gameEngine.getAllCities());
+    this.actions.updateCivilizations?.(this.gameEngine.civilizations);
+    this.actions.updateTechnologies?.(this.gameEngine.technologies);
+    this.actions.showVillageResult?.({
+      outcome: eventData.outcome,
+      civId: eventData.civId,
+      col: eventData.col,
+      row: eventData.row,
+      cityName: eventData.cityName,
+      techId: eventData.techId,
+      techName: eventData.techName,
+      goldAmount: eventData.goldAmount,
+      unitType: eventData.unitType,
+      unitName: eventData.unitName,
+      barbarianCount: eventData.barbarianCount,
+      destroyed: eventData.destroyed,
+    });
   }
 
   private onTurnStart(_eventData: any) {
@@ -619,6 +659,42 @@ export class EngineEventRouter {
     if (eventData?.message) {
       this.actions.addNotification?.({ type: 'info', message: eventData.message });
     }
+  }
+
+  private onAllianceBroken(eventData: any) {
+    const civs = this.gameEngine.civilizations || [];
+    const civA = civs.find((c: any) => c.id === eventData?.civA);
+    const civB = civs.find((c: any) => c.id === eventData?.civB);
+    const msg = `💔 Alliance broken: ${civA?.name ?? 'Unknown'} declared war on ${civB?.name ?? 'Unknown'}!`;
+    console.log('[EngineEventRouter] ALLIANCE_BROKEN:', msg);
+    this.actions.addNotification?.({ type: 'warning', message: msg });
+    this.syncState();
+  }
+
+  /**
+   * An AI civilization made a negotiable proposal to the human player. Surface
+   * it in the negotiation screen (with the offering civ pre-selected) instead
+   * of auto-resolving — the player decides. In AI-vs-AI games there is no
+   * human, so offers are never routed here.
+   */
+  private onAIDiplomacyOffer(eventData: any) {
+    if (this.isAIVsAI) return;
+    if (typeof eventData?.fromCivId !== 'number') return;
+
+    const civs = this.gameEngine.civilizations || [];
+    const from = civs.find((c: any) => c.id === eventData.fromCivId);
+    console.log('[EngineEventRouter] AI_DIPLOMACY_OFFER from', from?.name ?? eventData.fromCivId, '→', eventData.action);
+
+    if (eventData?.message) {
+      this.actions.addNotification?.({ type: 'info', message: eventData.message });
+    }
+    this.actions.showIncomingDiplomacyOffer?.({
+      fromCivId: eventData.fromCivId,
+      action: eventData.action ?? 'propose_peace',
+      goldAmount: eventData.goldAmount,
+      message: eventData.message,
+    });
+    this.syncState();
   }
 
   private syncState() {

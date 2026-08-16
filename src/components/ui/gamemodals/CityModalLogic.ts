@@ -135,7 +135,7 @@ export class CityModalLogic {
     
     for (const dir of directions) {
       const tile = this.gameEngine.map.getTile(this.city.col + dir.col, this.city.row + dir.row);
-      if (tile && (tile.terrain === 'ocean' || tile.terrain === 'coast')) {
+      if (tile && tile.terrain === 'ocean') {
         return true;
       }
     }

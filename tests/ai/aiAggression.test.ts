@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
 import { AIResearch } from '@/game/engine/AIResearch';
 
@@ -107,9 +107,20 @@ describe('AI-vs-AI research + aggression', () => {
     console.error = () => {};
 
     let engine: GameEngine | null = null;
+    let randomSpy: ReturnType<typeof vi.spyOn> | null = null;
     try {
       engine = new GameEngine(null);
       (engine as any).sleep = () => Promise.resolve();
+
+      // Deterministic RNG so the sim's outcome doesn't depend on the random
+      // map layout (some layouts never see contact within the round budget
+      // once Civ1 movement costs slow armies down).
+      let rngSeed = 42;
+      const seededRandom = () => {
+        rngSeed = (rngSeed * 1664525 + 1013904223) >>> 0;
+        return rngSeed / 4294967296;
+      };
+      randomSpy = vi.spyOn(Math, 'random').mockImplementation(seededRandom);
 
       await engine.initialize({
         numberOfCivilizations: 2,
@@ -118,7 +129,9 @@ describe('AI-vs-AI research + aggression', () => {
         startingGold: 50,
       });
 
-      const TARGET_ROUNDS = 150;
+      // Civ1 movement costs (2 for forest/hills, 3 for mountains) slow armies
+      // down, so give the simulation a bit more runway than the original 150.
+      const TARGET_ROUNDS = 200;
       const MAX_ITERATIONS = TARGET_ROUNDS * 12;
       let iterations = 0;
 
@@ -166,6 +179,7 @@ describe('AI-vs-AI research + aggression', () => {
       console.log = origLog;
       console.warn = origWarn;
       console.error = origError;
+      randomSpy?.mockRestore();
       if (engine) { (engine as any).units = []; (engine as any).cities = []; (engine as any).civilizations = []; }
     }
   }, 120000);

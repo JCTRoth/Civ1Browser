@@ -821,7 +821,7 @@ export class City {
         // Ocean tiles can only be worked if they have fish or are coastal
         const terrainType = tile.type;
         if (terrainType === 'ocean') {
-            return tile.resource === 'fish' || this.isCoastalTile(tileCol, tileRow, gameMap);
+            return String(tile.resource ?? '').toLowerCase() === 'fish' || this.isCoastalTile(tileCol, tileRow, gameMap);
         }
 
         return true;

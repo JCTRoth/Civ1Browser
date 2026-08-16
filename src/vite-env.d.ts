@@ -8,6 +8,11 @@ declare module '*.svg?url' {
   export default content;
 }
 
+declare module '*.ttf' {
+  const content: string;
+  export default content;
+}
+
 declare module '*.svg?raw' {
   const content: string;
   export default content;

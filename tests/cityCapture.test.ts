@@ -86,13 +86,17 @@ describe('City capture & destruction', () => {
   /** Make an enemy city of civ 1 (returns the created city). */
   const makeEnemyCity = (population: number, opts: { walls?: boolean; isCapital?: boolean; buildings?: string[] } = {}): any => {
     const civ1 = engine.civilizations[1];
-    // Reuse a tile far from all existing cities.
+    // Reuse a tile far from all existing cities. Cities are placed on
+    // movement-1 terrain (Civ1) so a 1-move attacker can reach them.
+    const CHEAP_TERRAIN = new Set(['grassland', 'plains', 'desert', 'tundra', 'river']);
     const width = (engine as any).map?.width ?? 80;
     const height = (engine as any).map?.height ?? 50;
     let spot: { col: number; row: number } | null = null;
     for (let row = 2; row < height - 2 && !spot; row++) {
       for (let col = 2; col < width - 2; col++) {
         if (!isLand(col, row)) continue;
+        const tile = (engine as any).getTileAt?.(col, row);
+        if (!tile || !CHEAP_TERRAIN.has(String(tile.type ?? '').toLowerCase())) continue;
         if (engine.cities.some((c: any) => Math.abs(c.col - col) + Math.abs(c.row - row) < 4)) continue;
         spot = { col, row };
         break;

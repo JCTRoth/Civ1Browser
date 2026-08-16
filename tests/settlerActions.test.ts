@@ -50,6 +50,12 @@ describe('settler action availability (context menu gating)', () => {
     return { col, row, tile };
   }
 
+  /** Grant a technology to a civilization (needed for tech-gated improvements). */
+  function grantTech(e: GameEngine, civId: number, techId: string) {
+    const civ = (e as unknown as { civilizations: Array<{ id: number; technologies: string[] }> }).civilizations.find((c) => c.id === civId);
+    if (civ && !civ.technologies.includes(techId)) civ.technologies.push(techId);
+  }
+
   let settlerCounter = 0;
 
   function spawnSettler(e: GameEngine, col: number, row: number, moves = 2, fortified = false) {
@@ -93,7 +99,8 @@ describe('settler action availability (context menu gating)', () => {
     it('is blocked by an existing improvement unless there is an upgrade path', async () => {
       const e = await setupEngine();
 
-      // Road already built → road not possible again; railroad upgrade is.
+      // Road already built → road not possible again; railroad upgrade is (needs Railroad tech).
+      grantTech(e, 0, 'railroad');
       const withRoad = prepareTile(e, TERRAIN_TYPES.GRASSLAND, 'road');
       const onRoad = spawnSettler(e, withRoad.col, withRoad.row);
       expect(e.canBuildImprovement(onRoad.id, 'road')).toBe(false);

@@ -16,10 +16,26 @@
 
 import { Constants } from '@/utils/Constants';
 import { TILE_SIZE, getTerrainInfo, TERRAIN_TYPES } from '@/data/TerrainData';
+import { TERRAIN_RESOURCES } from '@/data/TerrainConstants';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, ImprovementDisplayConfig } from '@/data/TileImprovementConstants';
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
+import { TERRAIN_FONT_FAMILY } from '@/utils/terrainFont';
 import type { MapState, CameraState, Unit, City, GameState, Civilization, CombatAnimation } from '../../../types/game';
+
+/** Civ1 special-resource glyphs rendered on the map (keyed by lowercase name). */
+const RESOURCE_GLYPHS: Record<string, string> = {
+  seal: '🦭',
+  gems: '💎',
+  horses: '🐎',
+  gold: '🪙',
+  coal: '⬛',
+  fish: '🐟',
+  oil: '🛢️',
+  furs: '🦊',
+  game: '🦌',
+  oasis: '🌴',
+};
 
 
 /**
@@ -47,6 +63,8 @@ export interface TerrainTileRenderInfo {
   hasRoad?: boolean;
   /** Whether this tile has a river */
   hasRiver?: boolean;
+  /** Whether this tile contains a Civ1 village (goody hut). */
+  village?: boolean;
 }
 
 /**
@@ -330,14 +348,16 @@ export class MapRenderer {
           else terrainType = Constants.TERRAIN.GRASSLAND;
         }
 
+        const res = TERRAIN_RESOURCES[terrainType];
         generated[row][col] = {
           type: terrainType,
-          resource: Math.random() < 0.1 ? 'bonus' : null,
+          resource: res !== null && res !== undefined && Math.random() < 0.2 ? res : null,
           improvement: null,
           visible: false,
           explored: false,
           hasRoad: false,
-          hasRiver: false
+          hasRiver: false,
+          village: false
         };
       }
     }
@@ -811,6 +831,7 @@ export class MapRenderer {
             improvement: authoritativeTile.improvement ?? null,
             hasRoad: authoritativeTile.hasRoad ?? false,
             hasRiver: authoritativeTile.hasRiver ?? tile.hasRiver ?? false,
+            village: authoritativeTile.village ?? tile.village ?? false,
             visible: tile.visible ?? false,
             explored: tile.explored ?? false
           };
@@ -1301,7 +1322,7 @@ export class MapRenderer {
 
     if (drawBase && typeof char === 'string' && char.length > 0) {
       ctx.fillStyle = '#000';
-      ctx.font = '16px monospace';
+      ctx.font = `16px ${TERRAIN_FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       try {
@@ -1311,12 +1332,37 @@ export class MapRenderer {
       }
     }
 
+    // Civ1 special-resource glyph (Seal, Gems, Horses, Gold, Coal, Fish, Oil, Furs, Game, Oasis).
+    const resource = terrain.resource ? String(terrain.resource) : null;
+    if (drawBase && resource && RESOURCE_GLYPHS[resource.toLowerCase()]) {
+      try {
+        ctx.font = `16px ${TERRAIN_FONT_FAMILY}`;
+        ctx.fillStyle = '#000';
+        ctx.fillText(RESOURCE_GLYPHS[resource.toLowerCase()], centerX - 10, centerY + 10);
+      } catch (err) {
+        console.warn('[MapRenderer] drawTerrainSymbol resource fillText failed', err);
+      }
+    }
+
+    // Civ1 village (goody hut) marker. Drawn only in the dynamic pass
+    // (drawBase === false) so it always reflects the authoritative map state
+    // and disappears the moment a unit claims/destroys the hut.
+    if (terrain.village && !drawBase) {
+      try {
+        ctx.font = `14px ${TERRAIN_FONT_FAMILY}`;
+        ctx.fillStyle = '#8B4513';
+        ctx.fillText('🏠', centerX + 9, centerY - 9);
+      } catch (err) {
+        console.warn('[MapRenderer] drawTerrainSymbol village fillText failed', err);
+      }
+    }
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     if (drawRivers && terrain.hasRiver) {
       try {
-        ctx.font = '16px monospace';
+        ctx.font = `16px ${TERRAIN_FONT_FAMILY}`;
         ctx.fillStyle = '#0066FF';
         ctx.fillText('~', centerX + 8, centerY + 8);
       } catch (err) {

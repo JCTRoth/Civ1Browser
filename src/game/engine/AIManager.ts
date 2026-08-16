@@ -7,7 +7,7 @@
 
 import { AIUtility, scanAreaForEnemies, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
-import { UNIT_PROPS } from '@/utils/Constants';
+import { UNIT_PROPS, TERRAIN_PROPS } from '@/utils/Constants';
 import { SettlementEvaluator } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
 import { AICoordinator } from './AICoordinator';
@@ -306,7 +306,7 @@ export class AIManager {
             this.gameEngine.log('ai', `Attack — ${civ.name} ${unit.type}(${unit.id}) attacks enemy ${targetUnit.type} at (${target.col},${target.row})`);
             // Check move cost before attempting attack
             const tt = this.gameEngine.getTileAt(target.col, target.row);
-            const attackCost = Math.max(1, tt?.movement || 1);
+            const attackCost = Math.max(1, TERRAIN_PROPS[tt?.type ?? '']?.movement ?? 1);
             if ((unit.movesRemaining || 0) >= attackCost) {
               this.gameEngine.combatUnit(unit, targetUnit);
             } else {
@@ -317,7 +317,7 @@ export class AIManager {
           } else {
             // Move into the tile
             const tt = this.gameEngine.getTileAt(target.col, target.row);
-            const moveCost = Math.max(1, tt?.movement || 1);
+            const moveCost = Math.max(1, TERRAIN_PROPS[tt?.type ?? '']?.movement ?? 1);
             if ((unit.movesRemaining || 0) >= moveCost) {
               const r = this.gameEngine.moveUnit(unit.id, target.col, target.row);
               if (!r || !r.success) {
@@ -338,23 +338,30 @@ export class AIManager {
           console.log(`[AI] Pathfinding to non-adjacent target (${target.col},${target.row})`);
           const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, new Set());
           if (path.length > 1) {
-            const next = path[1];
+            let next = path[1];
             console.log(`[AI] Path found, next step to (${next.col},${next.row}), path length: ${path.length}`);
             const tt = this.gameEngine.getTileAt(next.col, next.row);
-            const moveCost = Math.max(1, tt?.movement || 1);
-            if ((unit.movesRemaining || 0) >= moveCost) {
-              const r = this.gameEngine.moveUnit(unit.id, next.col, next.row);
-              if (!r || !r.success) {
-                console.log(`[AI] Path step failed, skipping unit`);
+            const moveCost = Math.max(1, TERRAIN_PROPS[tt?.type ?? '']?.movement ?? 1);
+            if ((unit.movesRemaining || 0) < moveCost) {
+              // A* routed the first step through a tile this unit cannot afford
+              // (Civ1: a unit must pay the full movement cost of the tile it
+              // enters). Fall back to the best affordable neighbor instead of
+              // getting permanently stuck on the first step.
+              const affordable = this.findAffordableStep(unit, target);
+              if (!affordable) {
+                console.log(`[AI] No affordable step for unit ${unit.id}, skipping`);
                 this.gameEngine.skipUnit(unit.id);
                 break;
               }
-              this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${next.col},${next.row}) toward (${target.col},${target.row})`);
-            } else {
-              console.log(`[AI] Not enough moves for path step (${unit.movesRemaining} < ${moveCost}), skipping`);
+              next = affordable;
+            }
+            const r = this.gameEngine.moveUnit(unit.id, next.col, next.row);
+            if (!r || !r.success) {
+              console.log(`[AI] Path step failed, skipping unit`);
               this.gameEngine.skipUnit(unit.id);
               break;
             }
+            this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${next.col},${next.row}) toward (${target.col},${target.row})`);
           } else {
             console.log(`[AI] No path found to target, skipping unit`);
             this.gameEngine.skipUnit(unit.id);
@@ -389,6 +396,42 @@ export class AIManager {
     }
 
     // RoundManager now responsible for evaluating end-of-turn and timeouts
+  }
+
+  /**
+   * Find the best affordable next step toward a target for a unit whose
+   * remaining movement cannot cover the A* path's first step. Civ1 units can
+   * only enter tiles whose movement cost they can pay, so the AI picks the
+   * cheapest affordable neighbor that reduces (or best limits) the distance to
+   * the target. Returns null when the unit is genuinely boxed in.
+   */
+  private findAffordableStep(
+    unit: { col: number; row: number; movesRemaining?: number; civilizationId?: number },
+    target: { col: number; row: number },
+  ): { col: number; row: number } | null {
+    const grid = this.gameEngine.squareGrid;
+    const movesLeft = unit.movesRemaining ?? 0;
+    if (!grid || !grid.getNeighbors) return null;
+    const neighbors = grid.getNeighbors(unit.col, unit.row);
+    let best: { col: number; row: number } | null = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (const n of neighbors) {
+      const tile = this.gameEngine.getTileAt(n.col, n.row);
+      if (!tile) continue;
+      const moveCost = Math.max(1, TERRAIN_PROPS[tile.type ?? '']?.movement ?? 1);
+      if (moveCost > movesLeft) continue;
+      // Avoid stepping onto an allied unit.
+      const occupant = this.gameEngine.getUnitAt(n.col, n.row);
+      if (occupant && occupant.civilizationId === unit.civilizationId) continue;
+      // Prefer tiles that move closer to the target; tie-break by cost.
+      const dist = grid.squareDistance(n.col, n.row, target.col, target.row);
+      const score = dist * 10 + moveCost;
+      if (score < bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    return best;
   }
 
   /**

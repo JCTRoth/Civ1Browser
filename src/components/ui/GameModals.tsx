@@ -7,6 +7,7 @@ import CityModal from './gamemodals/CityModal';
 import HexDetailModal from './gamemodals/HexDetailModal';
 import RatesModal from './gamemodals/RatesModal';
 import GovernmentModal from './gamemodals/GovernmentModal';
+import VillageModal from './gamemodals/VillageModal';
 import { useGameStore } from '@/stores/GameStore';
 import { UNIT_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
@@ -17,6 +18,7 @@ import '../../styles/diplomacyModal.css';
 import LeaderPortrait from './LeaderPortrait';
 import { LEADER_PORTRAITS, MOOD_COLORS } from '@/data/LeaderPortraits';
 import type { City, Civilization, GameEngine } from '../../../types/game';
+import type { DiplomatAction } from '@/game/engine/DiplomacyTypes';
 
 const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   // console.log('[GameModals] Component rendering, gameEngine present:', !!gameEngine);
@@ -37,6 +39,8 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   const gameStats = useGameStore(state => state.gameStats);
 
   const civilizations = useGameStore(state => state.civilizations);
+  const incomingDiplomacyOffer = useGameStore(state => state.incomingDiplomacyOffer);
+  const diplomacyFocusCivId = useGameStore(state => state.diplomacyFocusCivId);
 
   const selectedCity = cities.find(c => c.id === selectedCityId);
 
@@ -462,6 +466,41 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     setDiplomacyLog(prev => [msg, ...prev].slice(0, 20));
   };
 
+  // When the diplomacy screen opens with a focus civ (diplomat contact or an
+  // AI-initiated offer), pre-select that civ in the negotiation list, then
+  // consume the focus hint so it only applies once.
+  useEffect(() => {
+    if (uiState.activeDialog === 'diplomacy' && diplomacyFocusCivId != null) {
+      setSelectedDiploCiv(diplomacyFocusCivId);
+      setShowTreatyPanel(false);
+      setCounterProposal(null);
+      actions.clearDiplomacyFocus();
+    }
+  }, [uiState.activeDialog, diplomacyFocusCivId, actions]);
+
+  // Accept or reject the AI's pending proposal shown in the incoming-offer
+  // banner. Accepting executes the proposal directly (no willingness roll —
+  // the player's choice is the answer).
+  const handleIncomingOffer = (accept: boolean): void => {
+    const offer = useGameStore.getState().incomingDiplomacyOffer;
+    if (!offer) return;
+    const fromCiv = civilizations[offer.fromCivId];
+    if (accept && gameEngine?.diplomacyManager) {
+      const result = gameEngine.diplomacyManager.acceptOffer({
+        fromCivId: offer.fromCivId,
+        toCivId: currentPlayer?.id ?? 0,
+        action: offer.action as unknown as DiplomatAction,
+        goldAmount: offer.goldAmount,
+      });
+      addDiploLog(result.accepted
+        ? `You accepted ${fromCiv?.name ?? 'their'} proposal (${offer.action.replace(/_/g, ' ')}).`
+        : `The proposal could not be completed.`);
+    } else {
+      addDiploLog(`You declined ${fromCiv?.name ?? 'their'} proposal.`);
+    }
+    actions.clearIncomingDiplomacyOffer();
+  };
+
   const renderDiplomacy = () => {
     const dm = gameEngine?.diplomacyManager;
     const playerId = currentPlayer?.id ?? 0;
@@ -611,7 +650,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     return (
       <Modal 
         show={uiState.activeDialog === 'diplomacy'} 
-        onHide={() => { handleCloseDialog(); setSelectedDiploCiv(null); setDiplomacyLog([]); setShowTreatyPanel(false); setCounterProposal(null); }} 
+        onHide={() => { handleCloseDialog(); setSelectedDiploCiv(null); setDiplomacyLog([]); setShowTreatyPanel(false); setCounterProposal(null); actions.clearIncomingDiplomacyOffer(); actions.clearDiplomacyFocus(); }} 
         centered
         size="xl"
         fullscreen="lg-down"
@@ -623,6 +662,20 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="diplomacy-body">
+          {/* Pending AI→player proposal awaiting an accept/reject decision */}
+          {incomingDiplomacyOffer && (
+            <div className="diplomacy-incoming-offer">
+              <div className="diplomacy-incoming-title">📨 Incoming Proposal</div>
+              <div className="diplomacy-incoming-text">
+                {civilizations[incomingDiplomacyOffer.fromCivId]?.name ?? 'Unknown'} proposes: <strong>{incomingDiplomacyOffer.action.replace(/_/g, ' ')}</strong>
+                {incomingDiplomacyOffer.goldAmount ? ` (${incomingDiplomacyOffer.goldAmount} gold)` : ''}
+              </div>
+              <div className="diplomacy-incoming-buttons">
+                <button className="diplomacy-btn btn-peace" onClick={() => handleIncomingOffer(true)}>✓ Accept</button>
+                <button className="diplomacy-btn btn-war" onClick={() => handleIncomingOffer(false)}>✗ Reject</button>
+              </div>
+            </div>
+          )}
           {otherCivs.length === 0 ? (
             <p className="text-muted text-center py-4">No other civilizations discovered yet.</p>
           ) : (
@@ -891,6 +944,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
                                 peace_made: `🕊️ Peace between ${from} and ${to}`,
                                 ceasefire_signed: `🏳️ Ceasefire between ${from} and ${to}`,
                                 alliance_formed: `🤝 Alliance between ${from} and ${to}`,
+                                alliance_broken: `💔 ${from} broke the alliance with ${to}`,
                                 tribute_paid: `💰 ${from} paid tribute to ${to}${e.goldAmount ? ` (${e.goldAmount}g)` : ''}`,
                                 treaty_rejected: `❌ ${to} rejected ${from}'s proposal`,
                                 unit_bribed: `🎭 ${from} bribed a unit`,
@@ -972,6 +1026,15 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
           <Modal.Title>Diplomacy Report</Modal.Title>
         </Modal.Header>
         <Modal.Body className="diplomacy-body">
+          <div className="diplomacy-report-actions">
+            <button
+              className="diplomacy-btn btn-peace"
+              onClick={() => actions.openDiplomacy(null)}
+              title="Open the full negotiation screen for this civilization"
+            >
+              ⚖️ Open Negotiations
+            </button>
+          </div>
           {otherCivs.length === 0 ? (
             <p className="text-muted text-center py-4">No other civilizations discovered yet.</p>
           ) : (
@@ -1045,6 +1108,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
                           peace_made: `🕊️ Peace between ${from} and ${to}`,
                           ceasefire_signed: `🏳️ Ceasefire between ${from} and ${to}`,
                           alliance_formed: `🤝 Alliance between ${from} and ${to}`,
+                          alliance_broken: `💔 ${from} broke the alliance with ${to}`,
                           tribute_paid: `💰 ${from} paid tribute to ${to}${e.goldAmount ? ` (${e.goldAmount}g)` : ''}`,
                           treaty_rejected: `❌ ${to} rejected ${from}'s proposal`,
                           open_borders_signed: `🚪 Open borders: ${from} ↔ ${to}`,
@@ -1202,37 +1266,25 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
                 <strong>Build City:</strong> Settler founds a new city
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Build Road:</strong> +0.5 trade, faster movement (1 turn)
+                <strong>Build Road:</strong> +1 trade on grassland/plains/desert, 1/3 movement (1 turn)
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Irrigate:</strong> +1 food on grassland/plains/desert (2 turns)
+                <strong>Irrigate:</strong> +1 food on grassland/plains/desert; converts jungle/swamp to grassland (2 turns)
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Mine:</strong> +1 production on mountains/hills (8 turns)
+                <strong>Mine:</strong> +1 production on mountains, +3 on hills; converts jungle/swamp to forest, clears forest to plains (5 turns)
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
                 <strong>Fortify:</strong> Defensive bonus for military units
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Railroad:</strong> Upgrades road — +0.5 food/prod/trade (requires Railroad tech)
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Farmland:</strong> Upgrades irrigation — +2 food (requires Refrigeration tech)
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Port:</strong> +1 food/trade on coast (requires Navigation tech)
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Airport:</strong> +1 trade on land (requires Flight tech)
-              </ListGroup.Item>
-              <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Superhighways:</strong> Upgrades road — +1.5 trade (requires Automobile tech)
+                <strong>Railroad:</strong> Upgrades road — +0.5 food/prod/trade, free movement (requires Railroad tech)
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
                 <strong>Clean Pollution:</strong> Removes pollution from tile (2 turns)
               </ListGroup.Item>
               <ListGroup.Item className="bg-dark text-white border-secondary">
-                <strong>Fortress:</strong> +80% defense bonus (6 turns)
+                <strong>Fortress:</strong> +100% defense, applied last (6 turns, requires Construction tech)
               </ListGroup.Item>
             </ListGroup>
           </Tab>
@@ -1317,7 +1369,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     
     for (const dir of directions) {
       const tile = gameEngine.map.getTile(city.col + dir.col, city.row + dir.row);
-      if (tile && (tile.terrain === 'ocean' || tile.terrain === 'coast')) {
+      if (tile && tile.terrain === 'ocean') {
         return true;
       }
     }
@@ -1690,6 +1742,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <HexDetailModal show={uiState.activeDialog === 'hex-details'} onHide={handleCloseDialog} selectedHex={selectedHex} map={map} units={units} cities={cities} />
       <RatesModal show={uiState.activeDialog === 'rates'} onHide={handleCloseDialog} gameEngine={gameEngine} />
       <GovernmentModal show={uiState.activeDialog === 'government'} onHide={handleCloseDialog} gameEngine={gameEngine} />
+      <VillageModal show={uiState.activeDialog === 'village'} onHide={actions.clearVillageResult} />
       {renderCityProduction()}
       {renderCityPurchase()}
     </>

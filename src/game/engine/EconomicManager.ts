@@ -19,7 +19,7 @@ import { BUILDING_PROPERTIES } from '../../data/BuildingConstants';
 import { getGovernment } from '../../data/GovernmentData';
 import { CityUtils } from '../../utils/CityUtils';
 import { UNIT_PROPS } from '../../utils/Constants';
-import { TERRAIN_PROPERTIES, SPECIAL_RESOURCES } from '../../data/TerrainConstants';
+import { TERRAIN_PROPERTIES, TERRAIN_TYPES, SPECIAL_RESOURCES } from '../../data/TerrainConstants';
 import { IMPROVEMENT_PROPERTIES } from '../../data/TileImprovementConstants';
 import type { City, Civilization, GameEngine, Unit } from '../../../types/game';
 
@@ -266,16 +266,28 @@ export class EconomicManager {
         food += special.food ?? 0;
         production += special.production ?? 0;
         trade += special.trade ?? 0;
-      } else if (String(resName).toLowerCase() === 'bonus') {
-        trade += 1;
       }
     }
 
     const imp = tile.improvement ? IMPROVEMENT_PROPERTIES[tile.improvement] : null;
-    if (imp?.effects) {
-      food += imp.effects.food ?? 0;
-      production += imp.effects.production ?? 0;
-      trade += imp.effects.trade ?? 0;
+    if (imp) {
+      // Per-terrain yield effects (Civ1 mines: +1 shield on mountains, +3 on hills).
+      const terrainEffects = imp.effectsByTerrain?.[terrainType];
+      if (terrainEffects) {
+        food += terrainEffects.food ?? 0;
+        production += terrainEffects.production ?? 0;
+        trade += terrainEffects.trade ?? 0;
+      } else if (imp.effects) {
+        food += imp.effects.food ?? 0;
+        production += imp.effects.production ?? 0;
+        trade += imp.effects.trade ?? 0;
+      }
+      // Civ1 road: +1 trade only on grassland/plains/desert (never on rivers).
+      if (imp.tradeBonusTerrains && terrainType !== TERRAIN_TYPES.RIVER) {
+        if (imp.tradeBonusTerrains.includes(terrainType)) {
+          trade += 1;
+        }
+      }
     }
 
     return { food, production, trade };

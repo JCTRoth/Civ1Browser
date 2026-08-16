@@ -412,7 +412,7 @@ export class DiplomacyManager {
 
   /** Process a diplomatic proposal. Returns whether accepted. */
   processProposal(proposal: DiplomacyProposal): DiplomacyResponse {
-    const { fromCivId, toCivId, action, goldAmount } = proposal;
+    const { fromCivId, toCivId, action } = proposal;
     const attitude = this.getAttitude(toCivId, fromCivId);
     const willingness = this.calculateWillingness(toCivId, fromCivId, action, attitude);
     const roll = Math.random() * 100;
@@ -433,6 +433,28 @@ export class DiplomacyManager {
     }
 
     // Execute the accepted action
+    return this.executeAcceptedAction(proposal);
+  }
+
+  /**
+   * Execute an AI-initiated proposal that the human player explicitly accepted
+   * in the negotiation screen. Unlike `processProposal` there is no willingness
+   * roll — the player's accept/reject decision IS the answer, so the action is
+   * executed directly.
+   */
+  acceptOffer(proposal: DiplomacyProposal): DiplomacyResponse {
+    const { fromCivId, action } = proposal;
+    console.log(`[DIPLOMACY] Player accepted ${action} from Civ ${fromCivId}`);
+    return this.executeAcceptedAction(proposal);
+  }
+
+  /**
+   * Apply the effects of an accepted proposal (shared by `processProposal` —
+   * where the AI's willingness roll decided — and `acceptOffer` — where the
+   * human decided).
+   */
+  private executeAcceptedAction(proposal: DiplomacyProposal): DiplomacyResponse {
+    const { fromCivId, toCivId, action, goldAmount } = proposal;
     switch (action) {
       case 'propose_peace':
         this.makePeace(fromCivId, toCivId);
@@ -662,23 +684,17 @@ export class DiplomacyManager {
         // Consider peace if losing or war has gone on long enough
         if (theirStrength > ownStrength * 1.3 && turnsSince > 5) {
           console.log(`[AI-DIPLO] Civ ${civId} proposing ceasefire to Civ ${otherId} (outmatched)`);
-          const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_ceasefire' });
           if (isPlayerTarget) {
-            this.emitEvent('DIPLOMACY_EVENT', {
-              message: result.accepted
-                ? `${civName} proposes a ceasefire, and you accept.`
-                : `${civName} offers a ceasefire, but negotiations fail.`,
-            });
+            this.emitOffer(civId, otherId, 'propose_ceasefire', undefined, `${civName} proposes a ceasefire.`);
+          } else {
+            this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_ceasefire' });
           }
         } else if (turnsSince > 15 && attitude !== 'hostile') {
           console.log(`[AI-DIPLO] Civ ${civId} proposing peace to Civ ${otherId} (long war)`);
-          const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_peace' });
           if (isPlayerTarget) {
-            this.emitEvent('DIPLOMACY_EVENT', {
-              message: result.accepted
-                ? `${civName} sues for peace, and you agree.`
-                : `${civName} desires peace, but you refuse.`,
-            });
+            this.emitOffer(civId, otherId, 'propose_peace', undefined, `${civName} sues for peace.`);
+          } else {
+            this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_peace' });
           }
         }
       } else if (rel.status === 'peace' || rel.status === 'ceasefire') {
@@ -708,13 +724,10 @@ export class DiplomacyManager {
         else if (personality.aggression >= 6 && ownStrength > theirStrength * 2 && turnsSince > 10) {
           const demand = Math.max(25, Math.floor((ownStrength / Math.max(theirStrength, 1)) * 20));
           console.log(`[AI-DIPLO] Civ ${civId} demanding ${demand} gold tribute from Civ ${otherId}`);
-          const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'demand_tribute', goldAmount: demand });
           if (isPlayerTarget) {
-            this.emitEvent('DIPLOMACY_EVENT', {
-              message: result.accepted
-                ? `${civName} demands tribute! You pay ${result.goldTransferred ?? demand} gold.`
-                : `${civName} demands tribute, but you refuse!`,
-            });
+            this.emitOffer(civId, otherId, 'demand_tribute', demand, `${civName} demands ${demand} gold as tribute.`);
+          } else {
+            this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'demand_tribute', goldAmount: demand });
           }
         }
         // Consider alliance if friendly and similar strength
@@ -722,18 +735,59 @@ export class DiplomacyManager {
           const strengthRatio = Math.min(ownStrength, theirStrength) / Math.max(ownStrength, theirStrength, 1);
           if (strengthRatio > 0.5) {
             console.log(`[AI-DIPLO] Civ ${civId} proposing alliance to Civ ${otherId}`);
-            const result = this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_alliance' });
             if (isPlayerTarget) {
-              this.emitEvent('DIPLOMACY_EVENT', {
-                message: result.accepted
-                  ? `${civName} proposes an alliance — you accept!`
-                  : `${civName} offers an alliance, but you decline.`,
-              });
+              this.emitOffer(civId, otherId, 'propose_alliance', undefined, `${civName} proposes an alliance.`);
+            } else {
+              this.processProposal({ fromCivId: civId, toCivId: otherId, action: 'propose_alliance' });
             }
+          }
+        }
+      } else if (rel.status === 'alliance') {
+        // Alliances can collapse: a hostile attitude may push the AI to betray
+        // outright, and very aggressive leaders occasionally backstab after a
+        // long-standing pact. The reputation penalty is applied by declareWar.
+        const hostileBetrayal = attitude === 'hostile' && Math.random() * 100 < 40;
+        const longAllianceBetrayal = turnsSince > 20 && personality.aggression >= 7 && Math.random() * 100 < 8;
+        if (hostileBetrayal || longAllianceBetrayal) {
+          console.log(`[AI-DIPLO] Civ ${civId} breaking alliance with Civ ${otherId}`);
+          this.declareWar(civId, otherId);
+          this.logEvent({
+            type: 'alliance_broken',
+            fromCivId: civId,
+            toCivId: otherId,
+            details: 'Alliance collapsed',
+          });
+          this.emitEvent('ALLIANCE_BROKEN', { civA: civId, civB: otherId });
+          if (isPlayerTarget) {
+            this.emitEvent('DIPLOMACY_EVENT', {
+              message: `${civName} has BROKEN the alliance and declared war on you!`,
+            });
           }
         }
       }
     }
+  }
+
+  /**
+   * Surface a negotiable AI proposal to the human player. The proposal is NOT
+   * auto-resolved: the engine event carries it to the UI, which opens the
+   * negotiation screen so the player can accept (via acceptOffer) or reject.
+   */
+  private emitOffer(
+    fromCivId: number,
+    toCivId: number,
+    action: DiplomatAction,
+    goldAmount: number | undefined,
+    message: string,
+  ): void {
+    console.log(`[AI-DIPLO] Offering ${action} to human Civ ${toCivId}`);
+    this.emitEvent('AI_DIPLOMACY_OFFER', {
+      fromCivId,
+      toCivId,
+      action,
+      goldAmount,
+      message,
+    });
   }
 
   // ─── Internal helpers ──────────────────────────────────────────────

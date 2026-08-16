@@ -14,7 +14,6 @@ export interface SpecialResource {
 
 export const TERRAIN_TYPES = {
     OCEAN: 'ocean',
-    COAST: 'coast',
     GRASSLAND: 'grassland',
     PLAINS: 'plains',
     TUNDRA: 'tundra',
@@ -24,13 +23,14 @@ export const TERRAIN_TYPES = {
     MOUNTAINS: 'mountains',
     HILLS: 'hills',
     SWAMP: 'swamp',
-    ARCTIC: 'arctic'
+    ARCTIC: 'arctic',
+    RIVER: 'river'
 } as const;
 
 export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
     [TERRAIN_TYPES.OCEAN]: {
-        movement: 0.8,
-        defense: 0,
+        movement: 1,
+        defense: 1,
         food: 1,
         production: 0,
         trade: 2,
@@ -39,20 +39,20 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         description: 'Deep ocean waters',
         buildModifier: 1
     },
-    [TERRAIN_TYPES.COAST]: {
-        movement: 0.8,
-        defense: 0,
+    [TERRAIN_TYPES.RIVER]: {
+        movement: 1,
+        defense: 1.5,
         food: 2,
         production: 0,
         trade: 1,
-        color: '#3b82f6',
-        passable: false,
-        description: 'Coastal waters',
+        color: '#38bdf8',
+        passable: true,
+        description: 'River valley',
         buildModifier: 1
     },
     [TERRAIN_TYPES.GRASSLAND]: {
-        movement: 0.8,
-        defense: 0,
+        movement: 1,
+        defense: 1,
         food: 2,
         production: 1,
         trade: 0,
@@ -62,8 +62,8 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 1
     },
     [TERRAIN_TYPES.PLAINS]: {
-        movement: 0.8,
-        defense: 0,
+        movement: 1,
+        defense: 1,
         food: 1,
         production: 1,
         trade: 0,
@@ -73,8 +73,8 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 1
     },
     [TERRAIN_TYPES.TUNDRA]: {
-        movement: 0.8,
-        defense: 0,
+        movement: 1,
+        defense: 1,
         food: 1,
         production: 0,
         trade: 0,
@@ -84,8 +84,8 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 1
     },
     [TERRAIN_TYPES.DESERT]: {
-        movement: 0.8,
-        defense: 0,
+        movement: 1,
+        defense: 1,
         food: 0,
         production: 1,
         trade: 0,
@@ -95,8 +95,8 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 1
     },
     [TERRAIN_TYPES.FOREST]: {
-        movement: 0.9,
-        defense: 1.35,
+        movement: 2,
+        defense: 1.5,
         food: 1,
         production: 2,
         trade: 0,
@@ -106,19 +106,19 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 2
     },
     [TERRAIN_TYPES.JUNGLE]: {
-        movement: 1.0,
-        defense: 1.35,
-        food: 0,
+        movement: 2,
+        defense: 1.5,
+        food: 1,
         production: 0,
         trade: 0,
         color: '#15803d',
         passable: true,
-        description: 'Impassable jungle',
+        description: 'Dense jungle',
         buildModifier: 2
     },
     [TERRAIN_TYPES.MOUNTAINS]: {
-        movement: 1.0,
-        defense: 2.5,
+        movement: 3,
+        defense: 3,
         food: 0,
         production: 1,
         trade: 0,
@@ -128,10 +128,10 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 3
     },
     [TERRAIN_TYPES.HILLS]: {
-        movement: 1.0,
-        defense: 0.5,
+        movement: 2,
+        defense: 2,
         food: 1,
-        production: 1,
+        production: 0,
         trade: 0,
         color: '#a39071',
         passable: true,
@@ -139,9 +139,9 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 2
     },
     [TERRAIN_TYPES.SWAMP]: {
-        movement: 0.9,
-        defense: 1.35,
-        food: 0,
+        movement: 2,
+        defense: 1.5,
+        food: 1,
         production: 0,
         trade: 0,
         color: '#7c2d12',
@@ -150,8 +150,8 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
         buildModifier: 3
     },
     [TERRAIN_TYPES.ARCTIC]: {
-        movement: 0.8,
-        defense: 0,
+        movement: 2,
+        defense: 1,
         food: 0,
         production: 0,
         trade: 0,
@@ -164,22 +164,13 @@ export const TERRAIN_PROPERTIES: Record<string, TerrainProperties> = {
 
 export const SPECIAL_RESOURCES: SpecialResource[] = [
     {
-        name: 'Wheat',
-        terrain: TERRAIN_TYPES.PLAINS,
-        terrains: `${TERRAIN_TYPES.PLAINS}`,
-        food: 1,
+        name: 'Seal',
+        terrain: TERRAIN_TYPES.ARCTIC,
+        terrains: `${TERRAIN_TYPES.ARCTIC}`,
+        food: 2,
         production: 0,
         trade: 0,
-        description: 'Increases food production'
-    },
-    {
-        name: 'Silk',
-        terrain: TERRAIN_TYPES.JUNGLE,
-        terrains: `${TERRAIN_TYPES.JUNGLE}`,
-        food: 0,
-        production: 0,
-        trade: 2,
-        description: 'Increases trade'
+        description: 'Increases food production (Arctic)'
     },
     {
         name: 'Gems',
@@ -187,8 +178,17 @@ export const SPECIAL_RESOURCES: SpecialResource[] = [
         terrains: `${TERRAIN_TYPES.JUNGLE}`,
         food: 0,
         production: 0,
-        trade: 3,
-        description: 'High trade value'
+        trade: 4,
+        description: 'High trade value (Jungle)'
+    },
+    {
+        name: 'Horses',
+        terrain: TERRAIN_TYPES.PLAINS,
+        terrains: `${TERRAIN_TYPES.PLAINS}`,
+        food: 0,
+        production: 2,
+        trade: 0,
+        description: 'Increases production (Plains)'
     },
     {
         name: 'Gold',
@@ -196,49 +196,88 @@ export const SPECIAL_RESOURCES: SpecialResource[] = [
         terrains: `${TERRAIN_TYPES.MOUNTAINS}`,
         food: 0,
         production: 0,
-        trade: 4,
-        description: 'Very high trade value'
-    },
-    {
-        name: 'Iron',
-        terrain: TERRAIN_TYPES.HILLS,
-        terrains: `${TERRAIN_TYPES.HILLS}`,
-        food: 0,
-        production: 1,
-        trade: 0,
-        description: 'Increases production'
+        trade: 6,
+        description: 'Very high trade value (Mountains)'
     },
     {
         name: 'Coal',
-        terrain: TERRAIN_TYPES.MOUNTAINS,
-        terrains: `${TERRAIN_TYPES.MOUNTAINS}`,
+        terrain: TERRAIN_TYPES.HILLS,
+        terrains: `${TERRAIN_TYPES.HILLS}`,
         food: 0,
         production: 2,
         trade: 0,
-        description: 'Increases production'
-    },
-    {
-        name: 'Oil',
-        terrain: TERRAIN_TYPES.DESERT,
-        terrains: `${TERRAIN_TYPES.DESERT}`,
-        food: 0,
-        production: 3,
-        trade: 0,
-        description: 'High production value'
+        description: 'Increases production (Hills)'
     },
     {
         name: 'Fish',
         terrain: TERRAIN_TYPES.OCEAN,
-        terrains: `${TERRAIN_TYPES.OCEAN},${TERRAIN_TYPES.COAST}`,
+        terrains: `${TERRAIN_TYPES.OCEAN}`,
         food: 2,
         production: 0,
-        trade: 1,
-        description: 'Food and trade from sea'
+        trade: 0,
+        description: 'Food from the sea (Ocean)'
+    },
+    {
+        name: 'Oil',
+        terrain: TERRAIN_TYPES.SWAMP,
+        terrains: `${TERRAIN_TYPES.SWAMP}`,
+        food: 0,
+        production: 4,
+        trade: 0,
+        description: 'High production value (Swamp)'
+    },
+    {
+        name: 'Furs',
+        terrain: TERRAIN_TYPES.TUNDRA,
+        terrains: `${TERRAIN_TYPES.TUNDRA}`,
+        food: 2,
+        production: 0,
+        trade: 0,
+        description: 'Increases food production (Tundra)'
+    },
+    {
+        name: 'Game',
+        terrain: TERRAIN_TYPES.FOREST,
+        terrains: `${TERRAIN_TYPES.FOREST}`,
+        food: 2,
+        production: 0,
+        trade: 0,
+        description: 'Increases food production (Forest)'
+    },
+    {
+        name: 'Oasis',
+        terrain: TERRAIN_TYPES.DESERT,
+        terrains: `${TERRAIN_TYPES.DESERT}`,
+        food: 3,
+        production: 0,
+        trade: 0,
+        description: 'Increases food production (Desert)'
     }
 ];
+
+/**
+ * Default special resource for each terrain type (Civ1: exactly one per
+ * terrain; Grassland and River have none). Used by map generation and by
+ * terrain-conversion rules (the new terrain carries its own resource).
+ */
+export const TERRAIN_RESOURCES: Record<string, string | null> = {
+    [TERRAIN_TYPES.ARCTIC]: 'Seal',
+    [TERRAIN_TYPES.JUNGLE]: 'Gems',
+    [TERRAIN_TYPES.PLAINS]: 'Horses',
+    [TERRAIN_TYPES.MOUNTAINS]: 'Gold',
+    [TERRAIN_TYPES.HILLS]: 'Coal',
+    [TERRAIN_TYPES.OCEAN]: 'Fish',
+    [TERRAIN_TYPES.SWAMP]: 'Oil',
+    [TERRAIN_TYPES.TUNDRA]: 'Furs',
+    [TERRAIN_TYPES.FOREST]: 'Game',
+    [TERRAIN_TYPES.GRASSLAND]: null,
+    [TERRAIN_TYPES.DESERT]: 'Oasis',
+    [TERRAIN_TYPES.RIVER]: null
+};
 
 export default {
     TERRAIN_TYPES,
     TERRAIN_PROPERTIES,
-    SPECIAL_RESOURCES
+    SPECIAL_RESOURCES,
+    TERRAIN_RESOURCES
 };

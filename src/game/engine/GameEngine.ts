@@ -3,6 +3,17 @@ import { Constants, TERRAIN_PROPS, UNIT_PROPS } from '@/utils/Constants';
 import { CIVILIZATIONS, TECHNOLOGIES } from '@/data/GameData';
 import { TECHNOLOGIES_DATA } from '@/data/TechnologyData';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_REQUIREMENTS, IMPROVEMENT_TYPES } from '@/data/TileImprovementConstants';
+import { TERRAIN_RESOURCES, TERRAIN_TYPES } from '@/data/TerrainConstants';
+import {
+  BARBARIAN_CIV_ID,
+  VILLAGE_OUTCOME,
+  VILLAGE_OUTCOMES,
+  VILLAGE_FREE_BUILDINGS,
+  VILLAGE_GOLD_AMOUNT,
+  VILLAGE_BARBARIAN_TYPES,
+  VILLAGE_BARBARIAN_MIN,
+  VILLAGE_BARBARIAN_MAX,
+} from '@/data/VillageConstants';
 import { ProductionManager } from './ProductionManager';
 import { AutoProduction } from './AutoProduction';
 import { UnitActionManager } from './UnitActionManager';
@@ -18,7 +29,14 @@ import { getCivProductionProfile, getCivPersonality } from './AITypes';
 import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
-import type { GameActions, Unit, City, Civilization } from '../../../types/game';
+import { AIResearch } from './AIResearch';
+import type { GameActions, Unit, City, Civilization, VillageResult } from '../../../types/game';
+
+
+
+/** Civ1 "Bridge Building" tech — mapped to the existing Engineering tech. */
+const BRIDGE_BUILDING_TECH = 'engineering';
+
 
 interface GameSettings {
   difficulty: string;
@@ -33,6 +51,8 @@ interface MapTile {
   terrain: string;
   resource?: string;
   improvement?: string;
+  /** Whether this tile contains a Civ1 village (goody hut). */
+  village?: boolean;
   visible: boolean;
   explored: boolean;
   col: number;
@@ -715,7 +735,7 @@ export default class GameEngine {
             col,
             row,
             type: Constants.TERRAIN.OCEAN,
-            resource: Math.random() < 0.2 ? 'fish' : null, // 20% chance of fish
+            resource: Math.random() < 0.2 ? TERRAIN_RESOURCES[TERRAIN_TYPES.OCEAN] : null, // 20% chance of fish
             visible: false,
             explored: false
           });
@@ -751,13 +771,16 @@ export default class GameEngine {
             col,
             row,
             type: terrainType,
-            resource: Math.random() < 0.1 ? 'bonus' : null,
+            resource: this.rollTerrainResource(terrainType),
             visible: false,
             explored: false
           });
         }
       }
     }
+
+    // Carve rivers as winding single-tile paths (Civ1 treats rivers as terrain).
+    this.generateRivers(tiles, mapWidth, mapHeight);
     
     this.map = {
       width: mapWidth,
@@ -766,6 +789,65 @@ export default class GameEngine {
     };
     
     console.log('World generated with', tiles.length, 'tiles');
+  }
+
+  /**
+   * Roll a special resource for a terrain type at map generation. Civ1 places
+   * one resource type per terrain in a fixed pattern — approximated here by a
+   * fixed per-tile probability.
+   */
+  private rollTerrainResource(terrainType: string): string | null {
+    const resourceName = TERRAIN_RESOURCES[terrainType];
+    if (!resourceName) return null;
+    return Math.random() < 0.2 ? resourceName : null;
+  }
+
+  /**
+   * Carve rivers as winding single-tile paths across the map. Civ1 treats
+   * rivers as a separate terrain type; only land tiles are converted.
+   */
+  private generateRivers(
+    tiles: Array<{ type?: string; terrain?: string; resource?: string | null }>,
+    mapWidth: number,
+    mapHeight: number
+  ): void {
+    const isLand = (t: { type?: string; terrain?: string }): boolean => {
+      const type = t.type ?? t.terrain;
+      return type !== Constants.TERRAIN.OCEAN && type !== TERRAIN_TYPES.RIVER;
+    };
+    const idx = (row: number, col: number): number => row * mapWidth + col;
+    const valid = (col: number, row: number): boolean => col >= 0 && col < mapWidth && row >= 0 && row < mapHeight;
+    const numRivers = Math.max(1, Math.floor((mapWidth * mapHeight) / 800));
+
+    for (let r = 0; r < numRivers; r++) {
+      // Start on a random edge tile.
+      let col: number;
+      let row: number;
+      if (Math.random() < 0.5) {
+        col = Math.floor(Math.random() * mapWidth);
+        row = Math.random() < 0.5 ? 0 : mapHeight - 1;
+      } else {
+        col = Math.random() < 0.5 ? 0 : mapWidth - 1;
+        row = Math.floor(Math.random() * mapHeight);
+      }
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const length = 10 + Math.floor(Math.random() * 15);
+      for (let i = 0; i < length; i++) {
+        if (!valid(col, row)) break;
+        const t = tiles[idx(row, col)];
+        if (t && isLand(t)) {
+          t.type = TERRAIN_TYPES.RIVER;
+          t.terrain = TERRAIN_TYPES.RIVER;
+          t.resource = null;
+        }
+        // Wander mostly along the main axis, occasionally drifting a row.
+        if (Math.random() < 0.7) {
+          col += dir;
+        } else {
+          row += Math.random() < 0.5 ? 1 : -1;
+        }
+      }
+    }
   }
 
   /**
@@ -880,6 +962,9 @@ export default class GameEngine {
     for (let i = 0; i < this.civilizations.length; i++) {
       this.initializePlayerStorage(i);
     }
+
+    // Scatter villages (goody huts) away from starting settler placements.
+    this.placeVillages();
   }
 
   /**
@@ -1614,6 +1699,10 @@ export default class GameEngine {
       unit.row = targetRow;
       unit.movesRemaining = (unit.movesRemaining || 0) - moveCost;
 
+      // Civ1 village (goody hut) resolution — a military unit entering the
+      // tile claims the village and rolls an outcome.
+      this.resolveVillage(unit, targetTile);
+
       // Update turn done status
       this.updateUnitTurnsDoneFlag(unit);
 
@@ -1659,12 +1748,306 @@ export default class GameEngine {
     return { success: false, reason: 'insufficient_moves' };
   }
 
+  // ──────────────────────────────────────────────────────────────────────
+  // Civ1 villages (goody huts)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * Scatter Civ1 villages (goody huts) across the map after civilizations have
+   * been created. Villages never spawn on water, mountains, or within 2 tiles
+   * of a starting settler; at most one village per tile.
+   */
+  private placeVillages(): void {
+    if (!this.map || !this.map.tiles) return;
+    const { width, height, tiles } = this.map;
+
+    // Keep villages away from starting settler placements (2-tile radius).
+    const protectedTiles = new Set<string>();
+    for (const unit of this.units) {
+      if (unit.type !== 'settler') continue;
+      for (let dr = -2; dr <= 2; dr++) {
+        for (let dc = -2; dc <= 2; dc++) {
+          const c = unit.col + dc;
+          const r = unit.row + dr;
+          if (c >= 0 && c < width && r >= 0 && r < height) protectedTiles.add(`${c},${r}`);
+        }
+      }
+    }
+
+    const target = Math.max(4, Math.floor((width * height) / 80));
+    let placed = 0;
+    let attempts = 0;
+    while (placed < target && attempts < target * 40) {
+      attempts++;
+      const tile = tiles[Math.floor(Math.random() * tiles.length)];
+      if (!tile || tile.village) continue;
+      const type = String(tile.type ?? tile.terrain);
+      if (type === Constants.TERRAIN.OCEAN || type === Constants.TERRAIN.MOUNTAINS) continue;
+      if (protectedTiles.has(`${tile.col},${tile.row}`)) continue;
+      tile.village = true;
+      placed++;
+    }
+    console.log(`[VILLAGE] Placed ${placed} villages on ${width}x${height} map`);
+  }
+
+  /**
+   * Resolve a village (goody hut) when a unit enters its tile.
+   *  - Air units and barbarians destroy the village with no effect.
+   *  - Civilian units leave it untouched.
+   *  - Military units claim it and roll an equal-weight outcome (20% each):
+   *    Advanced Tribe, Scroll of Ancient Wisdom, Valuable Metals, Friendly
+   *    Mercenaries, or Horde of Barbarians. Invalid rolls (city adjacency for
+   *    Advanced Tribe, no researchable tech for Scroll) are re-rolled.
+   */
+  private resolveVillage(unit: Unit, tile: MapTile | null): void {
+    if (!tile?.village) return;
+    const props = UNIT_PROPS[String(unit.type)];
+    const isAir = props?.type === 'air';
+    const isBarbarian = unit.civilizationId === BARBARIAN_CIV_ID;
+    const isMilitary =
+      (unit.attack || 0) > 0.5 &&
+      !['settler', 'worker', 'caravan', 'diplomat'].includes(String(unit.type));
+
+    // Air/barbarian units destroy the village without claiming it.
+    if (isAir || isBarbarian) {
+      tile.village = false;
+      this.emitVillageResult(unit, { outcome: 'destroyed', destroyed: true });
+      return;
+    }
+    if (!isMilitary) return; // civilians ignore huts
+
+    tile.village = false;
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const outcome = VILLAGE_OUTCOMES[Math.floor(Math.random() * VILLAGE_OUTCOMES.length)];
+      switch (outcome) {
+        case VILLAGE_OUTCOME.ADVANCED_TRIBE: {
+          // Re-roll when on or adjacent to an existing city.
+          if (this.isTileAdjacentToCity(unit.col, unit.row)) continue;
+          const city = this.foundTribeCity(unit);
+          this.emitVillageResult(unit, { outcome, cityName: city?.name });
+          return;
+        }
+        case VILLAGE_OUTCOME.SCROLL_OF_ANCIENT_WISDOM: {
+          const techId = this.pickFreeTech(unit.civilizationId);
+          if (!techId) continue; // re-roll when no tech is available
+          const techName = this.technologies.find((t) => t.id === techId)?.name ?? techId;
+          this.grantTech(unit.civilizationId, techId);
+          this.emitVillageResult(unit, { outcome, techId, techName });
+          return;
+        }
+        case VILLAGE_OUTCOME.VALUABLE_METALS: {
+          this.addGoldToCiv(unit.civilizationId, VILLAGE_GOLD_AMOUNT);
+          this.emitVillageResult(unit, { outcome, goldAmount: VILLAGE_GOLD_AMOUNT });
+          return;
+        }
+        case VILLAGE_OUTCOME.FRIENDLY_MERCENARIES: {
+          const unitType = this.pickStrongestBuildableUnit(unit.civilizationId);
+          const unitName = UNIT_PROPS[unitType]?.name ?? unitType;
+          this.createUnit(unit.civilizationId, unitType, unit.col, unit.row);
+          this.emitVillageResult(unit, { outcome, unitType, unitName });
+          return;
+        }
+        case VILLAGE_OUTCOME.BARBARIANS: {
+          const barbarianCount = this.spawnBarbarians(unit);
+          this.emitVillageResult(unit, { outcome, barbarianCount });
+          return;
+        }
+        default:
+          continue;
+      }
+    }
+
+    // Re-roll budget exhausted — grant gold as a safe fallback.
+    this.addGoldToCiv(unit.civilizationId, VILLAGE_GOLD_AMOUNT);
+    this.emitVillageResult(unit, { outcome: 'valuable_metals', goldAmount: VILLAGE_GOLD_AMOUNT });
+  }
+
+  /** Whether the tile at (col,row) is on or adjacent to an existing city. */
+  private isTileAdjacentToCity(col: number, row: number): boolean {
+    return this.cities.some(
+      (city) => !!this.squareGrid && this.squareGrid.squareDistance(col, row, city.col, city.row) <= 1,
+    );
+  }
+
+  /**
+   * Create a city from an Advanced Tribe village: 1 population plus a random
+   * free building (Barracks, Granary, Temple, or nothing).
+   */
+  private foundTribeCity(unit: Unit): City | null {
+    const civId = unit.civilizationId;
+    const civ = this.civilizations[civId];
+    if (!civ) return null;
+    const cityName = this.getNextCityName(civId);
+    const building = VILLAGE_FREE_BUILDINGS[Math.floor(Math.random() * VILLAGE_FREE_BUILDINGS.length)];
+    const city: City = {
+      id: `city_${civId}_${this.cities.length}`,
+      name: cityName,
+      civilizationId: civId,
+      col: unit.col,
+      row: unit.row,
+      population: 1,
+      production: 0,
+      food: 0,
+      gold: 0,
+      science: 0,
+      isCapital: this.cities.filter((c) => c.civilizationId === civId).length === 0,
+      buildings: building ? [building] : [],
+      yields: { food: 2, production: 1, trade: 0 },
+      foodStored: 0,
+      foodNeeded: 20,
+      productionStored: 0,
+      productionProgress: 0,
+      currentProduction: civ.isHuman
+        ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
+        : this.pickInitialAIProduction(civId),
+      buildQueue: [],
+      autoProduction: true,
+    };
+    this.cities.push(city);
+
+    if (city.isCapital) {
+      this.governmentManager?.designateCapital(civId, city);
+    }
+    if (this.autoProduction && city.autoProduction) {
+      this.autoProduction.ensureProductionQueue(city.id);
+    }
+    if (this.onStateChange) {
+      this.onStateChange('CITY_FOUNDED', { city, source: 'village' });
+    }
+    return city;
+  }
+
+  /**
+   * Random tech the civ can research right now (prerequisites met, not yet
+   * owned) — no prerequisite skipping. Null when nothing is available.
+   */
+  private pickFreeTech(civId: number): string | null {
+    const civ = this.civilizations[civId];
+    if (!civ) return null;
+    const available = AIResearch.getAvailableTechnologies(civ);
+    if (available.length === 0) return null;
+    return available[Math.floor(Math.random() * available.length)];
+  }
+
+  /** Add a researched tech to a civ (free from a village) and refresh the tree. */
+  private grantTech(civId: number, techId: string): void {
+    const civ = this.civilizations[civId];
+    if (!civ) return;
+    if (Array.isArray(civ.technologies) && !civ.technologies.includes(techId)) {
+      civ.technologies.push(techId);
+    }
+    this.updateTechnologyAvailability();
+    console.log(`[VILLAGE] Civ ${civId} granted free tech: ${techId}`);
+  }
+
+  /** Add gold to a civilization's treasury. */
+  private addGoldToCiv(civId: number, amount: number): void {
+    const civ = this.civilizations[civId];
+    if (!civ) return;
+    civ.resources = civ.resources ?? { food: 0, production: 0, trade: 0, science: 0, gold: 0 };
+    civ.resources.gold = (civ.resources.gold ?? 0) + amount;
+    console.log(`[VILLAGE] Civ ${civId} received ${amount} gold (total ${civ.resources.gold})`);
+  }
+
+  /**
+   * Strongest military unit type the civ can currently build (highest attack,
+   * tie-broken by defense). Air units and civilians are excluded.
+   */
+  private pickStrongestBuildableUnit(civId: number): string {
+    const civ = this.civilizations[civId];
+    const civTechs = new Set(civ && Array.isArray(civ.technologies) ? civ.technologies : []);
+    const civilians = new Set(['settler', 'worker', 'caravan', 'diplomat', 'ferry']);
+    let best: { type: string; attack: number; defense: number } | null = null;
+    for (const [type, props] of Object.entries(UNIT_PROPS)) {
+      if (!props) continue;
+      if (props.type === 'air') continue;
+      if (civilians.has(type)) continue;
+      if ((props.attack || 0) <= 0) continue;
+      const requires = (props as { requires?: string | null }).requires;
+      if (requires && !civTechs.has(requires)) continue;
+      const attack = props.attack || 0;
+      const defense = props.defense || 0;
+      if (!best || attack > best.attack || (attack === best.attack && defense > best.defense)) {
+        best = { type, attack, defense };
+      }
+    }
+    return best ? best.type : 'warrior';
+  }
+
+  /**
+   * Spawn a horde of 2–4 barbarians (Legion or Cavalry, equal chance) on random
+   * adjacent land tiles, hostile to everyone. Each barbarian that spawns
+   * adjacent to the triggering unit attacks it immediately (same turn).
+   * Returns the number of barbarians spawned.
+   */
+  private spawnBarbarians(triggerUnit: Unit): number {
+    const neighbors = this.squareGrid
+      ? this.squareGrid.getNeighbors(triggerUnit.col, triggerUnit.row)
+      : [];
+    const spots: Array<{ col: number; row: number }> = [];
+    for (const n of neighbors) {
+      const tile = this.getTileAt(n.col, n.row);
+      if (!tile) continue;
+      const type = String(tile.type ?? tile.terrain);
+      if (type === Constants.TERRAIN.OCEAN || type === Constants.TERRAIN.MOUNTAINS) continue;
+      if (this.getUnitAt(n.col, n.row)) continue;
+      if (this.getCityAt(n.col, n.row)) continue;
+      spots.push({ col: n.col, row: n.row });
+    }
+    // Shuffle and pick 2–4 (or as many as are free).
+    for (let i = spots.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [spots[i], spots[j]] = [spots[j], spots[i]];
+    }
+    const count = Math.min(
+      VILLAGE_BARBARIAN_MIN + Math.floor(Math.random() * (VILLAGE_BARBARIAN_MAX - VILLAGE_BARBARIAN_MIN + 1)),
+      spots.length,
+    );
+    for (let i = 0; i < count; i++) {
+      const type = VILLAGE_BARBARIAN_TYPES[Math.floor(Math.random() * VILLAGE_BARBARIAN_TYPES.length)];
+      this.createUnit(BARBARIAN_CIV_ID, type, spots[i].col, spots[i].row);
+    }
+
+    // Barbarians act immediately: attack the triggering unit while it is still
+    // on the village tile (they spawn adjacent to it).
+    const target = this.units.find((u) => u.id === triggerUnit.id);
+    if (target) {
+      const barbarians = this.units.filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
+      for (const barbarian of barbarians) {
+        if ((target as { isDefeated?: boolean }).isDefeated) break; // triggering unit fell
+        const dist = this.squareGrid
+          ? this.squareGrid.squareDistance(barbarian.col, barbarian.row, target.col, target.row)
+          : Infinity;
+        if (dist === 1) {
+          this.combatUnit(barbarian, target);
+        }
+      }
+    }
+    return count;
+  }
+
+  /** Emit a village encounter for the UI (human-only modal shown downstream). */
+  private emitVillageResult(unit: Unit, result: Omit<VillageResult, 'civId' | 'col' | 'row'>): void {
+    if (this.onStateChange) {
+      this.onStateChange('VILLAGE_RESULT', {
+        ...result,
+        civId: unit.civilizationId,
+        col: unit.col,
+        row: unit.row,
+      });
+    }
+  }
+
   /**
    * Combat between units
    */
   combatUnit(attacker: Unit, defender: Unit) {
-    // Auto-declare war if not already at war
-    if (this.diplomacyManager && attacker.civilizationId !== defender.civilizationId) {
+    // Auto-declare war if not already at war. Barbarian units (phantom civ id
+    // < 0) never participate in diplomacy — combat with them is always hostile
+    // and must not create phantom war relations or UI events.
+    if (this.diplomacyManager && attacker.civilizationId !== defender.civilizationId
+        && attacker.civilizationId >= 0 && defender.civilizationId >= 0) {
       const status = this.diplomacyManager.getStatus(attacker.civilizationId, defender.civilizationId);
       if (status !== 'war') {
         this.diplomacyManager.declareWar(attacker.civilizationId, defender.civilizationId);
@@ -1697,8 +2080,23 @@ export default class GameEngine {
     }
 
     const attackerStrength = attacker.attack * (attacker.health / 100);
-    const defenderStrength = defender.defense * (defender.health / 100);
-    
+    // Civ1: the defender's terrain defense bonus (mountains +200%, hills +100%,
+    // forest/jungle/swamp/river +50%), fortification (x1.5), and fortress
+    // (+100%, applied last) stack onto the defender's strength.
+    const defenderTile = this.getTileAt(defender.col, defender.row);
+    const defenderTerrain = defenderTile ? (defenderTile.type ?? defenderTile.terrain) : null;
+    const terrainDefense = defenderTerrain ? TERRAIN_PROPS[defenderTerrain]?.defense ?? 1 : 1;
+    let defenderStrength = defender.defense * (defender.health / 100) * Math.max(1, terrainDefense);
+    if ((defender as { isFortified?: boolean }).isFortified) {
+      defenderStrength *= 1.5;
+    }
+    const fortressDef = defenderTile?.improvement
+      ? IMPROVEMENT_PROPERTIES[String(defenderTile.improvement)]?.defenseMultiplier
+      : undefined;
+    if (fortressDef) {
+      defenderStrength *= fortressDef;
+    }
+
     const attackerWins = Math.random() * (attackerStrength + defenderStrength) < attackerStrength;
     
     if (attackerWins) {
@@ -2843,9 +3241,53 @@ export default class GameEngine {
       improvement: tile.improvement
     });
 
+    const terrain = tile.terrain || tile.type || '';
+
+    // Tech prerequisites (railroad, fortress, bridge-building on rivers).
+    if (improvementProps?.requiredTech && !this.hasResearched(unit.civilizationId, improvementProps.requiredTech)) {
+      console.warn(`[GameEngine] Build: ${type} requires tech ${improvementProps.requiredTech}`);
+      return false;
+    }
+    if (improvementProps?.riverBridgeRequired && terrain === TERRAIN_TYPES.RIVER) {
+      if (!this.hasResearched(unit.civilizationId, BRIDGE_BUILDING_TECH)) {
+        console.warn(`[GameEngine] Build: Road on river requires tech ${BRIDGE_BUILDING_TECH}`);
+        return false;
+      }
+    }
+
+    // Civ1 terrain conversion (irrigation on jungle/swamp -> grassland, mine on
+    // jungle/swamp -> forest, clear forest -> plains).
+    if (improvementProps?.convertibleTerrains?.includes(terrain)) {
+      this.convertTile(tile, improvementProps.convertsTo);
+      unit.movesRemaining = (unit.movesRemaining || 0) - buildTurns;
+      this.updateUnitTurnsDoneFlag(unit);
+      console.log(`[GameEngine] Unit ${unit.id} converted ${terrain} -> ${improvementProps.convertsTo} at (${unit.col},${unit.row})`);
+      if (this.onStateChange) {
+        this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
+      }
+      if (this.unitTurnQueue) {
+        this.unitTurnQueue.checkUnitStatus(unitId);
+      }
+      this.checkAndEndTurnIfNoMoves();
+      return true;
+    }
+    if (improvementProps?.clearableTerrains?.includes(terrain)) {
+      this.convertTile(tile, improvementProps.clearsTo);
+      unit.movesRemaining = (unit.movesRemaining || 0) - buildTurns;
+      this.updateUnitTurnsDoneFlag(unit);
+      console.log(`[GameEngine] Unit ${unit.id} cleared ${terrain} -> ${improvementProps.clearsTo} at (${unit.col},${unit.row})`);
+      if (this.onStateChange) {
+        this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
+      }
+      if (this.unitTurnQueue) {
+        this.unitTurnQueue.checkUnitStatus(unitId);
+      }
+      this.checkAndEndTurnIfNoMoves();
+      return true;
+    }
+
     // Check terrain restrictions
     if (improvementProps?.terrainRestrictions) {
-      const terrain = tile.terrain || tile.type;
       if (!improvementProps.terrainRestrictions.includes(terrain)) {
         console.warn(`[GameEngine] Build: Terrain ${terrain} not valid for ${type} (requires: ${improvementProps.terrainRestrictions.join(', ')})`);
         return false;
@@ -2918,8 +3360,19 @@ export default class GameEngine {
     const props = IMPROVEMENT_PROPERTIES[type];
     if (!props) return false;
 
+    const terrain = tile.terrain || tile.type || '';
+
+    // Tech prerequisites (railroad, fortress, bridge-building on rivers).
+    if (props.requiredTech && !this.hasResearched(unit.civilizationId, props.requiredTech)) return false;
+    if (props.riverBridgeRequired && terrain === TERRAIN_TYPES.RIVER) {
+      if (!this.hasResearched(unit.civilizationId, BRIDGE_BUILDING_TECH)) return false;
+    }
+
+    // Terrain-conversion actions are feasible on their convertible/clearable terrains.
+    if (props.convertibleTerrains?.includes(terrain)) return true;
+    if (props.clearableTerrains?.includes(terrain)) return true;
+
     if (props.terrainRestrictions) {
-      const terrain = tile.terrain || tile.type;
       if (!props.terrainRestrictions.includes(terrain)) return false;
     }
 
@@ -2931,6 +3384,39 @@ export default class GameEngine {
     }
 
     return true;
+  }
+
+  /**
+   * Whether a civilization has researched a technology. Falls back to the
+   * shared tree's union flag when the civ has no tech list.
+   */
+  private hasResearched(civId: number, techId: string): boolean {
+    const civ = this.civilizations?.find((c) => c.id === civId);
+    if (civ && Array.isArray((civ as { technologies?: string[] }).technologies)) {
+      return (civ as { technologies: string[] }).technologies.includes(techId);
+    }
+    const tech = this.technologies?.find((t) => t.id === techId);
+    return !!tech?.researched;
+  }
+
+  /**
+   * Transform a tile to a new terrain type, reassigning its special resource
+   * per the Civ1 rule (the new terrain carries its own resource; grassland and
+   * river have none). Road/railroad infrastructure is kept; other improvements
+   * are removed (they cannot exist on the new terrain).
+   */
+  private convertTile(
+    tile: { type?: string; terrain?: string; resource?: string | null; improvement?: string | null },
+    toTerrain: string | undefined
+  ): void {
+    if (!toTerrain) return;
+    const improvement = tile.improvement;
+    tile.type = toTerrain;
+    tile.terrain = toTerrain;
+    tile.resource = TERRAIN_RESOURCES[toTerrain] ?? null;
+    if (improvement && improvement !== IMPROVEMENT_TYPES.ROAD && improvement !== IMPROVEMENT_TYPES.RAILROAD) {
+      tile.improvement = null;
+    }
   }
 
   /**

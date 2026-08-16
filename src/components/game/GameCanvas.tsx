@@ -1583,6 +1583,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           };
           const result = gameEngine.executeDiplomatAction(unit.id, actionMap[action], diplomatInfo.targetCivId);
           if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
+          // Civ I behaviour: a diplomat's contact opens the negotiation screen
+          // focused on the foreign civ so the player can continue bargaining.
+          if (actions?.openDiplomacy && diplomatInfo?.targetCivId != null) {
+            actions.openDiplomacy(diplomatInfo.targetCivId);
+          }
           if (result?.success) {
             if (result.type === 'intelligence') {
               const r = result.report;

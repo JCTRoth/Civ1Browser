@@ -55,11 +55,56 @@ interface Tile {
   terrain: string;
   resource?: string;
   improvement?: string;
+  /** Whether this tile contains a Civ1 village (goody hut). */
+  village?: boolean;
   visible: boolean;
   explored: boolean;
   col: number;
   row: number;
   type?: string;
+}
+
+/** Outcome of a Civ1 village (goody hut) encounter. */
+export type VillageOutcome =
+  | 'advanced_tribe'
+  | 'scroll_of_ancient_wisdom'
+  | 'valuable_metals'
+  | 'friendly_mercenaries'
+  | 'barbarians'
+  | 'destroyed';
+
+/** Data shown by the village-result modal. */
+export interface VillageResult {
+  outcome: VillageOutcome;
+  civId: number;
+  col: number;
+  row: number;
+  cityName?: string;
+  techId?: string;
+  techName?: string;
+  goldAmount?: number;
+  unitType?: string;
+  unitName?: string;
+  barbarianCount?: number;
+  /** True when an air or barbarian unit destroyed the village with no effect. */
+  destroyed?: boolean;
+}
+
+/**
+ * An AI-initiated diplomatic proposal (ceasefire, peace, alliance, tribute)
+ * awaiting the human player's accept/reject decision in the negotiation
+ * screen. Surfaced via `showIncomingDiplomacyOffer`; cleared once the player
+ * responds.
+ */
+export interface IncomingDiplomacyOffer {
+  /** Civilization that made the offer. */
+  fromCivId: number;
+  /** Diplomatic action being proposed (e.g. 'propose_peace'). */
+  action: string;
+  /** Gold demanded/offered (tribute demands). */
+  goldAmount?: number;
+  /** Human-readable message describing the offer. */
+  message?: string;
 }
 
 export interface CameraState {
@@ -201,7 +246,7 @@ export interface UIState {
   showTechTree: boolean;
   showDiplomacy: boolean;
   showGameMenu: boolean;
-  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | null;
+  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | 'village' | null;
   sidebarCollapsed: boolean;
   notifications: Notification[];
   goToMode: boolean; // When true, next click will set destination for selected unit
@@ -280,6 +325,12 @@ export interface GameStoreState {
   };
   /** Active combat animations (cloud + unit hide/fade effects). */
   combatAnimations: CombatAnimation[];
+  /** Last village (goody hut) outcome for the village-result modal. */
+  villageResult: VillageResult | null;
+  /** Civ auto-selected when the diplomacy screen opens (diplomat contact / AI offer). */
+  diplomacyFocusCivId: number | null;
+  /** Pending AI→player proposal awaiting a response in the diplomacy screen. */
+  incomingDiplomacyOffer: IncomingDiplomacyOffer | null;
   // Internal state for preventing rapid focus calls
   _lastFocusCall?: number;
 }
@@ -321,6 +372,18 @@ export interface GameActions {
   setCurrentQueueUnitId: (unitId: string | null) => void;
   showDialog: (dialog: UIState['activeDialog']) => void;
   hideDialog: () => void;
+  /** Show the village (goody hut) result modal. */
+  showVillageResult: (result: VillageResult) => void;
+  /** Dismiss the village result modal. */
+  clearVillageResult: () => void;
+  /** Open the Civ I–style negotiation screen, optionally focused on a civ. */
+  openDiplomacy: (focusCivId?: number | null) => void;
+  /** Consume the diplomacy focus hint without changing the open dialog. */
+  clearDiplomacyFocus: () => void;
+  /** Surface an AI-initiated proposal and open the negotiation screen. */
+  showIncomingDiplomacyOffer: (offer: IncomingDiplomacyOffer) => void;
+  /** Dismiss the pending AI proposal (accepted or rejected). */
+  clearIncomingDiplomacyOffer: () => void;
   addNotification: (notification: Omit<Notification, 'id'>) => void;
   removeNotification: (id: number) => void;
   setGoToMode: (enabled: boolean, unitId?: string | null) => void;

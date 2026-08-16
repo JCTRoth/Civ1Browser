@@ -346,22 +346,29 @@ describe('EconomicManager tile-based commerce', () => {
     const engine = makeEngine({ civilizations: [civ], cities: [], units: [] });
     const econ = new EconomicManager(engine);
 
-    // Coast: 2F/0P/1T
-    expect(econ.tileYields(makeTile('coast'))).toEqual({ food: 2, production: 0, trade: 1 });
-    // Ocean (1F/0P/2T) + fish resource (2F/1T)
-    expect(econ.tileYields(makeTile('ocean', { resource: 'fish' }))).toEqual({ food: 3, production: 0, trade: 3 });
-    // Plains + road (trade +0.5)
-    expect(econ.tileYields(makeTile('plains', { improvement: 'road' }))).toEqual({ food: 1, production: 1, trade: 0.5 });
-    // Generic 'bonus' resource adds +1 trade
-    expect(econ.tileYields(makeTile('grassland', { resource: 'bonus' }))).toEqual({ food: 2, production: 1, trade: 1 });
+    // River: 2F/0P/1T (Civ1 terrain)
+    expect(econ.tileYields(makeTile('river'))).toEqual({ food: 2, production: 0, trade: 1 });
+    // Ocean (1F/0P/2T) + fish resource (+2F)
+    expect(econ.tileYields(makeTile('ocean', { resource: 'fish' }))).toEqual({ food: 3, production: 0, trade: 2 });
+    // Plains + road (Civ1: +1 trade on plains)
+    expect(econ.tileYields(makeTile('plains', { improvement: 'road' }))).toEqual({ food: 1, production: 1, trade: 1 });
+    // Road on forest gives no trade bonus (Civ1 road trade is terrain-dependent)
+    expect(econ.tileYields(makeTile('forest', { improvement: 'road' }))).toEqual({ food: 1, production: 2, trade: 0 });
+    // Grassland has no special resource (Civ1)
+    expect(econ.tileYields(makeTile('grassland'))).toEqual({ food: 2, production: 1, trade: 0 });
+    // Mountains + gold resource (+6 trade)
+    expect(econ.tileYields(makeTile('mountains', { resource: 'gold' }))).toEqual({ food: 0, production: 1, trade: 6 });
+    // Mines: +3 production on hills, +1 on mountains
+    expect(econ.tileYields(makeTile('hills', { improvement: 'mines' }))).toEqual({ food: 1, production: 3, trade: 0 });
+    expect(econ.tileYields(makeTile('mountains', { improvement: 'mines' }))).toEqual({ food: 0, production: 2, trade: 0 });
   });
 
   it('works the city-center tile plus the best (pop-1) tiles in radius', () => {
     const civ = makeCiv(0);
     const tiles: Record<string, any> = {};
-    // center at (5,5) on coast
-    tiles['5,5'] = makeTile('coast');
-    // a high-trade ocean tile with fish within radius (total 6 → clearly best)
+    // center at (5,5) on river
+    tiles['5,5'] = makeTile('river');
+    // a fish ocean tile within radius (best trade tile)
     tiles['5,6'] = makeTile('ocean', { resource: 'fish' });
     // everything else defaults to grassland
     const grid = makeTileGrid();
@@ -377,14 +384,14 @@ describe('EconomicManager tile-based commerce', () => {
     const city = makeCity(0, 0, 2); // pop 2 → center + 1 worked tile
     city.col = 5;
     city.row = 5;
-    // center (coast→1T) + fish ocean (3T) = 4 trade
-    expect(econ.calculateCityTrade(city)).toBe(4);
+    // center (river→1T) + fish ocean (2T) = 3 trade
+    expect(econ.calculateCityTrade(city)).toBe(3);
   });
 
   it('recomputeCityYields writes real yields and building bonuses onto the city', () => {
     const civ = makeCiv(0);
     const tiles: Record<string, any> = {};
-    tiles['5,5'] = makeTile('coast');
+    tiles['5,5'] = makeTile('river');
     tiles['5,6'] = makeTile('ocean', { resource: 'fish' }); // clearly best tile
     const engine = makeEngine({
       civilizations: [civ],
@@ -401,8 +408,8 @@ describe('EconomicManager tile-based commerce', () => {
     city.buildings = ['marketplace']; // effects.trade: +1, science: 0
     econ.recomputeCityYields(city);
 
-    // center 1T + fish ocean 3T + marketplace 1T = 5 trade
-    expect(city.yields.trade).toBe(5);
+    // center 1T + fish ocean 2T + marketplace 1T = 4 trade
+    expect(city.yields.trade).toBe(4);
     expect(city.yields.food).toBeGreaterThanOrEqual(2);
     expect(city.scienceBonus).toBe(0);
   });

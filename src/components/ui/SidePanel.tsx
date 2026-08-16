@@ -91,7 +91,7 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
       terrainName: tile.type || 'Unknown',
       visible: isVisible,
       explored: isExplored,
-      defenseBonus: terrainProps[tile.type]?.defense ?? 0
+      defenseBonus: terrainProps[tile.type]?.defense ?? 1
     };
   };
 
@@ -410,10 +410,10 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
                     {selectedTile.improvement && <div>Improvement: {selectedTile.improvement}</div>}
                     <div>Visible: {selectedTile.visible ? 'Yes' : 'No'}</div>
                     <div>Explored: {selectedTile.explored ? 'Yes' : 'No'}</div>
-                    {selectedTile.defenseBonus > 0 && (
+                    {selectedTile.defenseBonus > 1 && (
                       <div className="defense-bonus">
                         <span role="img" aria-label="defense">🛡️</span>
-                        <span className="ms-2">Defense Bonus: {selectedTile.defenseBonus}</span>
+                        <span className="ms-2">Defense Bonus: +{Math.round((selectedTile.defenseBonus - 1) * 100)}%</span>
                       </div>
                     )}
                   </div>

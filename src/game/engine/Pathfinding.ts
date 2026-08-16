@@ -1,4 +1,5 @@
 import { TERRAIN_PROPS } from '../../utils/Constants';
+import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES } from '../../data/TileImprovementConstants';
 
 /**
  * Node for A* pathfinding
@@ -43,10 +44,11 @@ export class Pathfinding {
 
     // Check passability
     if (terrainProps) {
-      const isWaterTerrain = tile.type === 'ocean' || tile.type === 'coast' || tile.type === 'sea';
+      // Civ1: only deep ocean is water; rivers are a land terrain type.
+      const isWaterTerrain = tile.type === 'ocean' || tile.type === 'sea';
 
-      // Land units cannot pass deep water (ocean), but can pass rivers
-      if (isLandUnit && isWaterTerrain && !tile.river) {
+      // Land units cannot pass deep water (ocean)
+      if (isLandUnit && isWaterTerrain) {
         return Infinity; // Impassable
       }
 
@@ -55,23 +57,19 @@ export class Pathfinding {
         return Infinity; // Impassable
       }
 
-      // Base movement cost from terrain
+      // Base movement cost from terrain (Civ1-paced: 1/2/3).
       let cost = terrainProps.movement || 1;
 
-      // Rivers add cost for land units
-      if (isLandUnit && tile.river) {
-        cost += 0.5; // Extra cost for crossing rivers
+      // Civ1 rivers give no movement penalty (unlike Civ2).
+
+      // Civ1: moving onto a road tile costs 1/3 of a movement point.
+      if (tile.road || tile.improvement === IMPROVEMENT_TYPES.ROAD) {
+        cost = IMPROVEMENT_PROPERTIES[IMPROVEMENT_TYPES.ROAD]?.movementCost ?? 1 / 3;
       }
 
-      // Roads reduce cost
-      if (tile.road) {
-        cost = Math.max(0.5, cost - 0.5); // Roads make movement faster
-      }
-
-      // Railroads make movement free when moving between railroad tiles
-      // For pathfinding, we approximate by making railroad tiles very cheap to enter
-      if (tile.railroad) {
-        cost = 0.2; // Very low cost for railroad tiles
+      // Civ1: railroads make movement between railroad tiles free (tiny epsilon for A*).
+      if (tile.railroad || tile.improvement === IMPROVEMENT_TYPES.RAILROAD) {
+        cost = IMPROVEMENT_PROPERTIES[IMPROVEMENT_TYPES.RAILROAD]?.movementCost ?? 0.05;
       }
 
       return cost;

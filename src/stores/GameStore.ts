@@ -127,6 +127,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   // Combat animations (cloud + hide/fade effects)
   combatAnimations: [],
 
+  // Last village (goody hut) outcome, shown by the village-result modal
+  villageResult: null,
+
+  // Civ auto-selected when the diplomacy negotiation screen opens (set by
+  // diplomat contact or an AI-initiated offer).
+  diplomacyFocusCivId: null,
+
+  // Pending AI→player proposal awaiting a response in the diplomacy screen.
+  incomingDiplomacyOffer: null,
+
   // Settings
   settings: {
     uiScale: 1.0,        // Overall UI scale multiplier (0.5 to 2.0)
@@ -362,6 +372,35 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     hideDialog: () => set(state => ({
       uiState: { ...state.uiState, activeDialog: null }
+    })),
+
+    showVillageResult: (result) => set(state => ({
+      villageResult: result,
+      uiState: { ...state.uiState, activeDialog: 'village' }
+    })),
+
+    clearVillageResult: () => set(state => ({
+      villageResult: null,
+      uiState: { ...state.uiState, activeDialog: null }
+    })),
+
+    openDiplomacy: (focusCivId = null) => set(state => ({
+      uiState: { ...state.uiState, activeDialog: 'diplomacy' },
+      diplomacyFocusCivId: focusCivId
+    })),
+
+    clearDiplomacyFocus: () => set(() => ({
+      diplomacyFocusCivId: null
+    })),
+
+    showIncomingDiplomacyOffer: (offer) => set(state => ({
+      uiState: { ...state.uiState, activeDialog: 'diplomacy' },
+      diplomacyFocusCivId: offer.fromCivId,
+      incomingDiplomacyOffer: offer
+    })),
+
+    clearIncomingDiplomacyOffer: () => set(() => ({
+      incomingDiplomacyOffer: null
     })),
 
     addNotification: (notification) => {

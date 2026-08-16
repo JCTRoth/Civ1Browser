@@ -388,8 +388,8 @@ export class AIUtility {
       value += 5;
     }
 
-    // Strategic position near water
-    if (tile.river || tile.type === 'coast') {
+    // Strategic position near water (rivers are a Civ1 terrain type)
+    if (tile.type === 'river') {
       value += 1;
     }
 

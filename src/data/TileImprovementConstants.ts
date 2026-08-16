@@ -17,6 +17,24 @@ export interface TileImprovementConstants {
     terrainRestrictions?: string[];
     requiredTech?: string;
     display?: ImprovementDisplayConfig;
+    /** Terrain the tile converts to when built on a `convertibleTerrains` tile (e.g. jungle -> grassland). */
+    convertsTo?: string;
+    /** Terrains on which building this transforms the tile instead of leaving an improvement. */
+    convertibleTerrains?: string[];
+    /** Terrain the tile clears to (e.g. forest -> plains). */
+    clearsTo?: string;
+    /** Terrains on which building this clears the tile. */
+    clearableTerrains?: string[];
+    /** Per-terrain yield effects (Civ1 mines: hills +3 production, mountains +1). */
+    effectsByTerrain?: Record<string, Record<string, number>>;
+    /** Terrains on which this improvement grants +1 trade (Civ1 road on grassland/plains/desert). */
+    tradeBonusTerrains?: string[];
+    /** Movement cost to enter a tile carrying this improvement (Civ1 road = 1/3, railroad = free). */
+    movementCost?: number;
+    /** Roads on rivers require the bridge-building tech. */
+    riverBridgeRequired?: boolean;
+    /** Final multiplicative defense bonus in combat (Civ1 fortress = 2 -> +100%). */
+    defenseMultiplier?: number;
 }
 
 export const IMPROVEMENT_TYPES = {
@@ -27,11 +45,6 @@ export const IMPROVEMENT_TYPES = {
     MINES: 'mines',
     FORTRESS: 'fortress',
     POLLUTION: 'pollution',
-    // Advanced Improvements
-    FARMLAND: 'farmland',
-    PORT: 'port',
-    AIRPORT: 'airport',
-    SUPERHIGHWAYS: 'superhighways',
 } as const;
 
 export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = {
@@ -42,6 +55,8 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
             food: 1,
         },
         terrainRestrictions: ['grassland', 'plains', 'desert'],
+        convertsTo: 'grassland',
+        convertibleTerrains: ['jungle', 'swamp'],
         display: {
             label: 'I',
             color: '#00ff77ff',
@@ -54,8 +69,14 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
         name: 'Road',
         turns: 1,
         effects: {
-            trade: 0.5
+            trade: 0
         },
+        // Civ1: roads give +1 trade only on grassland/plains/desert (never on rivers).
+        tradeBonusTerrains: ['grassland', 'plains', 'desert'],
+        // Civ1: moving road-to-road costs 1/3 of a movement point.
+        movementCost: 1 / 3,
+        // Civ1: roads on rivers require the Bridge Building tech.
+        riverBridgeRequired: true,
         display: {
             glyph: 'R',
             color: '#ff0000ff',
@@ -75,6 +96,8 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
             trade: 0.5
         },
         requiredTech: 'railroad',
+        // Civ1: moving railroad-to-road costs no movement point (tiny epsilon for A*).
+        movementCost: 0.05,
         display: {
             glyph: 'RR',
             color: '#830000ff',
@@ -86,11 +109,21 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
     },
     [IMPROVEMENT_TYPES.MINES]: {
         name: 'Mines',
-        turns: 8,
+        turns: 5,
         effects: {
-            production: 1
+            production: 0
+        },
+        // Civ1: +1 shield on mountains, +3 shields on hills.
+        effectsByTerrain: {
+            mountains: { production: 1 },
+            hills: { production: 3 }
         },
         terrainRestrictions: ['mountains', 'hills'],
+        // Civ1: mining converts jungle/swamp to forest; "clear" turns forest into plains.
+        convertsTo: 'forest',
+        convertibleTerrains: ['jungle', 'swamp'],
+        clearsTo: 'plains',
+        clearableTerrains: ['forest'],
         display: {
             label: 'M',
             color: '#444444',
@@ -103,8 +136,11 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
         name: 'Fortress',
         turns: 6,
         effects: {
-            defense: 1.8,
+            defense: 0,
         },
+        // Civ1: +100% defense, applied last in the combat calculation.
+        defenseMultiplier: 2,
+        requiredTech: 'construction',
         display: {
             label: 'F',
             color: '#ffffffff',
@@ -130,77 +166,9 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
             offsetY: -10
         }
     },
-    [IMPROVEMENT_TYPES.FARMLAND]: {
-        name: 'Farmland',
-        turns: 4,
-        effects: {
-            food: 2,
-        },
-        terrainRestrictions: ['grassland', 'plains', 'desert'],
-        requiredTech: 'refrigeration',
-        display: {
-            label: 'Fm',
-            color: '#00cc55ff',
-            font: 'bold 12px monospace',
-            offsetX: 10,
-            offsetY: -10
-        }
-    },
-    [IMPROVEMENT_TYPES.PORT]: {
-        name: 'Port',
-        turns: 3,
-        effects: {
-            food: 1,
-            trade: 1,
-        },
-        terrainRestrictions: ['coast'],
-        requiredTech: 'navigation',
-        display: {
-            label: 'Po',
-            color: '#4488ffff',
-            font: 'bold 12px monospace',
-            offsetX: 10,
-            offsetY: -10
-        }
-    },
-    [IMPROVEMENT_TYPES.AIRPORT]: {
-        name: 'Airport',
-        turns: 4,
-        effects: {
-            trade: 1,
-        },
-        terrainRestrictions: ['grassland', 'plains', 'desert', 'tundra'],
-        requiredTech: 'flight',
-        display: {
-            label: 'Ap',
-            color: '#cc88ffff',
-            font: 'bold 12px monospace',
-            offsetX: 10,
-            offsetY: -10
-        }
-    },
-    [IMPROVEMENT_TYPES.SUPERHIGHWAYS]: {
-        name: 'Superhighways',
-        turns: 3,
-        effects: {
-            trade: 1.5,
-            movement: 0,
-        },
-        requiredTech: 'automobile',
-        display: {
-            glyph: 'SH',
-            color: '#ff4400ff',
-            font: 'bold 14px monospace',
-            offsetX: 0,
-            offsetY: 12,
-            skipLabel: true
-        }
-    },
 };
 
 
 export const IMPROVEMENT_REQUIREMENTS = {
     [IMPROVEMENT_TYPES.RAILROAD]: IMPROVEMENT_TYPES.ROAD,
-    [IMPROVEMENT_TYPES.FARMLAND]: IMPROVEMENT_TYPES.IRRIGATION,
-    [IMPROVEMENT_TYPES.SUPERHIGHWAYS]: IMPROVEMENT_TYPES.ROAD,
 } as const;
