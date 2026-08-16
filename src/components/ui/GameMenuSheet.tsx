@@ -16,6 +16,7 @@ interface GameMenuSheetProps {
   onQuit: () => void;
   onDownloadMap: () => void;
   onDownloadProgression: () => void;
+  onDownloadProgressionCompact: () => void;
   onHelp: () => void;
   onDiplomacy: () => void;
   onTechTree: () => void;
@@ -58,6 +59,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
   onQuit,
   onDownloadMap,
   onDownloadProgression,
+  onDownloadProgressionCompact,
   onHelp,
   onDiplomacy,
   onTechTree,
@@ -95,14 +97,14 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
             <MenuItem icon="⏸️" label="Pause" onClick={onPause} />
             <MenuItem icon="📁" label="Load Game" onClick={onLoadGame} />
             <MenuItem icon="⚙️" label="Settings" onClick={onOpenSettings} />
-            <MenuItem icon="📊" label="Rates" onClick={onOpenRates} />
-            <MenuItem icon="⚖️" label="Government" onClick={onOpenGovernment} />
             <MenuItem icon="🚪" label="Quit" onClick={onQuit} danger />
           </>
         )}
 
         {activeMenu === 'WORLD' && (
           <>
+            <MenuItem icon="⚖️" label="Government" onClick={onOpenGovernment} />
+            <MenuItem icon="📊" label="Rates" onClick={onOpenRates} />
             <MenuItem icon="⚖️" label="Diplomacy" onClick={onDiplomacy} />
             <MenuItem icon="🌳" label="Tech Tree" onClick={onTechTree} />
           </>
@@ -112,6 +114,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
           <>
             <MenuItem icon="🗺️" label="Download Map" onClick={onDownloadMap} />
             <MenuItem icon="📜" label="Download Game Progression List" onClick={onDownloadProgression} />
+            <MenuItem icon="🗜️" label="Download Compact Progression (CSV)" onClick={onDownloadProgressionCompact} />
             <MenuItem icon="❓" label="Help" onClick={onHelp} />
           </>
         )}

@@ -5,10 +5,12 @@
  *  - computeCivDelta delta-encodes unchanged civ fields across rounds.
  *  - serializeCityCompact produces the slim city snapshot.
  */
-import { describe, it, expect } from 'vitest';
-import { filterLogEntries, computeCivDelta } from '../src/utils/GameProgression';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import GameEngine from '@/game/engine/GameEngine';
+import { filterLogEntries, computeCivDelta, hydrateCiv, gameProgression } from '../src/utils/GameProgression';
+import { gameLogger } from '../src/utils/GameLogger';
 import { serializeCityCompact } from '../src/utils/CitySnapshots';
-import type { ProgressionCivSnapshot, ProgressionLogEntry } from '../types/progression';
+import type { ProgressionCivSnapshot, ProgressionCivDelta, ProgressionLogEntry } from '../types/progression';
 
 function entry(event: string, message = '', detail: Record<string, unknown> = {}): ProgressionLogEntry {
   return { ts: '2026-01-01T00:00:00.000Z', round: 1, player: 0, event, message, detail };
@@ -73,20 +75,28 @@ describe('computeCivDelta', () => {
     color: '#949494',
     isHuman: false,
     alive: true,
+    score: 10,
     gold: 50,
+    goldPerTurn: 4,
     science: 12,
+    trade: 8,
+    production: 6,
+    food: 10,
     taxRate: 50,
     scienceRate: 50,
     luxuryRate: 0,
     government: 'despotism',
     cities: 2,
     cityData: [],
+    population: 12,
     units: 3,
+    military: 5,
     technologies: 3,
     techList: ['irrigation', 'mining', 'roads'],
     currentResearch: 'pottery',
     researchProgress: 20,
     warWith: [],
+    wonders: 0,
     personality: { aggression: 50 },
     priorities: { militaryUnits: 20 },
   });
@@ -187,5 +197,139 @@ describe('serializeCityCompact', () => {
   it('falls back to productionProgress when productionStored is missing', () => {
     const compact = serializeCityCompact({ id: 'c', name: 'X', civilizationId: 0, col: 1, row: 1, population: 1, productionProgress: 12 });
     expect(compact.productionStored).toBe(12);
+  });
+});
+
+describe('hydrateCiv (compact CSV)', () => {
+  it('carries omitted delta fields forward from the previous round', () => {
+    const prev: ProgressionCivSnapshot = {
+      id: 0, name: 'Germans', leaderName: 'Frederick', color: '#888', isHuman: true, alive: true,
+      score: 10, gold: 50, goldPerTurn: 4, science: 3, trade: 8, production: 6, food: 10,
+      taxRate: 40, scienceRate: 50, luxuryRate: 10, government: 'despotism',
+      cities: 2, cityData: [], population: 12, units: 4, military: 6, technologies: 3, techList: ['irrigation'],
+      currentResearch: 'pottery', researchProgress: 7, warWith: [], wonders: 0, personality: {}, priorities: {},
+    };
+    // Next round: only gold/science changed (delta encoding).
+    const delta: ProgressionCivDelta = { id: 0, gold: 62, science: 4, cityData: [] };
+    const full = hydrateCiv(prev, delta);
+    expect(full.gold).toBe(62);
+    expect(full.science).toBe(4);
+    // Carried forward unchanged:
+    expect(full.name).toBe('Germans');
+    expect(full.government).toBe('despotism');
+    expect(full.cities).toBe(2);
+    expect(full.units).toBe(4);
+    expect(full.currentResearch).toBe('pottery');
+    expect(full.researchProgress).toBe(7);
+  });
+
+  it('provides sane defaults when there is no previous round', () => {
+    const delta: ProgressionCivDelta = { id: 1, gold: 50, science: 0, cityData: [] };
+    const full = hydrateCiv(undefined, delta);
+    expect(full.id).toBe(1);
+    expect(full.name).toBe('Civ 1');
+    expect(full.alive).toBe(true);
+    expect(full.isHuman).toBe(false);
+  });
+});
+
+describe('buildCompactCsv (strongly reduced export)', () => {
+  let engine: GameEngine;
+
+  beforeEach(async () => {
+    engine = new GameEngine(null);
+    (engine as any).sleep = () => Promise.resolve();
+    await engine.initialize({
+      numberOfCivilizations: 2,
+      mapType: 'CLOSEUP_1V1',
+      devMode: false,
+      startingGold: 50,
+    });
+    gameLogger.setSession('compact-test');
+    gameProgression.reset();
+    gameProgression.startSession(engine, {
+      mapType: 'CLOSEUP_1V1',
+      difficulty: 'PRINCE',
+      numberOfCivilizations: 2,
+      playerCivilization: 0,
+    });
+  });
+
+  afterEach(() => {
+    (engine as any).units = [];
+    (engine as any).cities = [];
+    (engine as any).civilizations = [];
+    gameProgression.reset();
+  });
+
+  /** Drive full rounds: start the human turn, then advance through AI → human. */
+  const advanceRounds = (n: number) => {
+    (engine.turnManager as any).startTurn?.(0);
+    for (let i = 0; i < n; i++) {
+      engine.turnManager.advanceTurn(); // human -> AI
+      engine.turnManager.advanceTurn(); // AI -> human (new round)
+      gameProgression.recordIfNewRound(engine);
+    }
+  };
+
+  it('produces a CSV scoreboard with one row per civ per round', async () => {
+    advanceRounds(3);
+
+    const csv = await gameProgression.buildCompactCsv(engine);
+    const lines = csv.trim().split('\n');
+    // Comment line + header + at least one row per civ.
+    expect(lines[0]).toMatch(/^# Civ1Browser progression \(compact\)/);
+    expect(lines[1]).toBe(
+      'round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders',
+    );
+    expect(lines.length).toBeGreaterThanOrEqual(4); // 2 header lines + ≥ 2 rows
+    expect(lines[2]).toMatch(/^1,/); // round 1 first
+    for (const row of lines.slice(2)) {
+      expect(row.split(',')).toHaveLength(26);
+    }
+  });
+
+  it('research shows a tech name (not [object Object]) and gold reads from resources', async () => {
+    // Give the human civ real resources + a researched tech object.
+    const civ = engine.civilizations[0];
+    if (civ && civ.resources) civ.resources.gold = 123;
+    (engine as any).setResearch?.(0, 'pottery');
+
+    // Two rounds: the first advance-cycle returns to currentTurn 1 (the round
+    // already recorded at session start), the second records a fresh round.
+    advanceRounds(2);
+
+    const csv = await gameProgression.buildCompactCsv(engine);
+    expect(csv).not.toContain('[object Object]');
+    // The human civ's row carries its treasury (from resources, after upkeep)
+    // and the research tech id.
+    const humanRow = csv.split('\n').find((line) => line.includes('true,') && line.includes('pottery'));
+    expect(humanRow).toBeDefined();
+    // Gold read from civ.resources (was always 0 before) — non-zero treasury.
+    expect(Number(humanRow!.split(',')[7])).toBeGreaterThan(0);
+    expect(humanRow!.split(',')[18]).toBe('pottery'); // research column
+  });
+
+  it('is much smaller than the full JSON payload when the log is large', async () => {
+    // Drive a few rounds so progression has several snapshots.
+    advanceRounds(3);
+
+    // Seed a realistic volume of move events (≈200), the dominant cost of the
+    // full export — the compact CSV drops the log entirely.
+    for (let i = 0; i < 200; i++) {
+      gameLogger.log('UNIT_MOVED', `Move: warrior(${i}) → (${i % 20},${(i * 7) % 20})`, {
+        data: { unitId: `u_${i}`, from: { col: i % 20, row: (i * 3) % 20 }, to: { col: (i + 1) % 20, row: (i * 7) % 20 } },
+      });
+    }
+
+    const csv = await gameProgression.buildCompactCsv(engine);
+    const payload = await gameProgression.buildDownloadPayload(engine);
+    const fullJson = JSON.stringify(payload);
+
+    // eslint-disable-next-line no-console
+    console.log('[SIZE] full JSON:', fullJson.length, 'bytes | compact CSV:', csv.length, 'bytes | ratio:', (fullJson.length / Math.max(1, csv.length)).toFixed(1), 'x smaller');
+    expect(csv.length).toBeLessThan(fullJson.length);
+    // The compact CSV must be dramatically smaller (≥ 5×) than the full export.
+    expect(csv.length).toBeLessThan(Math.ceil(fullJson.length / 5));
   });
 });

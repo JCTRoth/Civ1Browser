@@ -111,8 +111,9 @@ function valuesEqual(a: unknown, b: unknown): boolean {
 /**
  * Build the delta-encoded civ entry for one round. `prev` is the previous
  * round's full state; fields that did not change are omitted so the reader
- * carries them forward. `gold`, `science` and `cityData` are always emitted
- * (the per-round scoreboard and city growth timeline are the core signal).
+ * carries them forward. The per-round scoreboard (score/gold/science/trade/
+ * production/food/population/military/wonders) and `cityData` are always
+ * emitted — they are the core progression signal.
  */
 export function computeCivDelta(
   full: ProgressionCivSnapshot,
@@ -120,8 +121,16 @@ export function computeCivDelta(
 ): ProgressionCivDelta {
   const delta: ProgressionCivDelta = {
     id: full.id,
+    score: full.score,
     gold: full.gold,
+    goldPerTurn: full.goldPerTurn,
     science: full.science,
+    trade: full.trade,
+    production: full.production,
+    food: full.food,
+    population: full.population,
+    military: full.military,
+    wonders: full.wonders,
     cityData: full.cityData,
   };
   if (!prev) {
@@ -165,6 +174,52 @@ export function computeCivDelta(
   if (!valuesEqual(full.personality, prev.personality)) delta.personality = full.personality;
   if (!valuesEqual(full.priorities, prev.priorities)) delta.priorities = full.priorities;
   return delta;
+}
+
+/** Reconstruct a civ's full state by carrying a delta forward from the previous round. */
+export function hydrateCiv(
+  prev: ProgressionCivSnapshot | undefined,
+  delta: ProgressionCivDelta,
+): ProgressionCivSnapshot {
+  return {
+    id: delta.id,
+    name: delta.name ?? prev?.name ?? `Civ ${delta.id}`,
+    leaderName: delta.leaderName ?? prev?.leaderName ?? '',
+    color: delta.color ?? prev?.color ?? '#888888',
+    isHuman: delta.isHuman ?? prev?.isHuman ?? false,
+    alive: delta.alive ?? prev?.alive ?? true,
+    score: delta.score ?? prev?.score ?? 0,
+    gold: delta.gold ?? prev?.gold ?? 0,
+    goldPerTurn: delta.goldPerTurn ?? prev?.goldPerTurn ?? 0,
+    science: delta.science ?? prev?.science ?? 0,
+    trade: delta.trade ?? prev?.trade ?? 0,
+    production: delta.production ?? prev?.production ?? 0,
+    food: delta.food ?? prev?.food ?? 0,
+    taxRate: delta.taxRate ?? prev?.taxRate ?? 0,
+    scienceRate: delta.scienceRate ?? prev?.scienceRate ?? 50,
+    luxuryRate: delta.luxuryRate ?? prev?.luxuryRate ?? 50,
+    government: delta.government ?? prev?.government ?? 'despotism',
+    cities: delta.cities ?? prev?.cities ?? 0,
+    cityData: delta.cityData ?? prev?.cityData ?? [],
+    population: delta.population ?? prev?.population ?? 0,
+    units: delta.units ?? prev?.units ?? 0,
+    military: delta.military ?? prev?.military ?? 0,
+    technologies: delta.technologies ?? prev?.technologies ?? 0,
+    techList: delta.techList ?? prev?.techList ?? [],
+    currentResearch:
+      delta.currentResearch !== undefined ? delta.currentResearch : (prev?.currentResearch ?? null),
+    researchProgress: delta.researchProgress ?? prev?.researchProgress ?? 0,
+    warWith: delta.warWith ?? prev?.warWith ?? [],
+    wonders: delta.wonders ?? prev?.wonders ?? 0,
+    personality: delta.personality ?? prev?.personality ?? {},
+    priorities: delta.priorities ?? prev?.priorities ?? {},
+  };
+}
+
+/** Quote a CSV cell when it contains a comma, quote, or newline. */
+function csvCell(value: unknown): string {
+  const s = value === null || value === undefined ? '' : String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 class GameProgression {
@@ -258,6 +313,76 @@ class GameProgression {
     DomUtils.downloadTextFile(JSON.stringify(payload), filename);
   }
 
+  /**
+   * Strongly reduced export: a single CSV scoreboard (one row per civ per
+   * round) with the per-round key metrics only. Drops the event log, the
+   * per-city detail and the personality/rates/tech-list noise — the result is
+   * orders of magnitude smaller than the full JSON (≈ KBs for hundreds of
+   * moves) while still carrying the full game-state timeline an LLM needs to
+   * optimise the computer player.
+   */
+  async buildCompactCsv(engine: GameEngine | null): Promise<string> {
+    this.recordIfNewRound(engine);
+    const meta = this.meta ?? this.defaultMeta();
+    const lines: string[] = [];
+    lines.push(
+      `# Civ1Browser progression (compact) — session ${meta.sessionId} | map ${meta.mapType} | difficulty ${meta.difficulty} | civs ${meta.numberOfCivilizations} | rounds ${this.snapshots.length}`,
+    );
+    lines.push(
+      'round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders',
+    );
+
+    // Carry each civ's state forward across rounds (the snapshots are
+    // delta-encoded: omitted fields stay unchanged from the previous round).
+    const carried: Record<string, ProgressionCivSnapshot> = {};
+    for (const round of this.snapshots) {
+      for (const [civId, delta] of Object.entries(round.civs)) {
+        const full = hydrateCiv(carried[civId], delta);
+        carried[civId] = full;
+        lines.push(
+          [
+            round.round,
+            round.year,
+            full.id,
+            full.name,
+            full.isHuman,
+            full.alive,
+            full.score,
+            full.gold,
+            full.goldPerTurn,
+            full.science,
+            full.trade,
+            full.production,
+            full.food,
+            full.cities,
+            full.population,
+            full.units,
+            full.military,
+            full.technologies,
+            full.currentResearch ?? '',
+            full.researchProgress,
+            full.government,
+            full.taxRate,
+            full.scienceRate,
+            full.luxuryRate,
+            (full.warWith ?? []).join('|'),
+            full.wonders,
+          ]
+            .map(csvCell)
+            .join(','),
+        );
+      }
+    }
+    return `${lines.join('\n')}\n`;
+  }
+
+  /** Trigger a browser download of the compact CSV progression scoreboard. */
+  async downloadCompact(engine: GameEngine | null): Promise<void> {
+    const csv = await this.buildCompactCsv(engine);
+    const sessionId = this.meta?.sessionId ?? gameLogger.getSessionId() ?? 'game';
+    DomUtils.downloadTextFile(csv, `civ1-progression-compact-${sessionId}.csv`);
+  }
+
   private defaultMeta(): GameProgressionMeta {
     return {
       sessionId: gameLogger.getSessionId() ?? 'game',
@@ -286,30 +411,61 @@ class GameProgression {
     for (const civ of civList) {
       const civId = String(civ?.id ?? '?');
       const civCities = cities.filter((c) => String(c?.civilizationId) === civId);
-      const civUnits = units.filter((u) => String(u?.civilizationId) === civId).length;
+      const civUnitList = units.filter((u) => String(u?.civilizationId) === civId);
       const techList: string[] = [...(civ?.technologies ?? [])].map(String);
+
+      // `currentResearch` is the tech OBJECT on engine civs — reduce it to its
+      // id (fall back to name) so exports carry a plain string, not
+      // "[object Object]".
+      const researchRaw = civ?.currentResearch;
+      const currentResearch = researchRaw == null
+        ? null
+        : typeof researchRaw === 'object'
+          ? String(researchRaw.id ?? researchRaw.name ?? '')
+          : String(researchRaw);
+
+      // Real per-turn outputs / treasury live under `civ.resources` on the
+      // engine's plain-object civs (there is no top-level `civ.gold`).
+      const resources = civ?.resources ?? {};
 
       const full: ProgressionCivSnapshot = {
         id: civ?.id ?? Number(civId),
         name: civ?.name ?? `Civ ${civId}`,
-        leaderName: civ?.leaderName ?? '',
+        leaderName: civ?.leader ?? civ?.leaderName ?? '',
         color: civ?.color ?? '#888888',
         isHuman: civ?.isHuman === true,
-        alive: civ?.alive !== false,
-        gold: civ?.gold ?? 0,
-        science: civ?.science ?? 0,
+        alive: civ?.isAlive !== false,
+        score: civ?.score ?? 0,
+        gold: resources.gold ?? 0,
+        goldPerTurn: civCities.reduce((sum, c) => sum + (c.tax ?? 0), 0),
+        science: resources.science ?? 0,
+        trade: resources.trade ?? civCities.reduce((sum, c) => sum + (c.trade ?? 0), 0),
+        production: civCities.reduce((sum, c) => sum + (c.yields?.production ?? 0), 0),
+        food: civCities.reduce((sum, c) => sum + (c.yields?.food ?? 0), 0),
         taxRate: civ?.taxRate ?? 0,
         scienceRate: civ?.scienceRate ?? 50,
         luxuryRate: civ?.luxuryRate ?? 50,
         government: civ?.government ?? 'despotism',
         cities: civCities.length,
         cityData: civCities.map((c) => serializeCityCompact(c)),
-        units: civUnits,
+        population: civCities.reduce((sum, c) => sum + (c.population ?? 0), 0),
+        units: civUnitList.length,
+        military: civUnitList.reduce(
+          (sum, u) => sum + (u.attack ?? 0) + (u.defense ?? 0) * 0.5,
+          0,
+        ),
         technologies: techList.length,
         techList,
-        currentResearch: civ?.currentResearch ?? null,
+        currentResearch,
         researchProgress: civ?.researchProgress ?? 0,
-        warWith: [...(civ?.warWith ?? [])].map(String),
+        // Plain civs don't carry `warWith` — ask the diplomacy manager.
+        warWith: [
+          ...(engineAny?.diplomacyManager?.getEnemies?.(civ?.id) ?? [...(civ?.warWith ?? [])]),
+        ].map(String),
+        wonders: civCities.reduce(
+          (sum, c) => sum + (Array.isArray(c?.wonders) ? c.wonders.length : 0),
+          0,
+        ),
         personality: { ...(civ?.personality ?? {}) },
         priorities: { ...(civ?.priorities ?? {}) },
       };

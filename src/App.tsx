@@ -306,6 +306,23 @@ function App() {
     }
   };
 
+  // Download a strongly reduced CSV scoreboard (per-round key metrics only) —
+  // a tiny file for cheap AI analysis when the full list would be too large.
+  const handleDownloadProgressionCompact = async () => {
+    setActiveMenu(null);
+    if (!gameEngine) {
+      showToast('No active game to export', 'warning');
+      return;
+    }
+    try {
+      await gameProgression.downloadCompact(gameEngine);
+      showToast('Compact progression downloaded', 'success');
+    } catch (e) {
+      console.error('handleDownloadProgressionCompact error', e);
+      showToast('Failed to download compact progression', 'error');
+    }
+  };
+
   // Save game to a downloadable JSON file
   const handleSaveGame = () => {
     if (!gameEngine) {
@@ -976,6 +993,7 @@ function App() {
           setActiveMenu(null);
         }}
         onDownloadProgression={handleDownloadProgression}
+        onDownloadProgressionCompact={handleDownloadProgressionCompact}
         onHelp={() => {
           actions.showDialog('help');
           setActiveMenu(null);

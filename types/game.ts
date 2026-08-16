@@ -116,6 +116,7 @@ export interface City {
   happiness?: number | { happy: number; content: number; unhappy: number };
   unhappiness?: number; // unhappiness points (population-based)
   disorder?: boolean;   // true when unhappiness > happiness (halts production/growth)
+  capturedTurns?: number; // remaining turns of post-capture unrest (resentful citizens)
   // Current production progress (0..1 or absolute depending on implementation)
   productionProgress?: number;
   // Queue of production items (units/buildings)

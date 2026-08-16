@@ -137,9 +137,47 @@ LLM can analyse it to optimise the computer player:
   used by the raw debug log).
 - **`vite.config.js`** — the dev-server middleware already persisted log lines
   (POST `/__game_log`); it now also serves them back (GET) as a JSON array.
-- **`src/components/ui/GameMenuSheet.tsx`** — the `INFO` menu item
-  "📜 Download Game Progression List" triggers the export in `App.tsx`.
+- **`src/components/ui/GameMenuSheet.tsx`** — the `INFO` menu items
+  "📜 Download Game Progression List" (full JSON) and
+  "🗜️ Download Compact Progression (CSV)" (strongly reduced scoreboard) trigger
+  the exports in `App.tsx`.
 - **Types** — all progression types live in `types/progression.ts`.
+
+## Compact CSV export (for cheap AI analysis)
+
+When the full JSON would be too large to analyse (≈ 2.5 MB for 200 moves), use
+**Info → Download Compact Progression (CSV)** (`civ1-progression-compact-<id>.csv`).
+It keeps only the per-round scoreboard — one CSV row per civ per round with the
+key metrics — and drops the event log, per-city detail and personality noise.
+Measured on a 200-move sample it is **~54× smaller** (43 KB → 0.8 KB) and an LLM
+can read it directly:
+
+```csv
+# Civ1Browser progression (compact) — session aivsai-… | map AI_VS_AI | difficulty PRINCE | civs 2 | rounds 989
+round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders
+1,-4000,0,Germans,false,true,0,50,0,0,0,0,0,0,0,1,0.5,3,,0,despotism,50,50,0,,0
+1,-4000,1,Indians,false,true,0,50,0,0,0,0,0,0,0,1,0.5,3,,0,despotism,50,50,0,,0
+2,-3960,0,Germans,false,true,0,50,0,0,0,0,0,0,1,0,3,pottery,2,despotism,40,58,2,,0
+...
+```
+
+- Built by `gameProgression.buildCompactCsv()` / `downloadCompact()` in
+  `GameProgression.ts`. The delta-encoded snapshots are re-hydrated
+  (`hydrateCiv`) so each row shows the *full* carried-forward state.
+- **Columns** (26): `round, year, civId, civ, human, alive, score, gold,
+  goldPerTurn, science, trade, production, food, cities, population, units,
+  military, techs, research, researchProgress, government, tax, scirate, lux,
+  warWith, wonders`. War targets are joined with `|`; cells are quoted when
+  they contain commas/quotes.
+- **Sources** (fixed to read the engine's real state): `gold` is the treasury
+  (`civ.resources.gold`), `science`/`trade` are per-turn outputs
+  (`civ.resources.*`), `goldPerTurn`/`production`/`food`/`population` are
+  summed from city outputs, `military` = Σ(attack + 0.5×defense) over units,
+  `research` is the tech **id** (the engine stores the tech object — it used to
+  serialize as `[object Object]`), `warWith` comes from the diplomacy manager,
+  `alive` from `civ.isAlive`, and `leaderName` from `civ.leader`.
+- Use it when the cost of analysing the full log outweighs the move-level
+  detail; the full JSON remains the deep-dive format.
 
 ## Using it for AI analysis
 

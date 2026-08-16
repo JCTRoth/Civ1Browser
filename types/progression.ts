@@ -14,8 +14,20 @@ export interface ProgressionCivSnapshot {
   color: string;
   isHuman: boolean;
   alive: boolean;
+  /** Victory score (engine's score field). */
+  score: number;
+  /** Treasury (cumulative gold). */
   gold: number;
+  /** Gold income per turn (sum of city tax output). */
+  goldPerTurn: number;
+  /** Beakers per turn (rate-based science output). */
   science: number;
+  /** Commerce per turn. */
+  trade: number;
+  /** Shields per turn (city yields). */
+  production: number;
+  /** Food per turn (city yields). */
+  food: number;
   taxRate: number;
   scienceRate: number;
   luxuryRate: number;
@@ -23,20 +35,28 @@ export interface ProgressionCivSnapshot {
   cities: number;
   /** Slim per-player city list (one entry per city owned by this civ). */
   cityData: CompactCity[];
+  /** Total population across all cities. */
+  population: number;
   units: number;
+  /** Aggregate military strength (attack + 0.5×defense across units). */
+  military: number;
   technologies: number;
   techList: string[];
+  /** Id (or name) of the tech currently being researched. */
   currentResearch: string | null;
   researchProgress: number;
   warWith: string[];
+  /** Number of world wonders built. */
+  wonders: number;
   personality: Record<string, number>;
   priorities: Record<string, number>;
 }
 
 /**
  * Delta-encoded per-round civ entry: fields omitted in a round are carried
- * forward unchanged from the previous round. `gold`, `science` and `cityData`
- * are always emitted (per-round scoreboard + city growth timeline).
+ * forward unchanged from the previous round. The per-round scoreboard
+ * (score/gold/science/trade/production/food/population/military/wonders) and
+ * `cityData` are always emitted.
  */
 export interface ProgressionCivDelta {
   id: number;
@@ -45,20 +65,28 @@ export interface ProgressionCivDelta {
   color?: string;
   isHuman?: boolean;
   alive?: boolean;
+  score?: number;
   gold: number;
+  goldPerTurn?: number;
   science: number;
+  trade?: number;
+  production?: number;
+  food?: number;
   taxRate?: number;
   scienceRate?: number;
   luxuryRate?: number;
   government?: string;
   cities?: number;
   cityData: CompactCity[];
+  population?: number;
   units?: number;
+  military?: number;
   technologies?: number;
   techList?: string[];
   currentResearch?: string | null;
   researchProgress?: number;
   warWith?: string[];
+  wonders?: number;
   personality?: Record<string, number>;
   priorities?: Record<string, number>;
 }

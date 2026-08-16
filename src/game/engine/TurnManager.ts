@@ -596,6 +596,12 @@ export class TurnManager {
     });
 
     playerCities.forEach((city: any) => {
+      // Captured-city unrest fades a little each turn (Civ1: resentment
+      // subsides once the new owner garrisons and manages the city).
+      if (city.capturedTurns && city.capturedTurns > 0) {
+        city.capturedTurns -= 1;
+        if (city.capturedTurns < 0) city.capturedTurns = 0;
+      }
       const inDisorder = city.disorder === true;
       // Emit CITY_DISORDER only on transitions (enter/leave) to avoid spamming.
       if (inDisorder !== (city.disorderLastTurn === true)) {
@@ -812,6 +818,12 @@ export class TurnManager {
       }
       civ.researchProgress = 0;
       civ.currentResearch = null;
+
+      // City walls become obsolete once Metallurgy is discovered (Civ1) — they
+      // are automatically scrapped in every city of this civilization.
+      if (completedId === 'metallurgy') {
+        this.gameEngine.scrapObsoleteCityWalls?.(civ.id);
+      }
 
       if (this.gameEngine.updateTechnologyAvailability) {
         this.gameEngine.updateTechnologyAvailability();

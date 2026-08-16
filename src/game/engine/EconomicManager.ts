@@ -72,6 +72,12 @@ export const CITY_CENTER_COMMERCE = 2;
  * genuinely large cities need luxury/buildings.
  */
 export const BASE_CONTENTMENT = 2;
+/**
+ * Extra unhappiness a freshly captured city suffers (Civ1: resentful captured
+ * citizens). The penalty decays via `city.capturedTurns` and pushes the city
+ * into disorder until the new owner garrisons/manages it.
+ */
+export const CAPTURED_CITY_UNHAPPY = 3;
 /** Manhattan distance of the tiles a city can work (Civ1: radius 2). */
 export const CITY_RADIUS = 2;
 /** Minimum yields of the city-center tile (Civ1 rule). */
@@ -377,9 +383,13 @@ export class EconomicManager {
     // Civ1 crowding rule: citizens beyond the government's tolerance are
     // unhappy; luxury / buildings / government bonuses plus a base contentment
     // add happiness (the base keeps small/medium cities content in this
-    // low-commerce economy).
+    // low-commerce economy). Freshly captured cities also suffer a temporary
+    // unrest penalty while `capturedTurns` is active.
     const population = city?.population ?? 1;
-    const unhappiness = Math.max(0, population - gov.tolerance);
+    const capturedUnrest = city?.capturedTurns && city.capturedTurns > 0
+      ? CAPTURED_CITY_UNHAPPY
+      : 0;
+    const unhappiness = Math.max(0, population - gov.tolerance) + capturedUnrest;
     const happiness = out.luxury + this.buildingHappiness(city) + gov.happinessBonus + BASE_CONTENTMENT;
     return { happiness, unhappiness, disorder: unhappiness > happiness };
   }

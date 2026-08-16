@@ -1717,6 +1717,38 @@ export default class GameEngine {
         });
       }
 
+      // Civ1: when the LAST defender inside a city falls, the city is captured
+      // instantly — the attacker takes the city and any remaining garrison
+      // (stacked units not yet fought) is destroyed. Without this, a
+      // garrisoned city could never be taken: the attacker would just stand on
+      // the tile after killing the defender and city combat would never run.
+      const cityHere = this.getCityAt(defender.col, defender.row);
+      if (cityHere && cityHere.civilizationId !== attacker.civilizationId) {
+        const originalCiv = cityHere.civilizationId;
+        const stillDefended = this.units.some(
+          (u: Unit) => u.civilizationId === originalCiv
+            && u.col === cityHere.col && u.row === cityHere.row
+            && (u as any).isDefeated !== true
+            && u.id !== defender.id,
+        );
+        if (!stillDefended) {
+          const captureResult = this.resolveCityCombat(attacker, cityHere);
+          if (captureResult === 'captured' || captureResult === 'city_destroyed') {
+            // Attacker consumed on capture (same rule as a direct assault).
+            this.unitTurnQueue?.removeUnit?.(attacker.id);
+            this.units = this.units.filter(u => u.id !== attacker.id);
+            if (captureResult === 'captured' && this.onStateChange) {
+              this.onStateChange('CITY_CAPTURED', {
+                city: cityHere,
+                capturedBy: attacker.civilizationId,
+                originalCiv,
+              });
+            }
+            return true;
+          }
+        }
+      }
+
       // Check if turn should end automatically
       this.checkAndEndTurnIfNoMoves();
       
@@ -1778,10 +1810,13 @@ export default class GameEngine {
     const attackerStrength = (attacker.attack && attacker.attack > 0 ? attacker.attack : 0)
       * (attacker.health != null ? attacker.health / 100 : 1);
 
-    // City defense: base = population; walls double it.
+    // City defense: base = population. City walls TRIPLE the total defense
+    // (Civ1) — but air units and siege artillery ignore the walls entirely.
+    const hasWalls = (city.buildings?.includes?.('city_walls') ?? false)
+      || (city.buildings?.includes?.('walls') ?? false);
     let defense = Math.max(1, city.population || 1);
-    if (city.buildings?.includes('city_walls') || city.buildings?.includes('walls')) {
-      defense *= 2;
+    if (hasWalls && !this.unitIgnoresCityWalls(attacker)) {
+      defense *= 3;
     }
 
     const total = attackerStrength + defense;
@@ -1794,8 +1829,10 @@ export default class GameEngine {
     if (attackerWins) {
       const oldCiv = city.civilizationId;
       if ((city.population || 1) <= 1) {
-        // City is destroyed rather than captured.
+        // City is razed rather than captured — every unit garrisoned on its
+        // tile dies with it.
         const wasCapital = city.isCapital === true;
+        this.destroyGarrisonOnCapture(city, oldCiv);
         this.cities = this.cities.filter(c => c.id !== city.id);
         console.log(`[COMBAT] City ${city.name} (civ ${oldCiv}) destroyed by ${attacker.type}`);
         if (wasCapital) {
@@ -1812,6 +1849,24 @@ export default class GameEngine {
       city.population -= 1;
       city.civilizationId = attacker.civilizationId;
       city.buildings = city.buildings ?? [];
+
+      // --- Civ1 capture aftermath ---
+      // 1. Improvements are destroyed: city walls NEVER survive a capture, and
+      //    one more random building is lost per point of population lost.
+      this.destroyBuildingsOnCapture(city);
+      // 2. The attacker plunders a share of the defender's treasury.
+      this.plunderCityGold(oldCiv, attacker.civilizationId);
+      // 3. The entire garrison on the tile is wiped out.
+      this.destroyGarrisonOnCapture(city, oldCiv);
+      // 4. Production is reset.
+      city.currentProduction = null;
+      if (Array.isArray(city.buildQueue)) city.buildQueue.length = 0;
+      city.productionStored = 0;
+      city.productionProgress = 0;
+      // 5. Captured citizens are resentful — the city trends toward disorder
+      //    for a few turns until garrisoned/managed.
+      city.capturedTurns = 5;
+
       // A captured capital loses its Palace — the original civ must establish
       // a new seat of government (the new owner's capital is elsewhere).
       if (city.isCapital === true) {
@@ -1824,7 +1879,9 @@ export default class GameEngine {
       return 'captured';
     }
 
-    // Attacker defeated — damage or destroy it.
+    // Attacker defeated — damage or destroy it. A failed ground assault may
+    // still cost the city a citizen UNLESS it has walls (Civ1: walls shield
+    // the population from conventional ground attacks).
     attacker.health = Math.max(0, (attacker.health ?? 100) - 25);
     if (attacker.health <= 0) {
       (attacker as any).isDefeated = true;
@@ -1837,7 +1894,112 @@ export default class GameEngine {
       }, 5000);
       console.log(`[COMBAT] ${attacker.type} destroyed attacking city ${city.name}`);
     }
+    if (!hasWalls && (city.population || 1) > 1 && Math.random() < 0.5) {
+      city.population -= 1;
+      console.log(`[COMBAT] City ${city.name} lost a citizen to a failed attack (no city walls)`);
+    }
     return 'defended';
+  }
+
+  /**
+   * Civ1: air units (fighters/bombers) and siege artillery (cannon/artillery,
+   * the local stand-ins for the Howitzer) ignore city walls entirely.
+   */
+  private unitIgnoresCityWalls(attacker: any): boolean {
+    const type = String(attacker.type ?? '').toLowerCase();
+    const props = UNIT_PROPS[type];
+    if (props?.type === 'air') return true;
+    return type === 'cannon' || type === 'artillery';
+  }
+
+  /**
+   * Improvements destroyed when a city falls: city walls ALWAYS perish, plus
+   * one random non-palace, non-wonder building per point of population lost
+   * (capture costs exactly 1). Wonders and the palace survive.
+   */
+  private destroyBuildingsOnCapture(city: any): void {
+    const buildings = Array.isArray(city.buildings) ? city.buildings : [];
+    const wonders = new Set(Array.isArray(city.wonders) ? city.wonders : []);
+    const removals: string[] = [];
+
+    if (buildings.includes('city_walls') || buildings.includes('walls')) {
+      removals.push('city_walls');
+    }
+
+    const candidates = buildings.filter(
+      (b: string) => b !== 'city_walls' && b !== 'walls' && b !== 'palace' && !wonders.has(b),
+    );
+    if (candidates.length > 0) {
+      removals.push(candidates[Math.floor(Math.random() * candidates.length)]);
+    }
+
+    for (const removed of removals) {
+      const idx = buildings.indexOf(removed);
+      if (idx !== -1) buildings.splice(idx, 1);
+    }
+    const aliasIdx = buildings.indexOf('walls');
+    if (aliasIdx !== -1) buildings.splice(aliasIdx, 1);
+    if (removals.length > 0) {
+      console.log(`[COMBAT] Capture destroyed improvements in ${city.name}: ${removals.join(', ')}`);
+    }
+  }
+
+  /**
+   * Plunder a share of the defender's treasury — the amount scales with the
+   * civilization's treasury (Civ1), capped so a single city can't break the
+   * game.
+   */
+  private plunderCityGold(oldCivId: number, newCivId: number): void {
+    const oldCiv = this.civilizations?.[oldCivId];
+    const newCiv = this.civilizations?.[newCivId];
+    if (!oldCiv?.resources || !newCiv?.resources) return;
+    const treasury = oldCiv.resources.gold ?? 0;
+    if (treasury <= 0) return;
+    const plunder = Math.min(Math.floor(treasury * 0.2), 100);
+    oldCiv.resources.gold = treasury - plunder;
+    newCiv.resources.gold = (newCiv.resources.gold ?? 0) + plunder;
+    console.log(`[COMBAT] Plundered ${plunder} gold from civ ${oldCivId} to civ ${newCivId}`);
+  }
+
+  /**
+   * Every unit of the old owner standing on the captured city's tile is
+   * destroyed (Civ1: the garrison is wiped out when the city falls). Already
+   * defeated units (e.g. the last defender killed in unit combat moments ago)
+   * are left to their own removal to avoid double-removal/double-events.
+   */
+  private destroyGarrisonOnCapture(city: any, oldCivId: number): void {
+    const killed = this.units.filter(
+      (u: any) => u.civilizationId === oldCivId
+        && u.col === city.col && u.row === city.row
+        && (u as any).isDefeated !== true,
+    );
+    for (const u of killed) {
+      this.unitTurnQueue?.removeUnit?.(u.id);
+      this.onStateChange?.('UNIT_DEFEATED', { unit: u });
+      console.log(`[COMBAT] Garrison ${u.type} destroyed in captured city ${city.name}`);
+    }
+    if (killed.length > 0) {
+      this.units = this.units.filter((u: any) => !killed.includes(u));
+    }
+  }
+
+  /**
+   * Civ1: city walls become obsolete once Metallurgy is discovered — they are
+   * automatically scrapped in every city of this civilization.
+   */
+  scrapObsoleteCityWalls(civId: number): void {
+    let scrapped = 0;
+    for (const city of this.cities) {
+      if (city.civilizationId !== civId) continue;
+      if (!Array.isArray(city.buildings)) continue;
+      const w = city.buildings.indexOf('city_walls');
+      if (w !== -1) { city.buildings.splice(w, 1); scrapped += 1; continue; }
+      const a = city.buildings.indexOf('walls');
+      if (a !== -1) { city.buildings.splice(a, 1); scrapped += 1; }
+    }
+    if (scrapped > 0) {
+      console.log(`[GameEngine] Metallurgy discovered — ${scrapped} city wall(s) scrapped for civ ${civId}`);
+    }
   }
 
   /**

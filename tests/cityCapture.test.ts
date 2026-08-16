@@ -9,7 +9,10 @@ import GameEngine from '@/game/engine/GameEngine';
  *  - win vs pop>1  → city changes hands (captured), attacker consumed
  *  - win vs pop==1 → city is destroyed, attacker consumed
  *  - loss          → attacker takes damage / is defeated
- * City walls double the city's defense.
+ * City walls TRIPLE the city's defense (air units and siege artillery ignore
+ * them), are always destroyed on capture, and become obsolete with Metallurgy.
+ * Capturing a city destroys improvements, plunders gold, wipes out the
+ * garrison, resets production, and leaves resentful citizens (unrest).
  * Civilian units (settler/worker/caravan/diplomat/scout) cannot attack cities.
  */
 describe('City capture & destruction', () => {
@@ -81,7 +84,7 @@ describe('City capture & destruction', () => {
   };
 
   /** Make an enemy city of civ 1 (returns the created city). */
-  const makeEnemyCity = (population: number, opts: { walls?: boolean; isCapital?: boolean } = {}): any => {
+  const makeEnemyCity = (population: number, opts: { walls?: boolean; isCapital?: boolean; buildings?: string[] } = {}): any => {
     const civ1 = engine.civilizations[1];
     // Reuse a tile far from all existing cities.
     const width = (engine as any).map?.width ?? 80;
@@ -106,9 +109,13 @@ describe('City capture & destruction', () => {
       foodStored: 0,
       foodNeeded: population * 20,
       yields: { food: 0, production: 0, trade: 0, gold: 0, science: 0 },
-      buildings: opts.walls ? ['city_walls'] : [],
+      buildings: opts.buildings ?? (opts.walls ? ['city_walls'] : []),
+      wonders: [],
       isCapital: opts.isCapital === true,
       buildQueue: [],
+      currentProduction: null,
+      productionStored: 0,
+      productionProgress: 0,
     };
     (engine as any).cities.push(city);
     return city;
@@ -194,14 +201,14 @@ describe('City capture & destruction', () => {
     expect(attacker.health).toBeLessThan(100);
   });
 
-  it('city walls make capture harder (defense doubled)', () => {
+  it('city walls make capture harder (defense tripled)', () => {
     const walled = makeEnemyCity(2, { walls: true });
     const open = makeEnemyCity(2);
     const walledPos = adjacentLand(walled);
     const openPos = adjacentLand(open);
 
     // Same attacker vs open city: wins at 0.5 threshold region.
-    // Walled: defense 4 vs attack 2 → attacker wins only if random < 2/6 ≈ 0.333.
+    // Walled: defense 6 vs attack 2 → attacker wins only if random < 2/8 = 0.25.
     // Open:   defense 2 vs attack 2 → attacker wins only if random < 2/4 = 0.5.
     // At random = 0.4 the open city is captured, the walled one is not.
     addUnit('wA', 0, walledPos);
@@ -215,6 +222,150 @@ describe('City capture & destruction', () => {
 
     expect(engine.cities.find((c: any) => c.id === open.id)?.civilizationId).toBe(0);
     expect(engine.cities.find((c: any) => c.id === walled.id)?.civilizationId).toBe(1);
+  });
+
+  it('air units ignore city walls entirely', () => {
+    const walled = makeEnemyCity(2, { walls: true });
+    const pos = adjacentLand(walled);
+    // Bomber (attack 12) vs a walled size-2 city. Walls are ignored, so the
+    // defense is 2 (not 6): attacker wins whenever random < 12/14 ≈ 0.857.
+    addUnit('bomber1', 0, pos, 'bomber', 12);
+
+    randomSpy.mockReturnValue(0.5);
+
+    const result = (engine as any).moveUnit('bomber1', walled.col, walled.row);
+
+    expect(result.success).toBe(true);
+    expect(engine.cities.find((c: any) => c.id === walled.id)?.civilizationId).toBe(0);
+  });
+
+  it('capture destroys city walls plus one random building', () => {
+    const city = makeEnemyCity(3, { buildings: ['city_walls', 'temple', 'granary'] });
+    const pos = adjacentLand(city);
+    addUnit('atkA', 0, pos);
+
+    randomSpy.mockReturnValue(0.05); // attacker wins; building pick → index 0
+
+    (engine as any).moveUnit('atkA', city.col, city.row);
+
+    const captured = engine.cities.find((c: any) => c.id === city.id);
+    expect(captured?.civilizationId).toBe(0);
+    // Walls always destroyed + one random building (temple at random 0.05).
+    expect(captured.buildings).not.toContain('city_walls');
+    expect(captured.buildings).not.toContain('temple');
+    expect(captured.buildings).toContain('granary');
+  });
+
+  it('capture plunders gold from the defender treasury', () => {
+    const city = makeEnemyCity(2);
+    const pos = adjacentLand(city);
+    addUnit('atkB', 0, pos);
+
+    engine.civilizations[1].resources.gold = 500;
+    randomSpy.mockReturnValue(0.05);
+
+    (engine as any).moveUnit('atkB', city.col, city.row);
+
+    // 20% of 500 = 100 (capped at 100) transferred to the capturer (civ 0
+    // started with 100).
+    expect(engine.civilizations[0].resources.gold).toBe(200);
+    expect(engine.civilizations[1].resources.gold).toBe(400);
+  });
+
+  it('capture resets production and marks the city for unrest', () => {
+    const city = makeEnemyCity(2);
+    city.currentProduction = { type: 'unit', itemType: 'warrior', cost: 10 };
+    city.buildQueue = [{ type: 'building', itemType: 'temple', cost: 40 }];
+    city.productionStored = 40;
+    city.productionProgress = 40;
+    const pos = adjacentLand(city);
+    addUnit('atkC', 0, pos);
+
+    randomSpy.mockReturnValue(0.05);
+
+    (engine as any).moveUnit('atkC', city.col, city.row);
+
+    const captured = engine.cities.find((c: any) => c.id === city.id);
+    expect(captured.currentProduction).toBeNull();
+    expect(captured.buildQueue).toHaveLength(0);
+    expect(captured.productionStored).toBe(0);
+    expect(captured.productionProgress).toBe(0);
+    expect(captured.capturedTurns).toBeGreaterThan(0);
+  });
+
+  it('killing the last garrison instantly captures the city', () => {
+    const city = makeEnemyCity(2);
+    // A defender standing on the city tile (civ 1).
+    addUnit('garrison1', 1, { col: city.col, row: city.row });
+    const pos = adjacentLand(city);
+    addUnit('atkD', 0, pos);
+
+    randomSpy.mockReturnValue(0.05); // unit combat AND city combat both won
+
+    const result = (engine as any).moveUnit('atkD', city.col, city.row);
+
+    // Unit combat killed the defender, then the city was captured instantly.
+    expect(result.success).toBe(true);
+    const captured = engine.cities.find((c: any) => c.id === city.id);
+    expect(captured?.civilizationId).toBe(0);
+    expect(captured?.population).toBe(1);
+    // The defender is destroyed (kept briefly for the death animation) and
+    // the (consumed) attacker is gone from the unit list.
+    const garrison = engine.units.find((u: any) => u.id === 'garrison1');
+    expect(garrison).toBeDefined();
+    expect(garrison.isDefeated).toBe(true);
+    expect(engine.units.some((u: any) => u.id === 'atkD')).toBe(false);
+    expect(emitted).toContain('CITY_CAPTURED');
+  });
+
+  it('a failed attack can cost an unwalled city a citizen, but walls protect it', () => {
+    // Unwalled: attacker loses (0.99), then the population-loss roll succeeds
+    // (0.1 < 0.5) → the city drops to population 2.
+    const open = makeEnemyCity(3);
+    const openPos = adjacentLand(open);
+    addUnit('weak1', 0, openPos, 'warrior', 1);
+
+    randomSpy.mockReturnValueOnce(0.99).mockReturnValueOnce(0.1);
+    (engine as any).moveUnit('weak1', open.col, open.row);
+    expect(engine.cities.find((c: any) => c.id === open.id)?.population).toBe(2);
+
+    // Walled: same losing roll, but the walls shield the population.
+    const walled = makeEnemyCity(3, { walls: true });
+    const walledPos = adjacentLand(walled);
+    addUnit('weak2', 0, walledPos, 'warrior', 1);
+
+    randomSpy.mockReturnValueOnce(0.99).mockReturnValueOnce(0.1);
+    (engine as any).moveUnit('weak2', walled.col, walled.row);
+    expect(engine.cities.find((c: any) => c.id === walled.id)?.population).toBe(3);
+  });
+
+  it('metallurgy discovery scraps city walls', () => {
+    const city = makeEnemyCity(2, { buildings: ['city_walls', 'temple'] });
+
+    (engine as any).scrapObsoleteCityWalls(1);
+
+    const after = engine.cities.find((c: any) => c.id === city.id);
+    expect(after.buildings).not.toContain('city_walls');
+    expect(after.buildings).toContain('temple');
+  });
+
+  it('captured cities suffer unrest in the happiness model', () => {
+    const econ = (engine as any).economicManager;
+    const civ0 = engine.civilizations[0];
+    const city = engine.cities.find((c: any) => c.civilizationId === 0);
+    city.buildings = [];
+    city.population = 1;
+    city.capturedTurns = 0;
+
+    const calm = econ.cityHappiness(city, civ0);
+    expect(calm.unhappiness).toBe(0);
+    expect(calm.disorder).toBe(false);
+
+    city.capturedTurns = 3;
+    const restless = econ.cityHappiness(city, civ0);
+    // Resentful captured citizens push the city into disorder.
+    expect(restless.unhappiness).toBeGreaterThan(calm.unhappiness);
+    expect(restless.disorder).toBe(true);
   });
 });
 
