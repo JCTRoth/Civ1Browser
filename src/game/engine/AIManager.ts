@@ -622,22 +622,32 @@ export class AIManager {
             // Store enemy location in player storage for civilization-wide decision making
             this.gameEngine.recordEnemyLocation(unit.civilizationId, enemyResult);
 
-            // Mark that scout found enemy
-            unit.enemyFound = true;
-            unit.enemyLocation = { col: enemyResult.col, row: enemyResult.row };
+            // Civ1: a scout that spots a lone enemy UNIT keeps exploring — the
+            // army handles units. Only an enemy CITY is valuable enough to
+            // report home (it feeds the offensive plan so the army can
+            // besiege it). Previously the scout returned home on ANY enemy
+            // contact, so enemy cities were never recorded and the AI never
+            // laid siege (its armies only ever chased dead unit locations).
+            if (enemyResult.targetType === 'city') {
+              // Mark that scout found enemy
+              unit.enemyFound = true;
+              unit.enemyLocation = { col: enemyResult.col, row: enemyResult.row };
 
-            // Start returning to nearest city
-            const nearestCity = AIUtility.findNearestOwnCity(
-              unit.col,
-              unit.row,
-              unit.civilizationId,
-              this.gameEngine.cities,
-              (col1, row1, col2, row2) => this.gameEngine.squareGrid!.squareDistance(col1, row1, col2, row2)
-            );
-            if (nearestCity) {
-              console.log(`[AI-SCOUT] Scout returning to nearest city at (${nearestCity.col}, ${nearestCity.row})`);
-              return { col: nearestCity.col, row: nearestCity.row };
+              // Start returning to nearest city
+              const nearestCity = AIUtility.findNearestOwnCity(
+                unit.col,
+                unit.row,
+                unit.civilizationId,
+                this.gameEngine.cities,
+                (col1, row1, col2, row2) => this.gameEngine.squareGrid!.squareDistance(col1, row1, col2, row2)
+              );
+              if (nearestCity) {
+                console.log(`[AI-SCOUT] Scout returning to nearest city at (${nearestCity.col}, ${nearestCity.row})`);
+                return { col: nearestCity.col, row: nearestCity.row };
+              }
             }
+            // Enemy unit spotted: record it for the army, then keep exploring
+            // (fall through to the zone search below) to find their cities.
           }
         } else {
           console.log(`[AI-SCOUT] No enemy found near (${unit.col}, ${unit.row}), continuing exploration`);
@@ -1081,14 +1091,19 @@ export class AIManager {
     const storage = this.gameEngine.getPlayerStorage(unit.civilizationId);
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
 
-    const defensiveTarget = this.findDefensiveAssignment(unit, storage, roundNumber);
-    if (defensiveTarget) {
-      return defensiveTarget;
-    }
-
+    // The explicit offensive plan (a deliberate siege decision, already gated
+    // on army strength and NOT when a city is critically threatened) takes
+    // priority over generic defensive shuffling. Previously defense ran first,
+    // so minor border pressure permanently pulled units away from the attack
+    // and the AI sat in an AI-vs-AI stalemate, never besieging enemy cities.
     const offensivePlanTarget = this.getOffensivePlanTarget(unit, storage);
     if (offensivePlanTarget) {
       return offensivePlanTarget;
+    }
+
+    const defensiveTarget = this.findDefensiveAssignment(unit, storage, roundNumber);
+    if (defensiveTarget) {
+      return defensiveTarget;
     }
 
     const offensiveTarget = this.findOffensiveAssignment(unit, storage, roundNumber);
@@ -1107,7 +1122,12 @@ export class AIManager {
     storage.turnData = storage.turnData || {};
 
     const threatenedCities = this.identifyThreatenedCities(civilizationId, storage, roundNumber);
-    if (threatenedCities.length > 0) {
+    // A genuinely besieged city (garrison clearly overwhelmed) takes priority
+    // over any offense. But minor border pressure must NOT permanently cancel
+    // the offensive plan — that left AI-vs-AI stuck in a defensive stalemate
+    // where neither side ever attacked the other's cities.
+    const criticalThreats = threatenedCities.filter((t) => (t.assessment?.netThreat ?? 0) >= 2.5);
+    if (criticalThreats.length > 0) {
       storage.turnData.offensivePlan = null;
       return;
     }
@@ -1216,7 +1236,10 @@ export class AIManager {
   }
 
   private estimateRequiredStrength(targetType: 'city' | 'unit' | undefined): number {
-    const base = targetType === 'city' ? 10 : 5;
+    // A sizeable but not overwhelming force: ~3 units can mount a siege.
+    // (The old base of 10 needed ~4+ units AND a completely calm border, so
+    // the AI almost never attacked — it sat in a defensive stalemate.)
+    const base = targetType === 'city' ? 7 : 5;
     const difficulty = this.gameEngine.gameSettings?.difficulty ?? 'PRINCE';
     const modifiers: Record<string, number> = {
       CHIEFTAIN: 1.1,

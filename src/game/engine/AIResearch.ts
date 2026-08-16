@@ -293,7 +293,13 @@ export class AIResearch {
 
     for (const tech of TECHNOLOGIES_DATA) {
       if (hasTech(tech.id)) continue;
-      if (tech.researched) continue;
+      // NOTE: do NOT skip `tech.researched` here. The engine's shared tree
+      // marks a tech "researched" when ANY civ completes it (union), but each
+      // civilization researches independently in Civ1 — a tech another civ
+      // already discovered is still a valid (and often the best) choice for
+      // this civ. Skipping it here made the AI re-pick the same high-value
+      // tech every turn while `setResearch` (which also read the union flag)
+      // silently rejected it → permanent research freeze.
 
       // Check prerequisites
       const prereqs = tech.prerequisites ?? [];

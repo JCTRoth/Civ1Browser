@@ -298,7 +298,9 @@ describe('EconomicManager happiness & disorder', () => {
 
 describe('EconomicManager research (compounding fix)', () => {
   it('resources.science is the per-turn amount, not cumulative', () => {
-    const civ = makeCiv(0, { taxRate: 30, scienceRate: 50, luxuryRate: 20 });
+    // A human (isHuman) civ keeps its explicitly-set rates — the AI-only
+    // auto-rate fallback (raiseTaxForAI) must not override them here.
+    const civ = makeCiv(0, { taxRate: 30, scienceRate: 50, luxuryRate: 20, isHuman: true });
     const city = makeCity(0, 10);
     const engine = makeEngine({ civilizations: [civ], cities: [city] });
     const econ = new EconomicManager(engine);

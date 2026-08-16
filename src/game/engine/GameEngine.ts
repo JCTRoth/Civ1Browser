@@ -2342,14 +2342,27 @@ export default class GameEngine {
   /**
    * Set current research for civilization. `savedProgress` lets the UI restore
    * a tech's previously-saved progress when switching research (default 0).
+   *
+   * Each civilization researches independently (Civ1): the shared tree's
+   * `researched` flag is the union across ALL civs and only drives UI
+   * coloring — it must NOT gate what THIS civ can research. Otherwise a tech
+   * the other civ discovered first would be silently rejected here while the
+   * AI re-selected it every turn (research freeze).
    */
   setResearch(civId, techId, savedProgress = 0) {
     const civ = this.civilizations[civId];
     const tech = this.technologies.find(t => t.id === techId);
-    
-    if (civ && tech && tech.available && !tech.researched) {
-      civ.currentResearch = tech;
-      civ.researchProgress = savedProgress || 0;
+
+    if (civ && tech) {
+      // Gate on THIS civ's own techs + prerequisites only.
+      const civTechs = Array.isArray(civ.technologies) ? civ.technologies : [];
+      const hasTech = (id: string): boolean => civTechs.includes(String(id));
+      const prereqs = tech.prerequisites ?? [];
+      const prereqsMet = prereqs.length === 0 || prereqs.every(hasTech);
+      if (prereqsMet) {
+        civ.currentResearch = tech;
+        civ.researchProgress = savedProgress || 0;
+      }
     }
   }
 

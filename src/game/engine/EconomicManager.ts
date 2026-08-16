@@ -84,6 +84,13 @@ export const CITY_RADIUS = 2;
 export const CITY_CENTER_MIN = { food: 2, production: 1, trade: 1 };
 /** Tax rate the AI drifts back down to when its treasury is healthy. */
 export const AI_BALANCED_TAX = 40;
+/**
+ * Minimum science rate the AI keeps whenever it can afford to (unless it is
+ * genuinely bankrupt) so AI-vs-AI games don't lock into 0% science forever.
+ */
+export const AI_SCIENCE_FLOOR = 20;
+/** Absolute floor the AI never drops tax below while commerce exists. */
+export const AI_MIN_TAX = 10;
 
 const clamp = (v: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, v));
@@ -658,10 +665,14 @@ export class EconomicManager {
    * AI dynamic-rate fallback (spec: "allow AI to auto-adjust rates based on
    * gold reserve"). Priorities:
    *  1. Luxury: keep cities out of disorder (disorder zeroes their commerce).
-   *  2. Short of gold: raise tax just enough that income + treasury covers
-   *     upkeep (but keep at least some science so the AI keeps researching).
-   *  3. Wealthy: lower tax back toward a healthy science-focused balance so
-   *     the AI researches instead of hoarding gold at 100% tax.
+   *  2. Tax: cover upkeep with the treasury as a cushion.
+   *  3. Science: keep a floor so the AI keeps researching when it can.
+   *
+   * The old policy oscillated between 100% tax (→ disorder → zero income) and
+   * 100% luxury (→ bankruptcy → unit disbanding) on consecutive turns because
+   * it reacted to each turn's snapshot with extreme swings and no hysteresis.
+   * This version moves rates gradually (≤10 pts/turn) toward a stable target,
+   * never zeroes luxury, and only sacrifices science when genuinely bankrupt.
    */
   private raiseTaxForAI(civ: Civilization, cities: City[]): void {
     const gov = getGovernment(civ?.government);
@@ -669,77 +680,44 @@ export class EconomicManager {
     const gold = civ.resources?.gold ?? 0;
     const upkeep = this.totalUpkeep(civ.id);
     const commerce = cities.reduce((t: number, c: City) => t + this.cityCommerce(c), 0);
-    const currentTax = cities.reduce((t: number, c: City) => t + this.cityOutputs(c, civ).tax, 0);
-
-    // ── 1. Luxury: prevent disorder (zeroes a city's commerce entirely) ──
-    const luxury = Math.min(100, Math.max(rates.luxury, this.luxuryNeedPct(civ, cities)));
-
-    // ── 2. Wealthy: restore science (lower tax toward a balanced target) ──
-    // Only act when the treasury has a real safety buffer (2 turns of upkeep)
-    // AND the reduced tax still covers the current upkeep — otherwise the AI
-    // just crashes its income below sustainability and disbands its army.
-    if (gold > upkeep * 2 && rates.tax > AI_BALANCED_TAX) {
-      const minTaxForUpkeep = commerce > 0
-        ? Math.min(gov.maxTaxRate, Math.ceil((upkeep / commerce) * 100))
-        : AI_BALANCED_TAX;
-      const targetTax = Math.max(AI_BALANCED_TAX, minTaxForUpkeep);
-      if (targetTax < rates.tax) {
-        // Ease down gradually so the treasury buffer isn't blown through.
-        const newTax = Math.max(targetTax, rates.tax - 10);
-        const maxScience = 100 - newTax - luxury;
-        // Give the freed percentage mostly to science (a little to luxury
-        // when luxury is below its need).
-        const newScience = Math.min(maxScience, rates.science + Math.round((rates.tax - newTax) * 0.8));
-        const newLuxury = 100 - newTax - Math.max(0, newScience);
-        civ.taxRate = newTax;
-        civ.scienceRate = Math.max(0, newScience);
-        civ.luxuryRate = Math.max(luxury, newLuxury);
-      }
-      return;
-    }
-
-    // ── 3. Short of gold: raise tax just enough to cover this turn's upkeep ──
-    // If we're healthy, just make sure luxury is at its required level.
-    if (gold + currentTax >= upkeep) {
-      if (luxury > rates.luxury) {
-        const t = Math.min(gov.maxTaxRate, 100 - luxury);
-        civ.taxRate = t;
-        civ.scienceRate = Math.max(0, 100 - t - luxury);
-        civ.luxuryRate = luxury;
-      }
-      return;
-    }
     if (commerce <= 0) return;
-    const shortfall = upkeep - gold - currentTax;
-    const neededPct = Math.min(gov.maxTaxRate, Math.ceil((shortfall / commerce) * 100));
-    if (neededPct <= rates.tax) {
-      if (luxury > rates.luxury) {
-        const t = Math.min(gov.maxTaxRate, 100 - luxury);
-        civ.taxRate = t;
-        civ.scienceRate = Math.max(0, 100 - t - luxury);
-        civ.luxuryRate = luxury;
-      }
-      return;
+
+    // ── Luxury needed to prevent disorder (the most valuable use of
+    //    commerce — a disorder city contributes nothing). Never spend more on
+    //    luxury than leaves room for the tax + science floors. ──
+    const luxuryNeed = this.luxuryNeedPct(civ, cities);
+    const luxury = Math.min(luxuryNeed, 100 - AI_MIN_TAX - AI_SCIENCE_FLOOR);
+
+    // ── Tax target: cover this turn's upkeep (treasury cushions it). While
+    //    the treasury is non-negative keep the science floor; in a genuine
+    //    deficit let tax take science's share (luxury still wins). ──
+    const taxNeed = Math.ceil((Math.max(0, upkeep - Math.max(0, gold)) / commerce) * 100);
+    const scienceAllowance = gold < 0 ? 0 : AI_SCIENCE_FLOOR;
+    const targetTax = Math.max(
+      AI_MIN_TAX,
+      Math.min(gov.maxTaxRate, 100 - luxury - scienceAllowance, taxNeed),
+    );
+
+    // ── Move gradually toward the target (never jump 0↔100 between turns,
+    //    which is what made the old policy oscillate). ──
+    const MAX_DELTA = 10;
+    const newTax = targetTax >= rates.tax
+      ? Math.min(targetTax, rates.tax + MAX_DELTA)
+      : Math.max(targetTax, rates.tax - MAX_DELTA);
+
+    // ── Fill the luxury need first, science gets the rest. If that starves
+    //    science below its floor while luxury sits above its need, trim the
+    //    surplus luxury back into science. ──
+    let newLuxury = Math.min(luxury, 100 - newTax);
+    let newScience = 100 - newTax - newLuxury;
+    if (newScience < AI_SCIENCE_FLOOR && newLuxury > luxuryNeed) {
+      const trim = Math.min(newLuxury - luxuryNeed, AI_SCIENCE_FLOOR - newScience);
+      newLuxury -= trim;
+      newScience += trim;
     }
 
-    // Raise tax, redistribute the remaining 100% over science/luxury (do NOT
-    // re-normalise tax — it must stay at neededPct). Luxury keeps its need.
-    const t = neededPct;
-    let s = rates.science;
-    let l = luxury;
-    const otherSum = s + l;
-    if (t + otherSum > 100 && otherSum > 0) {
-      const scale = (100 - t) / otherSum;
-      s = Math.round(s * scale);
-      l = 100 - t - s;
-      if (l < luxury && t < 100 - luxury) {
-        // Try to keep luxury at its need by taking from science.
-        l = luxury;
-        s = 100 - t - l;
-      }
-    }
-    civ.taxRate = t;
-    civ.scienceRate = Math.max(0, s);
-    civ.luxuryRate = Math.max(0, l);
+    civ.taxRate = Math.max(0, Math.min(gov.maxTaxRate, Math.round(newTax)));
+    civ.scienceRate = Math.max(0, Math.round(newScience));
+    civ.luxuryRate = Math.max(0, Math.round(newLuxury));
   }
 }
