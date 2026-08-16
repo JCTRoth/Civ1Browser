@@ -139,6 +139,10 @@ export interface Unit {
   homeCityId?: string | null;
   plannedPath?: { col: number; row: number }[];
   areTurnsDone?: boolean; // Set to true when unit has no moves left or is fortified/sleeping
+  /** Civ1 multi-turn improvement construction: improvement being worked on. */
+  workTarget?: string | null;
+  /** Civ1 multi-turn improvement construction: worker-turns remaining. */
+  workTurns?: number;
 }
 
 export interface City {
@@ -449,8 +453,12 @@ export interface GameEngine {
   skipUnit(unitId: string): void;
   buildImprovement(unitId: string, improvement: string): boolean;  /** Whether a unit could build this improvement on its current tile (ignores moves). */
   canBuildImprovement(unitId: string, improvementType: string): boolean;
-  /** Whether the unit has enough moves (and isn't fortified) to build this improvement now. */
+  /** Whether the unit can start/continue improvement work this turn (has moves, not fortified). */
   hasMovesForImprovement(unitId: string, improvementType: string): boolean;
+  /** Civ1 worker-turns to build an improvement on a terrain type. */
+  improvementBuildTurns(type: string, terrain: string): number;
+  /** Advance an in-progress improvement by one worker-turn; true when completed. */
+  advanceUnitWork(unitId: string): boolean;
   /** Whether a settler can found a city on its current tile. */
   canFoundCity(settlerId: string): boolean;  cleanPollution(unitId: string): boolean;
   disbandUnit(unitId: string): boolean;

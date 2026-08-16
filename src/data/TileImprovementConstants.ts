@@ -25,6 +25,17 @@ export interface TileImprovementConstants {
     clearsTo?: string;
     /** Terrains on which building this clears the tile. */
     clearableTerrains?: string[];
+    /**
+     * Civ1 construction time in worker-turns, per terrain type (the source of
+     * truth for both buildability — a missing entry means the improvement
+     * cannot be built there — and how long a settler works on the tile).
+     */
+    turnsByTerrain?: Record<string, number>;
+    /**
+     * Civ1 terrain transformation: terrain -> new terrain. Applied when the
+     * improvement completes (e.g. irrigating grassland becomes forest).
+     */
+    convertsToByTerrain?: Record<string, string>;
     /** Per-terrain yield effects (Civ1 mines: hills +3 production, mountains +1). */
     effectsByTerrain?: Record<string, Record<string, number>>;
     /** Terrains on which this improvement grants +1 trade (Civ1 road on grassland/plains/desert). */
@@ -54,9 +65,27 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
         effects: {
             food: 1,
         },
-        terrainRestrictions: ['grassland', 'plains', 'desert'],
-        convertsTo: 'grassland',
-        convertibleTerrains: ['jungle', 'swamp'],
+        // Civ1 construction times (worker-turns) by terrain — a missing entry
+        // means the improvement cannot be built there (mountain/ocean/tundra).
+        turnsByTerrain: {
+            arctic: 4,
+            desert: 5,
+            forest: 5,
+            grassland: 5,
+            hills: 10,
+            jungle: 15,
+            plains: 5,
+            river: 5,
+            swamp: 15,
+        },
+        terrainRestrictions: ['arctic', 'desert', 'forest', 'grassland', 'hills', 'jungle', 'plains', 'river', 'swamp'],
+        // Civ1 terrain transformation: irrigating jungle/swamp reclaims them to
+        // grassland; irrigating grassland becomes forest.
+        convertsToByTerrain: {
+            jungle: 'grassland',
+            swamp: 'grassland',
+            grassland: 'forest',
+        },
         display: {
             label: 'I',
             color: '#00ff77ff',
@@ -70,6 +99,22 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
         turns: 1,
         effects: {
             trade: 0
+        },
+        // Civ1 construction times by terrain (roads can be built anywhere,
+        // including tundra and even ocean in the reference table).
+        turnsByTerrain: {
+            arctic: 6,
+            desert: 2,
+            forest: 4,
+            grassland: 2,
+            hills: 4,
+            jungle: 4,
+            mountains: 6,
+            ocean: 2,
+            plains: 2,
+            river: 2,
+            swamp: 4,
+            tundra: 2,
         },
         // Civ1: roads give +1 trade only on grassland/plains/desert (never on rivers).
         tradeBonusTerrains: ['grassland', 'plains', 'desert'],
@@ -96,6 +141,21 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
             trade: 0.5
         },
         requiredTech: 'railroad',
+        // Civ1 construction times by terrain (railroads cannot be built on
+        // arctic). Railroads always require an existing road.
+        turnsByTerrain: {
+            desert: 4,
+            forest: 8,
+            grassland: 4,
+            hills: 8,
+            jungle: 8,
+            mountains: 12,
+            ocean: 4,
+            plains: 4,
+            river: 4,
+            swamp: 8,
+            tundra: 4,
+        },
         // Civ1: moving railroad-to-road costs no movement point (tiny epsilon for A*).
         movementCost: 0.05,
         display: {
@@ -113,17 +173,32 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
         effects: {
             production: 0
         },
+        // Civ1 construction times by terrain (no mines on ocean/river/tundra).
+        // Grassland, plains and desert can be mined (10/15/5 turns).
+        turnsByTerrain: {
+            arctic: 8,
+            desert: 5,
+            forest: 5,
+            grassland: 10,
+            hills: 10,
+            jungle: 15,
+            mountains: 10,
+            plains: 15,
+            swamp: 15,
+        },
         // Civ1: +1 shield on mountains, +3 shields on hills.
         effectsByTerrain: {
             mountains: { production: 1 },
             hills: { production: 3 }
         },
-        terrainRestrictions: ['mountains', 'hills'],
-        // Civ1: mining converts jungle/swamp to forest; "clear" turns forest into plains.
-        convertsTo: 'forest',
-        convertibleTerrains: ['jungle', 'swamp'],
-        clearsTo: 'plains',
-        clearableTerrains: ['forest'],
+        terrainRestrictions: ['arctic', 'desert', 'forest', 'grassland', 'hills', 'jungle', 'mountains', 'plains', 'swamp'],
+        // Civ1 terrain transformation: mining jungle/swamp converts to forest;
+        // clearing forest with a mine turns it into plains.
+        convertsToByTerrain: {
+            jungle: 'forest',
+            swamp: 'forest',
+            forest: 'plains',
+        },
         display: {
             label: 'M',
             color: '#444444',
@@ -137,6 +212,20 @@ export const IMPROVEMENT_PROPERTIES: Record<string, TileImprovementConstants> = 
         turns: 6,
         effects: {
             defense: 0,
+        },
+        // Civ1 construction times by terrain (no fortress on arctic).
+        turnsByTerrain: {
+            desert: 5,
+            forest: 6,
+            grassland: 5,
+            hills: 6,
+            jungle: 6,
+            mountains: 7,
+            ocean: 5,
+            plains: 5,
+            river: 5,
+            swamp: 6,
+            tundra: 5,
         },
         // Civ1: +100% defense, applied last in the combat calculation.
         defenseMultiplier: 2,

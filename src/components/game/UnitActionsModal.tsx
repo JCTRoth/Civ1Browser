@@ -67,6 +67,13 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
           </div>
         </div>
 
+        {/* Civ1 multi-turn construction progress */}
+        {contextMenu.unit?.workTarget && (
+          <div className="unit-context-menu__work">
+            🚧 Working on {contextMenu.unit.workTarget} ({contextMenu.unit.workTurns} turn{contextMenu.unit.workTurns !== 1 ? 's' : ''} left)
+          </div>
+        )}
+
         <div className="unit-context-menu__scroll">
           {/* Unit Actions */}
           {contextMenu.unit && (

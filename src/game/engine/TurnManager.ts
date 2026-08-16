@@ -560,6 +560,15 @@ export class TurnManager {
       unit.movesRemaining = unitProps?.movement || 1;
       unit.areTurnsDone = false;
       unit.isSkipped = false; // "Skip turn" only applies to the current turn
+
+      // Civ1 multi-turn settler construction: a settler with in-progress
+      // improvement work spends this turn on the site. advanceUnitWork
+      // decrements the worker-turns and — if still under construction —
+      // consumes the moves we just reset; when it completes the settler keeps
+      // its fresh moves and can move on.
+      if (unit.workTarget) {
+        this.gameEngine.advanceUnitWork(unit.id);
+      }
     });
   }
 

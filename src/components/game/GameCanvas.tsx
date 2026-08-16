@@ -1341,6 +1341,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     touchMovedRef.current = false;
   };
 
+  /** "Road construction started (2 turns)" — Civ1 multi-turn construction feedback. */
+  const buildStartedMessage = (engine: GameEngine, unit: any, improvement: string): string => {
+    const tile = engine.getTileAt(unit.col, unit.row) as { terrain?: string; type?: string } | undefined;
+    const terrain = tile?.terrain || tile?.type || '';
+    const turns = engine.improvementBuildTurns?.(improvement, terrain) ?? 1;
+    const label = improvement === 'mines' ? 'Mine' : improvement.charAt(0).toUpperCase() + improvement.slice(1);
+    return `${label} construction started (${turns} turn${turns > 1 ? 's' : ''})`;
+  };
+
   const executeContextAction = (action: string) => {
     console.log(`[ContextMenu] Executing action: ${action}`, { contextMenu });
 
@@ -1471,7 +1480,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
             if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
-              message: 'Road built'
+              message: buildStartedMessage(gameEngine, unit, 'road'),
             });
           } else {
             if (actions?.addNotification) actions.addNotification({
@@ -1491,7 +1500,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
             if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
-              message: 'Irrigation built'
+              message: buildStartedMessage(gameEngine, unit, 'irrigation'),
             });
           } else {
             if (actions?.addNotification) actions.addNotification({
@@ -1511,7 +1520,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
             if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
-              message: 'Mine built'
+              message: buildStartedMessage(gameEngine, unit, 'mines'),
             });
           } else {
             if (actions?.addNotification) actions.addNotification({
@@ -1531,7 +1540,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
             if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
-              message: 'Railroad built'
+              message: buildStartedMessage(gameEngine, unit, 'railroad'),
             });
           } else {
             if (actions?.addNotification) actions.addNotification({

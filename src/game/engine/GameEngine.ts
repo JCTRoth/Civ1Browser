@@ -1695,6 +1695,14 @@ export default class GameEngine {
       const fromCol = unit.col;
       const fromRow = unit.row;
 
+      // A settler that walks away abandons any in-progress improvement work
+      // (Civ1: construction requires the settler to stay on the tile).
+      if (unit.workTarget) {
+        console.log(`[GameEngine] Unit ${unit.id} abandoned ${unit.workTarget} work by moving`);
+        unit.workTarget = null;
+        unit.workTurns = 0;
+      }
+
       unit.col = targetCol;
       unit.row = targetRow;
       unit.movesRemaining = (unit.movesRemaining || 0) - moveCost;
@@ -3194,142 +3202,69 @@ export default class GameEngine {
   }
 
   /**
-   * Build an improvement (road, farm, etc.)
+   * Start (or continue) building an improvement on the tile the settler stands
+   * on. Civ I: construction takes a fixed number of worker-turns depending on
+   * the improvement and the terrain; the settler stays on the tile and works
+   * until the timer expires. Each call performs ONE turn of work and consumes
+   * the settler's movement — the remaining turns are advanced by
+   * `advanceUnitWork` at the start of each subsequent turn.
    */
   buildImprovement(unitId: string, improvementType: string): boolean {
     const type = GameEngine.canonicalImprovementType(improvementType);
     console.log(`[GameEngine] buildImprovement called: unitId=${unitId}, type=${type}`);
-    
+
     const unit = this.units.find(u => u.id === unitId);
     if (!unit) {
       console.warn(`[GameEngine] Build: Unit ${unitId} not found`);
       return false;
     }
 
-    console.log(`[GameEngine] Build: Unit found:`, {
-      id: unit.id,
-      type: unit.type,
-      col: unit.col,
-      row: unit.row,
-      movesRemaining: unit.movesRemaining
-    });
+    // Feasibility (terrain construction-time table, tech prerequisites, river
+    // bridge, irrigation water adjacency, upgrade prerequisite, existing
+    // improvement). Read-only — mirrors canBuildImprovement.
+    if (!this.canBuildImprovement(unitId, type)) {
+      console.warn(`[GameEngine] Build: ${type} not feasible at (${unit.col},${unit.row})`);
+      return false;
+    }
 
-    // Get improvement properties to determine build time
-    const improvementProps = IMPROVEMENT_PROPERTIES[type];
-    const buildTurns = improvementProps?.turns || 1; // Default to 1 if not found
-    console.log(`[GameEngine] Build: Improvement props:`, improvementProps, 'turns:', buildTurns);
-
-    // Check if unit can perform this action
-    const canPerform = UnitActionManager.canPerformAction(unit, 'build_improvement', buildTurns);
-    console.log(`[GameEngine] Build: Can perform action:`, canPerform);
-    
+    // Movement gating: the settler needs at least some movement to work the
+    // turn (a working settler that already spent its turn cannot work again).
+    const canPerform = UnitActionManager.canPerformAction(unit, 'build_improvement', 1);
     if (!canPerform) {
-      console.warn(`[GameEngine] Build: Unit cannot perform this action`);
+      console.warn(`[GameEngine] Build: Unit ${unit.id} cannot start work (no moves / fortified)`);
       return false;
     }
 
-    const tile = this.getTileAt(unit.col, unit.row);
-    if (!tile) {
-      console.warn(`[GameEngine] Build: No tile at (${unit.col},${unit.row})`);
-      return false;
-    }
-
-    console.log(`[GameEngine] Build: Tile found:`, {
-      col: tile.col,
-      row: tile.row,
-      terrain: tile.terrain,
-      improvement: tile.improvement
-    });
-
+    const tile = this.getTileAt(unit.col, unit.row)!;
     const terrain = tile.terrain || tile.type || '';
+    const requiredTurns = this.improvementBuildTurns(type, terrain);
 
-    // Tech prerequisites (railroad, fortress, bridge-building on rivers).
-    if (improvementProps?.requiredTech && !this.hasResearched(unit.civilizationId, improvementProps.requiredTech)) {
-      console.warn(`[GameEngine] Build: ${type} requires tech ${improvementProps.requiredTech}`);
-      return false;
-    }
-    if (improvementProps?.riverBridgeRequired && terrain === TERRAIN_TYPES.RIVER) {
-      if (!this.hasResearched(unit.civilizationId, BRIDGE_BUILDING_TECH)) {
-        console.warn(`[GameEngine] Build: Road on river requires tech ${BRIDGE_BUILDING_TECH}`);
-        return false;
-      }
-    }
-
-    // Civ1 terrain conversion (irrigation on jungle/swamp -> grassland, mine on
-    // jungle/swamp -> forest, clear forest -> plains).
-    if (improvementProps?.convertibleTerrains?.includes(terrain)) {
-      this.convertTile(tile, improvementProps.convertsTo);
-      unit.movesRemaining = (unit.movesRemaining || 0) - buildTurns;
-      this.updateUnitTurnsDoneFlag(unit);
-      console.log(`[GameEngine] Unit ${unit.id} converted ${terrain} -> ${improvementProps.convertsTo} at (${unit.col},${unit.row})`);
-      if (this.onStateChange) {
-        this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
-      }
-      if (this.unitTurnQueue) {
-        this.unitTurnQueue.checkUnitStatus(unitId);
-      }
-      this.checkAndEndTurnIfNoMoves();
-      return true;
-    }
-    if (improvementProps?.clearableTerrains?.includes(terrain)) {
-      this.convertTile(tile, improvementProps.clearsTo);
-      unit.movesRemaining = (unit.movesRemaining || 0) - buildTurns;
-      this.updateUnitTurnsDoneFlag(unit);
-      console.log(`[GameEngine] Unit ${unit.id} cleared ${terrain} -> ${improvementProps.clearsTo} at (${unit.col},${unit.row})`);
-      if (this.onStateChange) {
-        this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
-      }
-      if (this.unitTurnQueue) {
-        this.unitTurnQueue.checkUnitStatus(unitId);
-      }
-      this.checkAndEndTurnIfNoMoves();
-      return true;
+    // Start work if not already working on this exact improvement; a settler
+    // that is already working just spends another turn on the site. The turn
+    // spent NOW is the first of the required worker-turns, so the remaining
+    // count starts at requiredTurns - 1 (advanceUnitWork decrements the rest).
+    if (unit.workTarget !== type) {
+      unit.workTarget = type;
+      unit.workTurns = requiredTurns - 1;
+      console.log(`[GameEngine] Unit ${unit.id} starts ${type} on ${terrain} (${requiredTurns} worker-turns)`);
+    } else {
+      console.log(`[GameEngine] Unit ${unit.id} continues ${type} (${unit.workTurns} worker-turns left)`);
     }
 
-    // Check terrain restrictions
-    if (improvementProps?.terrainRestrictions) {
-      if (!improvementProps.terrainRestrictions.includes(terrain)) {
-        console.warn(`[GameEngine] Build: Terrain ${terrain} not valid for ${type} (requires: ${improvementProps.terrainRestrictions.join(', ')})`);
-        return false;
-      }
-    }
-
-    // Check if this improvement requires a prerequisite improvement (upgrade path)
-    const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[type];
-    if (requiredBase) {
-      if (tile.improvement !== requiredBase) {
-        console.warn(`[GameEngine] Build: ${type} requires existing ${requiredBase}, tile has: ${tile.improvement}`);
-        return false;
-      }
-      // Upgrade: replace the existing improvement
-    } else if (tile.improvement) {
-      // No upgrade path and tile already has an improvement
-      console.log(`[GameEngine] Build: Tile already has improvement: ${tile.improvement}`);
-      return false;
-    }
-
-    // Build the improvement
-    tile.improvement = type;
-    unit.movesRemaining = (unit.movesRemaining || 0) - buildTurns;
-
-    // Update turn done status
+    // The settler spends this turn working and cannot move.
+    unit.movesRemaining = 0;
     this.updateUnitTurnsDoneFlag(unit);
 
-    console.log(`[GameEngine] Unit ${unit.id} built ${type} at (${unit.col},${unit.row}) in ${buildTurns} turns. Moves remaining: ${unit.movesRemaining}`);
-
     if (this.onStateChange) {
-      this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
+      this.onStateChange('IMPROVEMENT_WORK_STARTED', {
+        unit, tile, improvementType: type, turns: unit.workTurns,
+      });
     }
 
-    // Remove the worker from the turn queue if it spent all its moves, so the
-    // queue can empty and auto-end-turn can trigger after building.
     if (this.unitTurnQueue) {
       this.unitTurnQueue.checkUnitStatus(unitId);
     }
-
-    // Check if turn should end
     this.checkAndEndTurnIfNoMoves();
-
     return true;
   }
 
@@ -3344,7 +3279,8 @@ export default class GameEngine {
 
   /**
    * Whether a unit could currently build an improvement on the tile it is
-   * standing on (tile, terrain restrictions, upgrade prerequisite, existing
+   * standing on (terrain construction-time table, tech prerequisites, river
+   * bridge, irrigation water adjacency, upgrade prerequisite, existing
    * improvement). Read-only — mirrors the feasibility checks of
    * `buildImprovement` without consuming movement. Movement is checked
    * separately via `hasMovesForImprovement`.
@@ -3362,28 +3298,126 @@ export default class GameEngine {
 
     const terrain = tile.terrain || tile.type || '';
 
+    // Civ1 construction-time table defines which terrains each improvement can
+    // be built on (a missing per-terrain entry means "not buildable there").
+    if (props.turnsByTerrain) {
+      if (props.turnsByTerrain[terrain] === undefined) return false;
+    } else if (props.terrainRestrictions && !props.terrainRestrictions.includes(terrain)) {
+      return false;
+    }
+
     // Tech prerequisites (railroad, fortress, bridge-building on rivers).
     if (props.requiredTech && !this.hasResearched(unit.civilizationId, props.requiredTech)) return false;
     if (props.riverBridgeRequired && terrain === TERRAIN_TYPES.RIVER) {
       if (!this.hasResearched(unit.civilizationId, BRIDGE_BUILDING_TECH)) return false;
     }
 
-    // Terrain-conversion actions are feasible on their convertible/clearable terrains.
-    if (props.convertibleTerrains?.includes(terrain)) return true;
-    if (props.clearableTerrains?.includes(terrain)) return true;
-
-    if (props.terrainRestrictions) {
-      if (!props.terrainRestrictions.includes(terrain)) return false;
+    // Civ1: irrigation requires fresh water (river/lake) or an already
+    // irrigated tile orthogonally adjacent.
+    if (type === IMPROVEMENT_TYPES.IRRIGATION) {
+      if (!this.hasFreshWaterAdjacency(unit.col, unit.row)) return false;
     }
 
-    const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[type];
-    if (requiredBase) {
-      if (tile.improvement !== requiredBase) return false;
-    } else if (tile.improvement) {
-      return false;
+    // Terrain transformations (e.g. irrigate jungle -> grassland) are allowed
+    // regardless of an existing road/railroad on the tile. Plain builds are
+    // blocked by an existing improvement unless there is an upgrade path.
+    const transformsTerrain = !!props.convertsToByTerrain && terrain in props.convertsToByTerrain;
+    if (!transformsTerrain) {
+      const requiredBase = (IMPROVEMENT_REQUIREMENTS as Record<string, string>)[type];
+      if (requiredBase) {
+        if (tile.improvement !== requiredBase) return false;
+      } else if (tile.improvement) {
+        return false;
+      }
     }
 
     return true;
+  }
+
+  /**
+   * Civ1 worker-turns required to build an improvement on a terrain type
+   * (from the per-terrain construction-time table). Accepts both 'mine' and
+   * 'mines' (the canonical constant key).
+   */
+  improvementBuildTurns(type: string, terrain: string): number {
+    const canonical = GameEngine.canonicalImprovementType(type);
+    const props = IMPROVEMENT_PROPERTIES[canonical];
+    const perTerrain = props?.turnsByTerrain?.[terrain];
+    if (perTerrain !== undefined) return perTerrain;
+    return props?.turns || 1;
+  }
+
+  /**
+   * Civ1 irrigation rule: a tile can only be irrigated when it is horizontally
+   * or vertically adjacent to fresh water (a river or lake) or to another tile
+   * that has already been irrigated.
+   */
+  private hasFreshWaterAdjacency(col: number, row: number): boolean {
+    const directions = [
+      { col: 0, row: -1 },
+      { col: 1, row: 0 },
+      { col: 0, row: 1 },
+      { col: -1, row: 0 },
+    ];
+    for (const dir of directions) {
+      const nc = col + dir.col;
+      const nr = row + dir.row;
+      if (!this.squareGrid?.isValidSquare(nc, nr)) continue;
+      const tile = this.getTileAt(nc, nr);
+      if (!tile) continue;
+      const terrain = tile.terrain || tile.type || '';
+      if (terrain === TERRAIN_TYPES.RIVER) return true;
+      if (tile.improvement === IMPROVEMENT_TYPES.IRRIGATION) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Advance a settler's in-progress improvement by one worker-turn (called at
+   * the start of the player's turn). Returns true when the improvement
+   * completed this turn.
+   */
+  advanceUnitWork(unitId: string): boolean {
+    const unit = this.units.find((u) => u.id === unitId);
+    if (!unit || !unit.workTarget) return false;
+
+    unit.workTurns = (unit.workTurns ?? 1) - 1;
+    if (unit.workTurns <= 0) {
+      this.completeImprovement(unit);
+      return true;
+    }
+
+    // Still under construction — the settler stays on the site all turn.
+    unit.movesRemaining = 0;
+    this.updateUnitTurnsDoneFlag(unit);
+    return false;
+  }
+
+  /**
+   * Apply the finished improvement: terrain transformation (Civ1) or a plain
+   * improvement placement. Clears the settler's work state.
+   */
+  private completeImprovement(unit: any): void {
+    const type = unit.workTarget;
+    const tile = this.getTileAt(unit.col, unit.row);
+    unit.workTarget = null;
+    unit.workTurns = 0;
+    if (!tile) return;
+
+    const props = IMPROVEMENT_PROPERTIES[type];
+    const terrain = tile.terrain || tile.type || '';
+    const convertedTo = props?.convertsToByTerrain?.[terrain];
+    if (convertedTo) {
+      this.convertTile(tile, convertedTo);
+      console.log(`[GameEngine] Completed ${type} on ${terrain} -> ${convertedTo} at (${unit.col},${unit.row})`);
+    } else {
+      tile.improvement = type;
+      console.log(`[GameEngine] Completed ${type} at (${unit.col},${unit.row})`);
+    }
+
+    if (this.onStateChange) {
+      this.onStateChange('IMPROVEMENT_BUILT', { unit, tile, improvementType: type });
+    }
   }
 
   /**
@@ -3420,16 +3454,14 @@ export default class GameEngine {
   }
 
   /**
-   * Whether the unit has enough movement (and is not fortified) to build an
-   * improvement right now. Mirrors the `canPerformAction` check inside
-   * `buildImprovement`.
+   * Whether the unit can start/continue improvement work right now — it just
+   * needs SOME movement (one worker-turn) and must not be fortified. Civ I:
+   * construction spans multiple turns; each turn consumes the settler's move.
    */
-  hasMovesForImprovement(unitId: string, improvementType: string): boolean {
-    const type = GameEngine.canonicalImprovementType(improvementType);
+  hasMovesForImprovement(unitId: string, _improvementType: string): boolean {
     const unit = this.units.find((u) => u.id === unitId);
     if (!unit) return false;
-    const buildTurns = IMPROVEMENT_PROPERTIES[type]?.turns || 1;
-    return UnitActionManager.canPerformAction(unit, 'build_improvement', buildTurns);
+    return UnitActionManager.canPerformAction(unit, 'build_improvement', 1);
   }
 
   /**

@@ -144,12 +144,37 @@ describe('Civ1 settler terrain conversion', () => {
     return { col, row, tile, settler };
   }
 
+  /** Mark an orthogonally adjacent tile as fresh water so irrigation is feasible (Civ1 water rule). */
+  function ensureRiverAdjacent(e: GameEngine, col: number, row: number): void {
+    const directions = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const;
+    for (const [dc, dr] of directions) {
+      const tile = e.getTileAt(col + dc, row + dr) as unknown as { type: string; terrain?: string } | undefined;
+      if (tile) {
+        // Only the terrain flag changes — the tile keeps its type so later
+        // tile searches are not redirected to this neighbor.
+        tile.terrain = TERRAIN_TYPES.RIVER;
+        return;
+      }
+    }
+  }
+
+  /** Start the multi-turn construction and advance it to completion. */
+  function finishWork(e: GameEngine, settler: { id: string }, type: string, terrain: string): void {
+    const turns = e.improvementBuildTurns(type, terrain);
+    expect(e.buildImprovement(settler.id, type)).toBe(true);
+    for (let i = 1; i < turns; i++) {
+      e.advanceUnitWork(settler.id);
+    }
+  }
+
   it('irrigation converts jungle to grassland and removes its resource', async () => {
     const e = await setupEngine();
     const { col, row, tile, settler } = placeSettler(e, TERRAIN_TYPES.JUNGLE);
     tile.resource = 'Gems';
+    // Civ1 irrigation needs fresh water orthogonally adjacent.
+    ensureRiverAdjacent(e, col, row);
     expect(e.canBuildImprovement(settler.id, 'irrigation')).toBe(true);
-    expect(e.buildImprovement(settler.id, 'irrigation')).toBe(true);
+    finishWork(e, settler, 'irrigation', TERRAIN_TYPES.JUNGLE);
     const after = e.getTileAt(col, row) as unknown as { type: string; resource: string | null };
     expect(after.type).toBe(TERRAIN_TYPES.GRASSLAND);
     expect(after.resource).toBeNull();
@@ -159,7 +184,8 @@ describe('Civ1 settler terrain conversion', () => {
     const e = await setupEngine();
     const { col, row, tile, settler } = placeSettler(e, TERRAIN_TYPES.SWAMP);
     tile.resource = 'Oil';
-    expect(e.buildImprovement(settler.id, 'irrigation')).toBe(true);
+    ensureRiverAdjacent(e, col, row);
+    finishWork(e, settler, 'irrigation', TERRAIN_TYPES.SWAMP);
     const after = e.getTileAt(col, row) as unknown as { type: string; resource: string | null };
     expect(after.type).toBe(TERRAIN_TYPES.GRASSLAND);
     expect(after.resource).toBeNull();
@@ -169,7 +195,7 @@ describe('Civ1 settler terrain conversion', () => {
     const e = await setupEngine();
     const { col, row, settler } = placeSettler(e, TERRAIN_TYPES.JUNGLE);
     expect(e.canBuildImprovement(settler.id, 'mine')).toBe(true);
-    expect(e.buildImprovement(settler.id, 'mine')).toBe(true);
+    finishWork(e, settler, 'mine', TERRAIN_TYPES.JUNGLE);
     const after = e.getTileAt(col, row) as unknown as { type: string; resource: string | null };
     expect(after.type).toBe(TERRAIN_TYPES.FOREST);
     expect(after.resource).toBe('Game');
@@ -180,7 +206,7 @@ describe('Civ1 settler terrain conversion', () => {
     const { col, row, tile, settler } = placeSettler(e, TERRAIN_TYPES.FOREST);
     tile.resource = 'Game';
     expect(e.canBuildImprovement(settler.id, 'mine')).toBe(true);
-    expect(e.buildImprovement(settler.id, 'mine')).toBe(true);
+    finishWork(e, settler, 'mine', TERRAIN_TYPES.FOREST);
     const after = e.getTileAt(col, row) as unknown as { type: string; resource: string | null };
     expect(after.type).toBe(TERRAIN_TYPES.PLAINS);
     expect(after.resource).toBe('Horses');
@@ -189,7 +215,7 @@ describe('Civ1 settler terrain conversion', () => {
   it('mines on mountains stay as an improvement (no conversion)', async () => {
     const e = await setupEngine();
     const { tile, settler } = placeSettler(e, TERRAIN_TYPES.MOUNTAINS);
-    expect(e.buildImprovement(settler.id, 'mine')).toBe(true);
+    finishWork(e, settler, 'mine', TERRAIN_TYPES.MOUNTAINS);
     expect(tile.improvement).toBe('mines');
     expect(tile.type).toBe(TERRAIN_TYPES.MOUNTAINS);
   });
@@ -205,7 +231,7 @@ describe('Civ1 settler terrain conversion', () => {
     const civ = (e as unknown as { civilizations: Array<{ id: number; technologies: string[] }> }).civilizations.find((c) => c.id === 0);
     civ?.technologies.push('engineering');
     expect(e.canBuildImprovement(settler.id, 'road')).toBe(true);
-    expect(e.buildImprovement(settler.id, 'road')).toBe(true);
+    finishWork(e, settler, 'road', TERRAIN_TYPES.RIVER);
     expect(tile.improvement).toBe('road');
   });
 });

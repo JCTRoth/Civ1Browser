@@ -44,8 +44,9 @@ describe('settler action availability (context menu gating)', () => {
     if (index < 0) throw new Error('no land tile found');
     const col = index % width;
     const row = Math.floor(index / width);
-    const tile = e.getTileAt(col, row) as unknown as { type: string; improvement: string | null };
+    const tile = e.getTileAt(col, row) as unknown as { type: string; terrain?: string; improvement: string | null };
     tile.type = type;
+    tile.terrain = type;
     tile.improvement = improvement;
     return { col, row, tile };
   }
@@ -54,6 +55,20 @@ describe('settler action availability (context menu gating)', () => {
   function grantTech(e: GameEngine, civId: number, techId: string) {
     const civ = (e as unknown as { civilizations: Array<{ id: number; technologies: string[] }> }).civilizations.find((c) => c.id === civId);
     if (civ && !civ.technologies.includes(techId)) civ.technologies.push(techId);
+  }
+
+  /** Mark an orthogonally adjacent tile as fresh water so irrigation is feasible (Civ1 water rule). */
+  function makeWaterAdjacent(e: GameEngine, col: number, row: number): void {
+    const directions = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const;
+    for (const [dc, dr] of directions) {
+      const tile = e.getTileAt(col + dc, row + dr) as unknown as { type: string; terrain?: string } | undefined;
+      if (tile) {
+        // Only the terrain flag changes — the tile keeps its type so later
+        // tile searches are not redirected to this neighbor.
+        tile.terrain = TERRAIN_TYPES.RIVER;
+        return;
+      }
+    }
   }
 
   let settlerCounter = 0;
@@ -75,18 +90,28 @@ describe('settler action availability (context menu gating)', () => {
   }
 
   describe('canBuildImprovement', () => {
-    it('respects terrain restrictions (irrigation on grassland, mine only on hills/mountains)', async () => {
+    it('respects the Civ1 construction-time table (irrigation needs water; grassland can be mined)', async () => {
       const e = await setupEngine();
 
       const grassland = prepareTile(e, TERRAIN_TYPES.GRASSLAND);
+      makeWaterAdjacent(e, grassland.col, grassland.row);
       const onGrass = spawnSettler(e, grassland.col, grassland.row);
       expect(e.canBuildImprovement(onGrass.id, 'irrigation')).toBe(true);
-      expect(e.canBuildImprovement(onGrass.id, 'mine')).toBe(false);
+      // Civ1: grassland can be mined (10 worker-turns).
+      expect(e.canBuildImprovement(onGrass.id, 'mine')).toBe(true);
 
       const mountains = prepareTile(e, TERRAIN_TYPES.MOUNTAINS);
       const onMountains = spawnSettler(e, mountains.col, mountains.row);
       expect(e.canBuildImprovement(onMountains.id, 'mine')).toBe(true);
+      // Mountains have no irrigation entry in the construction table.
       expect(e.canBuildImprovement(onMountains.id, 'irrigation')).toBe(false);
+    });
+
+    it('irrigation is not possible without fresh-water adjacency', async () => {
+      const e = await setupEngine();
+      const grassland = prepareTile(e, TERRAIN_TYPES.GRASSLAND);
+      const s = spawnSettler(e, grassland.col, grassland.row);
+      expect(e.canBuildImprovement(s.id, 'irrigation')).toBe(false);
     });
 
     it('road is possible on any land tile that has no improvement yet', async () => {
@@ -125,16 +150,19 @@ describe('settler action availability (context menu gating)', () => {
   });
 
   describe('hasMovesForImprovement', () => {
-    it('requires enough moves for the build cost (road=1, irrigation=2)', async () => {
+    it('requires any movement to start work (Civ1 per-turn construction)', async () => {
       const e = await setupEngine();
       const tile = prepareTile(e, TERRAIN_TYPES.GRASSLAND);
 
+      // With the multi-turn model every improvement costs one worker-turn per
+      // call, so a single move is enough to start any construction.
       const oneMove = spawnSettler(e, tile.col, tile.row, 1);
       expect(e.hasMovesForImprovement(oneMove.id, 'road')).toBe(true);
-      expect(e.hasMovesForImprovement(oneMove.id, 'irrigation')).toBe(false);
+      expect(e.hasMovesForImprovement(oneMove.id, 'irrigation')).toBe(true);
+      expect(e.hasMovesForImprovement(oneMove.id, 'mine')).toBe(true);
 
-      const twoMoves = spawnSettler(e, tile.col, tile.row, 2);
-      expect(e.hasMovesForImprovement(twoMoves.id, 'irrigation')).toBe(true);
+      const noMoves = spawnSettler(e, tile.col, tile.row, 0);
+      expect(e.hasMovesForImprovement(noMoves.id, 'road')).toBe(false);
     });
 
     it('is false for a fortified unit', async () => {
