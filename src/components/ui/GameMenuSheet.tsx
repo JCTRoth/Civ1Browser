@@ -97,14 +97,14 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
             <MenuItem icon="⏸️" label="Pause" onClick={onPause} />
             <MenuItem icon="📁" label="Load Game" onClick={onLoadGame} />
             <MenuItem icon="⚙️" label="Settings" onClick={onOpenSettings} />
+            <MenuItem icon="📊" label="Rates" onClick={onOpenRates} />
+            <MenuItem icon="🏛️" label="Government" onClick={onOpenGovernment} />
             <MenuItem icon="🚪" label="Quit" onClick={onQuit} danger />
           </>
         )}
 
         {activeMenu === 'WORLD' && (
           <>
-            <MenuItem icon="⚖️" label="Government" onClick={onOpenGovernment} />
-            <MenuItem icon="📊" label="Rates" onClick={onOpenRates} />
             <MenuItem icon="⚖️" label="Diplomacy" onClick={onDiplomacy} />
             <MenuItem icon="🌳" label="Tech Tree" onClick={onTechTree} />
           </>
