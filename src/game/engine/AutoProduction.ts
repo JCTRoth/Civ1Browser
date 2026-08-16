@@ -390,6 +390,22 @@ export class AutoProduction {
       }
     }
 
+    // 6b. A diplomat for diplomacy (Civ I): diplomatic civs at peace send one
+    //     to negotiate with the neighbours. This is a peacetime luxury — it
+    //     never displaces defenders, settlers, buildings, or wonders.
+    if (civ && this.shouldBuildDiplomat(civ)) {
+      const dProps = UNIT_PROPS.diplomat;
+      if (dProps) {
+        console.log(`[AutoProduction] Building diplomat for diplomacy (profile ${strategy})`);
+        return {
+          type: 'unit',
+          itemType: 'diplomat',
+          name: dProps.name,
+          cost: dProps.cost
+        };
+      }
+    }
+
     // 7. Build military units (default)
     //    Balance the army: if the civ has an offensive plan (needs attackers)
     //    or its offense is weaker than its defense, build an attacker;
@@ -601,6 +617,36 @@ export class AutoProduction {
       (u: Unit) => u.civilizationId === civilizationId && u.type === 'scout'
     ).length + plannedScouts;
     return scoutCount < this.getDesiredScoutCount(civilizationId);
+  }
+
+  /**
+   * Whether the civ should produce a diplomat: at peace, under its diplomat
+   * cap (max 2), Writing researched, and rolling the small personality-scaled
+   * chance (diplomatic leaders far more likely). Diplomats are a peacetime
+   * luxury — this branch runs only after defense/settler/building/wonder needs.
+   */
+  private shouldBuildDiplomat(civ: Civilization | undefined): boolean {
+    if (!civ) return false;
+    if (!canBuildUnit(civ, 'diplomat')) return false;
+
+    // Only while at peace (a diplomat built mid-war is dead weight).
+    const dm = this.gameEngine.diplomacyManager;
+    if (dm) {
+      for (const other of this.gameEngine.civilizations ?? []) {
+        if (other.id === civ.id || other.isAlive === false) continue;
+        if (dm.isAtWar(civ.id, other.id)) return false;
+      }
+    }
+
+    // Cap the diplomat corps (the AI only needs 1–2).
+    const diplomatCount = this.gameEngine.units.filter(
+      (u: Unit) => u.civilizationId === civ.id && u.type === 'diplomat'
+    ).length;
+    if (diplomatCount >= 2) return false;
+
+    const personality = (civ as any).personality ?? { aggression: 5, diplomacy: 5, military: 5 };
+    const chance = personality.diplomacy >= 7 ? 0.30 : personality.diplomacy >= 5 ? 0.15 : 0.05;
+    return Math.random() < chance;
   }
 
   private isOffensiveUnitType(unitType: string): boolean {

@@ -25,6 +25,7 @@ import {
   scoreEnemyTarget,
   type CityThreatAssessment
 } from './AIStrategy';
+import type { DiplomatAction } from './DiplomacyTypes';
 import type { Unit, City } from '../../../types/game';
 
 // How much better (in settlement-score points) the best location must be for a
@@ -252,6 +253,18 @@ export class AIManager {
           console.warn(`[AI] ⚠️ Unit ${unit.id} exceeded maximum movement attempts (${MAX_MOVEMENT_ATTEMPTS}), forcing skip`);
           this.gameEngine.skipUnit(unit.id);
           break;
+        }
+
+        // Diplomats negotiate instead of fighting: the moment one stands next
+        // to a foreign city or unit it performs its diplomatic action rather
+        // than attacking (Civ I: diplomacy is initiated on physical contact).
+        // The action consumes the diplomat's moves, ending its processing.
+        if (unit.type === 'diplomat') {
+          const diplomatInfo = this.gameEngine.getDiplomatActions?.(unit.id);
+          if (diplomatInfo) {
+            this.executeAIDiplomatAction(unit, diplomatInfo);
+            break;
+          }
         }
 
         const target = this.chooseAITarget(unit);
@@ -540,6 +553,16 @@ export class AIManager {
       }
     }
 
+    // Diplomats head to a known foreign city to open negotiations (Civ I).
+    if (unit.type === 'diplomat') {
+      const diplomatTarget = this.chooseDiplomatTarget(unit);
+      if (diplomatTarget) {
+        console.log(`[AI-DIPLOMAT] Diplomat ${unit.id} heading to foreign city (${diplomatTarget.col},${diplomatTarget.row})`);
+        return diplomatTarget;
+      }
+      // No known foreign city — fall through and explore like other civilians.
+    }
+
     // Special handling for settlers: use SettlementEvaluator to find best city location
     if (unit.type === 'settler') {
       console.log(`[AI-SETTLER] Settler detected at (${unit.col}, ${unit.row}), using SettlementEvaluator`);
@@ -777,6 +800,141 @@ export class AIManager {
 
     console.log(`[AI] No valid target found for unit ${unit.id}`);
     return null;
+  }
+
+  // ─── AI diplomat units (Civ I: diplomats move to an enemy city/unit to
+  //      initiate diplomacy) ───────────────────────────────────────────
+
+  /**
+   * Pick a destination for an AI diplomat: the nearest foreign city the civ
+   * knows about. Civs we are NOT at war with are preferred (a diplomat walking
+   * into a war zone is wasted); among those, pick the nearest.
+   */
+  private chooseDiplomatTarget(unit: any): { col: number; row: number } | null {
+    const civId = unit.civilizationId;
+    const storage = this.gameEngine.getPlayerStorage?.(civId);
+    const dm = this.gameEngine.diplomacyManager;
+    const squareDistance = (c1: number, r1: number, c2: number, r2: number) =>
+      this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
+
+    const candidates: Array<{ col: number; row: number; civId: number; distance: number }> = [];
+
+    // 1) Known enemy cities recorded by scouts.
+    if (storage?.enemyLocations instanceof Map) {
+      for (const [enemyCivId, locations] of storage.enemyLocations.entries()) {
+        if (enemyCivId === civId) continue;
+        for (const loc of locations) {
+          if (loc.type !== 'city') continue;
+          candidates.push({
+            col: loc.col,
+            row: loc.row,
+            civId: enemyCivId,
+            distance: squareDistance(unit.col, unit.row, loc.col, loc.row),
+          });
+        }
+      }
+    }
+
+    // 2) Foreign cities this civ has already explored (belt & braces — scouts
+    //    may not have recorded every one).
+    if (this.gameEngine.cities) {
+      for (const city of this.gameEngine.cities) {
+        if (city.civilizationId === civId) continue;
+        if (typeof this.gameEngine.isExploredByPlayer === 'function' &&
+            !this.gameEngine.isExploredByPlayer(civId, city.col, city.row)) continue;
+        if (candidates.some(c => c.col === city.col && c.row === city.row)) continue;
+        candidates.push({
+          col: city.col,
+          row: city.row,
+          civId: city.civilizationId,
+          distance: squareDistance(unit.col, unit.row, city.col, city.row),
+        });
+      }
+    }
+
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a.distance - b.distance);
+    const atPeace = candidates.filter(c => !dm?.isAtWar(civId, c.civId));
+    return (atPeace.length > 0 ? atPeace : candidates)[0];
+  }
+
+  /**
+   * Choose which diplomatic action an AI diplomat performs on contact with a
+   * foreign civ — mirrors `processAIDiplomacy`'s decision logic (peace when
+   * outmatched, alliance when friendly, tribute when dominant, else intel).
+   */
+  private chooseDiplomatAction(unit: any, targetCivId: number, available: string[]): string {
+    const civId = unit.civilizationId;
+    const dm = this.gameEngine.diplomacyManager;
+    const ownStrength = dm?.estimateMilitaryStrength?.(civId) ?? 0;
+    const theirStrength = dm?.estimateMilitaryStrength?.(targetCivId) ?? 0;
+    const attitude = dm?.getAttitude?.(civId, targetCivId) ?? 'neutral';
+    const status = dm?.getStatus?.(civId, targetCivId) ?? 'peace';
+    const personality = (this.gameEngine.civilizations?.[civId] as any)?.personality
+      ?? { aggression: 5, diplomacy: 5, military: 5 };
+    const has = (a: string) => available.includes(a);
+
+    if (status === 'war') {
+      // Outmatched → sue for peace outright; otherwise a ceasefire.
+      if (theirStrength > ownStrength * 1.3 && has('propose_peace')) return 'propose_peace';
+      if (has('propose_ceasefire')) return 'propose_ceasefire';
+      if (has('propose_peace')) return 'propose_peace';
+    } else if (status === 'ceasefire') {
+      if (has('propose_peace')) return 'propose_peace';
+    } else if (status === 'peace') {
+      // Alliance if friendly + comparable strength + a diplomatic leader.
+      const ratio = Math.min(ownStrength, theirStrength) / Math.max(ownStrength, theirStrength, 1);
+      if (attitude === 'friendly' && ratio > 0.5 && personality.diplomacy >= 6 && has('propose_alliance')) return 'propose_alliance';
+      // Otherwise demand tribute when clearly stronger.
+      if (personality.aggression >= 6 && ownStrength > theirStrength * 2 && has('demand_tribute')) return 'demand_tribute';
+    }
+
+    return 'gather_intelligence';
+  }
+
+  /**
+   * The tribute an AI diplomat demands (same formula as processAIDiplomacy).
+   */
+  private diplomatTributeDemand(unit: any, targetCivId: number): number {
+    const dm = this.gameEngine.diplomacyManager;
+    const ownStrength = dm?.estimateMilitaryStrength?.(unit.civilizationId) ?? 0;
+    const theirStrength = dm?.estimateMilitaryStrength?.(targetCivId) ?? 0;
+    return Math.max(25, Math.floor((ownStrength / Math.max(theirStrength, 1)) * 20));
+  }
+
+  /**
+   * Execute an AI diplomat's action when adjacent to a foreign city/unit.
+   * Human targets get an interactive offer (negotiation screen); AI targets
+   * resolve through the normal proposal path.
+   */
+  private executeAIDiplomatAction(unit: any, info: { targetCivId: number; actions: string[] }): void {
+    const civId = unit.civilizationId;
+    const targetCivId = info.targetCivId;
+    const civ = this.gameEngine.civilizations?.[civId];
+    const targetCiv = this.gameEngine.civilizations?.[targetCivId];
+    const civName = civ?.name ?? `Civ ${civId}`;
+    const action = this.chooseDiplomatAction(unit, targetCivId, info.actions);
+
+    console.log(`[AI-DIPLOMAT] ${civName} diplomat at (${unit.col},${unit.row}) contacting ${targetCiv?.name ?? targetCivId} → ${action}`);
+
+    if (targetCiv?.isHuman === true) {
+      // The human decides — surface an interactive offer, consume the move.
+      if (action === 'gather_intelligence') {
+        this.gameEngine.executeDiplomatAction?.(unit.id, 'gather_intelligence', targetCivId);
+      } else {
+        const gold = action === 'demand_tribute' ? this.diplomatTributeDemand(unit, targetCivId) : undefined;
+        this.gameEngine.diplomacyManager?.presentOffer?.(
+          civId, targetCivId, action as unknown as DiplomatAction, gold,
+          `${civName}'s diplomat proposes ${action.replace(/_/g, ' ')}.`,
+        );
+        unit.movesRemaining = 0;
+      }
+    } else {
+      this.gameEngine.executeDiplomatAction?.(unit.id, action, targetCivId);
+    }
+
+    this.gameEngine.log?.('ai', `Diplomat — ${civName} ${action.replace(/_/g, ' ')} with ${targetCiv?.name ?? targetCivId}`);
   }
 
   /**

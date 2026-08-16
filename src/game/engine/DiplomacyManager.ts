@@ -790,6 +790,21 @@ export class DiplomacyManager {
     });
   }
 
+  /**
+   * Public wrapper around `emitOffer` used by AI diplomat units: when an AI
+   * diplomat makes contact with the human, its proposal is surfaced as an
+   * interactive offer (AI_DIPLOMACY_OFFER) instead of being auto-resolved.
+   */
+  presentOffer(
+    fromCivId: number,
+    toCivId: number,
+    action: DiplomatAction,
+    goldAmount: number | undefined,
+    message: string,
+  ): void {
+    this.emitOffer(fromCivId, toCivId, action, goldAmount, message);
+  }
+
   // ─── Internal helpers ──────────────────────────────────────────────
 
   /** Generate a counter-proposal when the AI rejects an offer */
