@@ -115,14 +115,23 @@ test.describe('AI vs AI (Computer vs Computer)', () => {
 
     // Let the AI play for a bit so log lines accumulate and flush.
     await page.waitForTimeout(8_000);
-    await expect
-      .poll(() => latestAivsaiLog(), { timeout: 20_000, intervals: [1_000] })
-      .not.toBeNull();
 
-    const logFile = latestAivsaiLog()!;
-    // The started session should have produced a NEW log file (or updated the
-    // newest one — on a fresh run there is always a new timestamped file).
-    const logContent = readFileSync(logFile, 'utf8');
+    // Poll until the newest aivsai- log actually contains the expected
+    // in-game events. The very first rounds often have no unit moves (each
+    // AI settler founds a city in place), so reading too early is flaky.
+    let logFile: string | null = null;
+    let logContent = '';
+    await expect
+      .poll(
+        () => {
+          logFile = latestAivsaiLog();
+          if (!logFile) return '';
+          logContent = readFileSync(logFile, 'utf8');
+          return logContent;
+        },
+        { timeout: 30_000, intervals: [1_000] },
+      )
+      .toContain('"event":"UNIT_MOVED"');
 
     // The log must record the game start and actual in-game events.
     expect(logContent).toContain('Game started');

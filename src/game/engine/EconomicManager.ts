@@ -197,7 +197,10 @@ export class EconomicManager {
       commerce: afterCorruption,
       corruption,
       tax: Math.floor(afterCorruption * (rates.tax / 100)),
-      science: Math.floor(afterCorruption * (rates.science / 100)) + scienceBonus,
+      // Round (not floor) the science share so the Science Rate slider visibly
+      // affects research even for tiny economies — flooring made 1–2 commerce
+      // cities produce the same 0–1 science across most slider positions.
+      science: Math.round(afterCorruption * (rates.science / 100)) + scienceBonus,
       luxury: Math.floor(afterCorruption * (rates.luxury / 100)),
     };
   }

@@ -405,6 +405,8 @@ export interface GameEngine {
   productionManager: any;
   /** Economic manager for tax/science/luxury rates and upkeep. */
   economicManager: any;
+  /** Civ I–style research manager (tech cost, beaker modifiers, turn caps). */
+  researchManager: any;
   /** Per-civilization persistent turn storage (AI state, explored tiles…). */
   getPlayerStorage(civilizationId: number): any;
   /** Square grid backing the map (null until a game is initialized). */

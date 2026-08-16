@@ -125,12 +125,42 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
       : null;
     const currentTech = currentId ? techs.find((t) => t.id === currentId) : null;
     const currentProgress = civ?.researchProgress ?? 0;
+    // Effective (map/difficulty/tech-count scaled) cost for the current tech —
+    // the value research actually completes at.
+    let effectiveCost: number | null = null;
+    if (currentTech && gameEngine?.researchManager) {
+      const engineCiv = gameEngine.civilizations?.[0] ?? civ;
+      if (engineCiv) effectiveCost = gameEngine.researchManager.effectiveTechCost(engineCiv, currentTech);
+    }
     const nextInPathId = researchPath.find((id) => {
       const t = techs.find((x) => x.id === id);
       return t && t.available && !t.researched;
     }) ?? null;
     const nextInPath = nextInPathId ? techs.find((t) => t.id === nextInPathId) : null;
-    return { currentTech, currentProgress, nextInPath, allResearched };
+    return { currentTech, currentProgress, nextInPath, allResearched, effectiveCost };
+  })();
+
+  /**
+   * Live "research time" estimate for the current tech, computed from the
+   * Civ I research model. Uses the per-turn science at the CURRENT rates
+   * (EconomicManager.cityOutputs preview), so changing the Science Rate in
+   * the rates modal immediately updates the estimated turns remaining.
+   */
+  const researchTurns = (() => {
+    if (!gameEngine?.researchManager || !researchInfo.currentTech) return null;
+    const civ = gameEngine.civilizations?.[0] ?? ((civilizations && civilizations[0]) || null);
+    if (!civ) return null;
+    const econ = gameEngine.economicManager as
+      { cityOutputs?: (city: unknown, civ: unknown) => { science: number } } | undefined;
+    const cities = (gameEngine.cities ?? []).filter((c) => c.civilizationId === civ.id);
+    const perTurnScience = cities.reduce((sum: number, c) => {
+      if (econ && typeof econ.cityOutputs === 'function') {
+        return sum + econ.cityOutputs(c, civ).science;
+      }
+      return sum + ((c as { science?: number }).science ?? 0);
+    }, 0);
+    const turns = gameEngine.researchManager.estimatedTurns(civ, researchInfo.currentTech, perTurnScience);
+    return turns > 0 ? turns : null;
   })();
 
   const handleContinueResearch = () => {
@@ -249,15 +279,20 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
               <div className="side-panel-research-line">
                 {getTechIcon(researchInfo.currentTech.id)} {researchInfo.currentTech.name}
                 <span className="side-panel-research-progress">
-                  {researchInfo.currentProgress}/{researchInfo.currentTech.cost ?? 0}
+                  {researchInfo.currentProgress}/{researchInfo.effectiveCost ?? researchInfo.currentTech.cost ?? 0}
                 </span>
               </div>
               <div className="side-panel-research-bar">
                 <div
                   className="side-panel-research-bar-fill"
-                  style={{ width: `${Math.min(100, (researchInfo.currentProgress / (researchInfo.currentTech.cost || 1)) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (researchInfo.currentProgress / (researchInfo.effectiveCost ?? researchInfo.currentTech.cost ?? 1)) * 100)}%` }}
                 />
               </div>
+              {researchTurns != null && (
+                <div className="side-panel-research-eta">
+                  ~{researchTurns} {researchTurns === 1 ? 'turn' : 'turns'} to complete
+                </div>
+              )}
               <button
                 type="button"
                 className="side-panel-research-btn"

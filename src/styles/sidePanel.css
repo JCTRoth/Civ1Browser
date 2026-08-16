@@ -375,6 +375,13 @@
   border-radius: 3px;
 }
 
+.side-panel-research-eta {
+  font-size: 0.72rem;
+  color: #ffd700;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
 .side-panel-research-btn {
   width: 100%;
   margin-top: 6px;

@@ -794,67 +794,78 @@ export class TurnManager {
 
   private processCivilizationResearch(civ: any): void {
     try {
-      if (civ.currentResearch && civ.resources && civ.resources.science > 0) {
-        civ.researchProgress = (civ.researchProgress || 0) + civ.resources.science;
-        
-        const TECHNOLOGIES = (this.gameEngine.constructor as any).TECHNOLOGIES || (globalThis as any).TECHNOLOGIES;
-        const techCost = typeof civ.currentResearch === 'object' && civ.currentResearch.cost 
-          ? civ.currentResearch.cost 
-          : (TECHNOLOGIES?.[civ.currentResearch]?.cost || 0);
-        
-        if (civ.researchProgress >= techCost && techCost > 0) {
-          const completedTechId = civ.currentResearch.id || civ.currentResearch;
-          if (Array.isArray(civ.technologies)) {
-            civ.technologies.push(completedTechId);
+      if (!civ.currentResearch) return;
+
+      // Civ I research model: beaker modifiers + tech cost scaling + the
+      // 4-turn minimum / 32-turn maximum. Even a civ with 0 science makes
+      // minimum progress so a tech can never take more than 32 turns.
+      const totalScience = civ.resources?.science ?? 0;
+      const completedTechId = this.gameEngine.researchManager
+        ? this.gameEngine.researchManager.advanceResearch(civ, civ.currentResearch, totalScience)
+        : this.legacyAdvanceResearch(civ, civ.currentResearch, totalScience);
+
+      if (!completedTechId) return;
+
+      const completedId = completedTechId;
+      if (Array.isArray(civ.technologies)) {
+        civ.technologies.push(completedId);
+      }
+      civ.researchProgress = 0;
+      civ.currentResearch = null;
+
+      if (this.gameEngine.updateTechnologyAvailability) {
+        this.gameEngine.updateTechnologyAvailability();
+      }
+
+      console.log(`[TurnManager] Civilization ${civ.name} completed research: ${completedId}`);
+
+      // Notify listeners (UI research-complete modal, log, progression…).
+      this.emit('TECH_RESEARCHED', { civilizationId: civ.id, techId: completedId });
+
+      // Newly researched techs may unlock units/buildings — refresh the
+      // civ's production queues so it can build the newest options.
+      this.gameEngine.autoProduction?.processAutoProductionForCivilization(civ.id);
+
+      // AI auto-selects next research via AIResearch module
+      if (!civ.isHuman && typeof this.gameEngine.setResearch === 'function') {
+        try {
+          const storage = this.gameEngine.getPlayerStorage?.(civ.id);
+          const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
+          const strategy = aiState.strategyProfile ?? 'balanced_growth';
+
+          const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civ.id) ?? [];
+          const gameState = {
+            currentYear: this.gameEngine.currentYear ?? -4000,
+            roundNumber: this.roundNumber,
+            numCities: cities.length,
+            numEnemyCitiesKnown: 0,
+            isAtWar: (civ.warWith?.size ?? 0) > 0,
+            hasLibrary: cities.some((c: any) => c.buildings?.some?.((b: any) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
+            totalScience: this.gameEngine.cities?.reduce((s: number, c: any) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
+          };
+
+          const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
+          if (techChoice) {
+            this.gameEngine.setResearch(civ.id, techChoice);
+            console.log(`[TurnManager] AI ${civ.name} auto-selected next research: ${techChoice}`);
           }
-          civ.researchProgress = 0;
-          civ.currentResearch = null;
-          
-          if (this.gameEngine.updateTechnologyAvailability) {
-            this.gameEngine.updateTechnologyAvailability();
-          }
-          
-          console.log(`[TurnManager] Civilization ${civ.name} completed research: ${completedTechId}`);
-
-          // Notify listeners (UI research-complete modal, log, progression…).
-          this.emit('TECH_RESEARCHED', { civilizationId: civ.id, techId: completedTechId });
-
-          // Newly researched techs may unlock units/buildings — refresh the
-          // civ's production queues so it can build the newest options.
-          this.gameEngine.autoProduction?.processAutoProductionForCivilization(civ.id);
-
-          // AI auto-selects next research via AIResearch module
-          if (!civ.isHuman && typeof this.gameEngine.setResearch === 'function') {
-            try {
-              const storage = this.gameEngine.getPlayerStorage?.(civ.id);
-              const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
-              const strategy = aiState.strategyProfile ?? 'balanced_growth';
-
-              const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civ.id) ?? [];
-              const gameState = {
-                currentYear: this.gameEngine.currentYear ?? -4000,
-                roundNumber: this.roundNumber,
-                numCities: cities.length,
-                numEnemyCitiesKnown: 0,
-                isAtWar: (civ.warWith?.size ?? 0) > 0,
-                hasLibrary: cities.some((c: any) => c.buildings?.some?.((b: any) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
-                totalScience: this.gameEngine.cities?.reduce((s: number, c: any) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
-              };
-
-              const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
-              if (techChoice) {
-                this.gameEngine.setResearch(civ.id, techChoice);
-                console.log(`[TurnManager] AI ${civ.name} auto-selected next research: ${techChoice}`);
-              }
-            } catch (err) {
-              console.warn('[TurnManager] Failed to auto-select AI research', err);
-            }
-          }
+        } catch (err) {
+          console.warn('[TurnManager] Failed to auto-select AI research', err);
         }
       }
     } catch (e) {
       console.warn('[TurnManager] Error processing research', e);
     }
+  }
+
+  /** Fallback when researchManager isn't available (defensive). */
+  private legacyAdvanceResearch(civ: any, tech: any, totalScience: number): string | null {
+    civ.researchProgress = (civ.researchProgress || 0) + (totalScience || 0);
+    const techCost = typeof tech === 'object' && tech.cost ? tech.cost : 0;
+    if (civ.researchProgress >= techCost && techCost > 0) {
+      return tech.id || tech;
+    }
+    return null;
   }
 
   // --- Automated movement (path following) ---

@@ -19,11 +19,13 @@ type Props = {
   currentResearchId?: string | null;
   /** Current research progress (absolute science points). */
   researchProgress?: number;
+  /** Effective (scaled) cost of the tech currently being researched. */
+  currentTechCost?: number | null;
   /** Called when the player picks a tech to research. */
   onSelectTech?: (techId: string) => void;
 };
 
-const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWidth = 200, nodeHeight = 56, verticalSpacing = 80, horizontalSpacing = 40, researchPath = null, currentResearchId = null, researchProgress = 0, onSelectTech }) => {
+const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWidth = 200, nodeHeight = 56, verticalSpacing = 80, horizontalSpacing = 40, researchPath = null, currentResearchId = null, researchProgress = 0, currentTechCost = null, onSelectTech }) => {
   // If store hasn't populated technologies yet, fall back to static data
   const techs = (technologies && technologies.length > 0) ? technologies : TECHNOLOGIES_DATA;
   // compute depth per tech
@@ -266,8 +268,11 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
           const isAnimating = animatingNodes.has(tech.id);
           const isCurrentResearch = tech.id === currentResearchId;
           const fill = isAnimating ? 'url(#unresearchedPattern)' : (tech.researched ? '#2f855a' : tech.available ? '#1e90ff' : '#444');
-          const progress = isCurrentResearch && (tech.cost ?? 0) > 0
-            ? Math.min(1, (researchProgress || 0) / (tech.cost || 1))
+          // Effective cost for the current research (map/difficulty scaled);
+          // other nodes keep their base cost.
+          const nodeCost = isCurrentResearch && currentTechCost != null ? currentTechCost : tech.cost;
+          const progress = isCurrentResearch && (nodeCost ?? 0) > 0
+            ? Math.min(1, (researchProgress || 0) / (nodeCost || 1))
             : 0;
           return (
             <g 
@@ -281,7 +286,7 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
               <rect width={nodeWidth} height={nodeHeight} rx={6} ry={6} fill={fill} stroke={isCurrentResearch ? '#ffd700' : '#0b00a4ff'} strokeWidth={isCurrentResearch ? 3 : 1} />
               <text x={12} y={20} className="tech-tree-node-text">{tech.name}</text>
               <text x={12} y={36} className="tech-tree-node-cost">
-                {isCurrentResearch ? `${researchProgress || 0}/${tech.cost} sci` : `${tech.cost} sci`}
+                {isCurrentResearch ? `${researchProgress || 0}/${nodeCost} sci` : `${tech.cost} sci`}
               </text>
               {isCurrentResearch && progress > 0 && (
                 <rect x={4} y={nodeHeight - 6} width={(nodeWidth - 8) * progress} height={4} rx={2} fill="#ffd700" />

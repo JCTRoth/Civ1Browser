@@ -17,6 +17,7 @@ import { DiplomacyManager } from './DiplomacyManager';
 import { getCivProductionProfile, getCivPersonality } from './AITypes';
 import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
+import { ResearchManager } from './ResearchManager';
 import type { GameActions, Unit, City, Civilization } from '../../../types/game';
 
 interface GameSettings {
@@ -82,6 +83,7 @@ export default class GameEngine {
   autoProduction: AutoProduction;
   economicManager: EconomicManager;
   governmentManager: GovernmentManager;
+  researchManager: ResearchManager;
   playerStorage: Map<number, PlayerTurnStorage>; // Per-player persistent storage
   devMode: boolean; // Developer mode flag
   roundManager: TurnManager; // kept property name for compatibility
@@ -134,6 +136,7 @@ export default class GameEngine {
     this.autoProduction = new AutoProduction(this);
     this.economicManager = new EconomicManager(this);
     this.governmentManager = new GovernmentManager(this);
+    this.researchManager = new ResearchManager(this);
     this.roundManager = new TurnManager(this);
     this.goToManager = new GoToManager(this, this.roundManager);
     this.playerStorage = new Map();

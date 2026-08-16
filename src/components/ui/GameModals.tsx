@@ -360,6 +360,13 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     const currentTechId = civ?.currentResearch
       ? (typeof civ.currentResearch === 'object' ? (civ.currentResearch as { id?: string }).id : civ.currentResearch)
       : null;
+    // Effective (map/difficulty/tech-count scaled) cost of the tech currently
+    // being researched — the value research actually completes at.
+    let currentTechCost: number | null = null;
+    if (civ && currentTechId && gameEngine?.researchManager) {
+      const tech = (gameEngine.technologies ?? []).find((t) => t.id === currentTechId);
+      if (tech) currentTechCost = gameEngine.researchManager.effectiveTechCost(civ, tech);
+    }
     return (
       <Modal 
         show={uiState.activeDialog === 'tech'} 
@@ -380,6 +387,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
               researchPath={researchPath}
               currentResearchId={currentTechId}
               researchProgress={civ?.researchProgress ?? 0}
+              currentTechCost={currentTechCost}
               onSelectTech={handleSelectTech}
             />
           </React.Suspense>

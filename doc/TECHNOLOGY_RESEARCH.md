@@ -35,20 +35,51 @@ Player-facing research UX built on top of the existing Technology Tree modal.
 - `src/game/engine/GameEngine.ts` — `setResearch(civId, techId, savedProgress?)`;
   `updateTechnologyAvailability()` marks completed techs `researched` on the shared
   tree (union of all civs' researched techs).
-- `src/game/engine/TurnManager.ts` — emits `TECH_RESEARCHED {civilizationId, techId}`
+- `src/game/engine/ResearchManager.ts` — **Civ I research model** (see below).
+- `src/game/engine/TurnManager.ts` — `processCivilizationResearch` uses the
+  ResearchManager to advance progress; emits `TECH_RESEARCHED {civilizationId, techId}`
   when a tech completes.
 - `src/utils/EngineEventHandlers.ts` — `onTechResearched` (syncs store copies, shows
   the completion modal for the human player, auto-advances the path) +
   `advanceResearchPath`.
 - `src/components/ui/TechTreeView.tsx` — research props, `is-researching` highlight,
-  progress display, click-to-select.
+  progress display (uses the effective cost for the current tech), click-to-select.
 - `src/components/ui/GameModals.tsx` — `handleSelectTech`, `renderResearchComplete`
   (invoked as `{renderResearchComplete()}` in the main return).
 - `src/components/ui/SidePanel.tsx` — research status section (always reads the
-  **human** player, `civilizations[0]`, never `currentPlayer`).
+  **human** player, `civilizations[0]`, never `currentPlayer`) with a live
+  "~X turns to complete" ETA computed from the current rates.
+
+## Civ I research model (`ResearchManager`)
+
+The Science Rate now visibly changes research time:
+
+1. **Tech cost** = `floor((baseCost × mapTechRate) / difficultyFactor)`, then
+   adjusted by a tech-count comparison vs the most-advanced known civ (bonus if
+   behind, penalty if ahead; ±20%).
+   - `mapTechRate` scales with map size (bigger maps → pricier techs).
+   - `difficultyFactor`: CHIEFTAIN 1.2 … EMPEROR 0.8 (easier → cheaper).
+2. **Beakers applied** per turn =
+   `floor(floor((totalBaseBeakers + 1) × knownCivsModifier) × prerequisitesModifier)`
+   - `knownCivsModifier < 1.0` when contacted civs already know the tech (10% each,
+     floor 0.6).
+   - `prerequisitesModifier < 1.0` when the civ has discovered prerequisite techs
+     (up to 40% off).
+3. **Hard caps**: research can never complete in fewer than **4 turns** nor take
+   more than **32 turns** (even with 0 science, minimum progress is applied).
+4. The side panel shows the **effective** cost (`progress/effectiveCost`) and a live
+   "~X turns to complete" estimate computed from the per-turn science at the
+   **current** Science Rate — changing the rate in the rates modal immediately
+   updates the ETA.
+5. Per-city science split uses `Math.round` (not floor) so tiny economies still see
+   the rate matter (flooring previously zeroed 1–2 commerce cities).
 
 ## Tests
 
 - `tests/researchPath.test.ts` — path finding + icons (7 unit tests).
+- `tests/researchManager.test.ts` — tech cost scaling, known-civs/prereq modifiers,
+  beakers formula, 4-turn minimum, 32-turn maximum, ETA.
+- `tests/scienceRate.test.ts` — science rate changes research accumulation through
+  the real turn pipeline.
 - e2e `e2e/game.spec.ts` — Tech Tree tests (modal shows available techs, selecting a
   tech, researched techs after turns).
