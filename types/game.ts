@@ -91,6 +91,7 @@ export interface Unit {
   isFortified?: boolean;
   isSkipped?: boolean;
   isSleeping?: boolean;
+  homeCityId?: string | null;
   plannedPath?: { col: number; row: number }[];
   areTurnsDone?: boolean; // Set to true when unit has no moves left or is fortified/sleeping
 }

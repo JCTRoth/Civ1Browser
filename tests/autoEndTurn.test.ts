@@ -96,8 +96,12 @@ describe('Auto End Turn + city founding', () => {
     expect(city).toBeTruthy();
     expect(city!.currentProduction).toBeTruthy();
     expect(Array.isArray(city!.buildQueue)).toBe(true);
-    // The current production (Warrior) must NOT also sit at the front of the queue.
-    expect(city!.buildQueue).toHaveLength(0);
+    // Auto-production lines up follow-ups so the queue isn't empty right away,
+    // but the current production (Warrior) must NOT also sit at the front of
+    // the queue (that would be a duplicate).
+    const currentName = city!.currentProduction?.name || city!.currentProduction?.itemType;
+    const frontName = city!.buildQueue[0]?.name || city!.buildQueue[0]?.itemType;
+    expect(frontName).not.toBe(currentName);
   });
 
   it('auto-end turn fires when the player has no units left (founded last settler)', () => {

@@ -682,9 +682,21 @@ export class DiplomacyManager {
           }
         }
       } else if (rel.status === 'peace' || rel.status === 'ceasefire') {
-        // Consider declaring war if aggressive and strong enough
-        if (personality.aggression >= 7 && ownStrength > theirStrength * 1.5 && attitude === 'hostile') {
-          console.log(`[AI-DIPLO] Civ ${civId} declaring war on Civ ${otherId} (aggressive & strong)`);
+        // War for conquest: military-leaning civs with a clear strength
+        // advantage attack a weaker neighbour — this is what lets the AI
+        // actually capture enemy cities instead of only reacting. Civs that
+        // prefer to expand/research/wonder stay peaceful until provoked.
+        const strengthRatio = ownStrength / Math.max(theirStrength, 1);
+        const profile = civ.productionProfile ?? 'balanced_growth';
+        const conquestThreshold = profile === 'military_expansion' ? 1.6
+          : profile === 'balanced_growth' ? 2.0
+          : Infinity;
+        const wantsConquest = personality.aggression >= 4 && strengthRatio >= conquestThreshold;
+        // Classic behaviour: very aggressive + hostile civs attack with only
+        // a 1.5x edge.
+        const classicDoW = personality.aggression >= 7 && strengthRatio >= 1.5 && attitude === 'hostile';
+        if (wantsConquest || classicDoW) {
+          console.log(`[AI-DIPLO] Civ ${civId} declaring war on Civ ${otherId} (conquest ratio ${strengthRatio.toFixed(2)})`);
           this.declareWar(civId, otherId);
           if (isPlayerTarget) {
             this.emitEvent('DIPLOMACY_EVENT', {

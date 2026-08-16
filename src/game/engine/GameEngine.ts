@@ -14,7 +14,7 @@ import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
-import { getCivProductionProfile } from './AITypes';
+import { getCivProductionProfile, getCivPersonality } from './AITypes';
 import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
 import type { GameActions, Unit, City, Civilization } from '../../../types/game';
@@ -816,6 +816,7 @@ export default class GameEngine {
         luxuryRate: 0,
         government: 'despotism',
         productionProfile: getCivProductionProfile(i),
+        personality: getCivPersonality(getCivProductionProfile(i)),
         score: 0
       };
 

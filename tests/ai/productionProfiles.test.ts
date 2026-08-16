@@ -187,6 +187,20 @@ describe('initial AI production (real engine)', () => {
     expect((e.civilizations[1] as { productionProfile?: string }).productionProfile).toBe('military_expansion');
   });
 
+  it('assigns a deterministic AI personality matching each production profile', async () => {
+    const e = new GameEngine(null);
+    (e as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
+    (e as unknown as { isPaused: boolean }).isPaused = true;
+    await e.initialize({ numberOfCivilizations: 2, mapType: 'AI_VS_AI', devMode: false, startingGold: 100 });
+    engine = e;
+
+    const p0 = (e.civilizations[0] as { personality?: { aggression: number } }).personality;
+    const p1 = (e.civilizations[1] as { personality?: { aggression: number } }).personality;
+    // early_expansion → aggression 6; military_expansion → aggression 8.
+    expect(p0?.aggression).toBe(6);
+    expect(p1?.aggression).toBe(8);
+  });
+
   it('starts the first AI city with a settler', async () => {
     const e = new GameEngine(null);
     (e as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();

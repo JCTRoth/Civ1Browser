@@ -117,6 +117,39 @@ export function getCivProductionProfile(civilizationId: number): StrategyProfile
   return CIV_PRODUCTION_PROFILES[civilizationId % CIV_PRODUCTION_PROFILES.length] ?? 'balanced_growth';
 }
 
+/**
+ * Deterministic AI personality (aggression/diplomacy/military/…) derived from
+ * the civ's production profile. The engine's civs are plain objects and never
+ * got a `personality`, which made `processAIDiplomacy` fall back to an all-5
+ * profile — so the AI could never declare war on its own and its city-capture
+ * ability stayed dormant. Profiles that produce armies get high aggression so
+ * they actually attack weaker neighbours.
+ */
+export function getCivPersonality(profile: StrategyProfile): {
+  aggression: number;
+  diplomacy: number;
+  military: number;
+  expansion: number;
+  science: number;
+  economy: number;
+} {
+  switch (profile) {
+    case 'military_expansion':
+      return { aggression: 8, diplomacy: 3, military: 9, expansion: 8, science: 3, economy: 4 };
+    case 'early_expansion':
+      return { aggression: 6, diplomacy: 5, military: 5, expansion: 9, science: 5, economy: 6 };
+    case 'science_focus':
+      return { aggression: 3, diplomacy: 7, military: 3, expansion: 5, science: 9, economy: 5 };
+    case 'defensive_turtle':
+      return { aggression: 2, diplomacy: 6, military: 7, expansion: 4, science: 6, economy: 6 };
+    case 'wonder_rush':
+      return { aggression: 4, diplomacy: 6, military: 4, expansion: 4, science: 7, economy: 7 };
+    case 'balanced_growth':
+    default:
+      return { aggression: 5, diplomacy: 5, military: 5, expansion: 6, science: 5, economy: 5 };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Technology category mapping for AI research scoring
 // ---------------------------------------------------------------------------

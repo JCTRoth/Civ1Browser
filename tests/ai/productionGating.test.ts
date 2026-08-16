@@ -65,8 +65,8 @@ describe('production tech-gating', () => {
     const city = engine.cities.find((c) => c.civilizationId === 0);
     expect(city).toBeDefined();
 
-    const set = (item: { type: string; itemType: string; name: string; cost: number }) =>
-      engine!.productionManager.setCityProduction(city!.id, item, false);
+    const set = (item: { type: string; itemType: string; name: string; cost: number }): { success: boolean; reason?: string } =>
+      engine!.productionManager.setCityProduction(city!.id, item, false) as { success: boolean; reason?: string };
 
     // Civ 0 starts with irrigation/mining/roads only.
     const forge = set({ type: 'building', itemType: 'forge', name: 'Forge', cost: 80 });

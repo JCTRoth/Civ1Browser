@@ -299,6 +299,54 @@ describe('DiplomacyManager', () => {
     });
   });
 
+  // ─── AI war for conquest (city capture) ───────────────────────────
+
+  describe('AI war for conquest', () => {
+    it('a military_expansion civ declares war when it has a clear strength advantage', () => {
+      // Reset to a 2-civ game with a strong military_expansion AI.
+      ge.civilizations = [
+        { id: 0, name: 'Americans', isAlive: true, isHuman: true, resources: { gold: 200 }, personality: { aggression: 5, diplomacy: 5, military: 5, expansion: 5, science: 5, economy: 5 } },
+        { id: 1, name: 'Aztecs', isAlive: true, isAI: true, resources: { gold: 100 }, personality: { aggression: 8, diplomacy: 3, military: 9, expansion: 8, science: 3, economy: 4 }, productionProfile: 'military_expansion' },
+      ];
+      ge.units = [
+        { id: 'a1', type: 'warriors', civilizationId: 1, attack: 2, defense: 1, col: 5, row: 5 },
+        { id: 'a2', type: 'warriors', civilizationId: 1, attack: 2, defense: 1, col: 6, row: 5 },
+        { id: 'a3', type: 'warriors', civilizationId: 1, attack: 2, defense: 1, col: 7, row: 5 },
+        { id: 'd1', type: 'warriors', civilizationId: 0, attack: 1, defense: 1, col: 10, row: 10 },
+      ];
+      ge.cities = [{ id: 'c1', civilizationId: 0, col: 10, row: 10 }];
+      dm = new DiplomacyManager(ge);
+      dm.initialize([0, 1]);
+
+      ge.roundManager.getRoundNumber = () => 5;
+      dm.processAIDiplomacy(1);
+
+      // Strength: civ1 = 3 * (2 + 0.5) = 7.5 vs civ0 = 1 + 0.5 = 1.5 → ratio 5 ≥ 1.6.
+      expect(dm.isAtWar(1, 0)).toBe(true);
+    });
+
+    it('a defensive_turtle civ does not declare war even when stronger', () => {
+      ge.civilizations = [
+        { id: 0, name: 'Americans', isAlive: true, isHuman: true, resources: { gold: 200 }, personality: { aggression: 5, diplomacy: 5, military: 5, expansion: 5, science: 5, economy: 5 } },
+        { id: 1, name: 'Aztecs', isAlive: true, isAI: true, resources: { gold: 100 }, personality: { aggression: 2, diplomacy: 6, military: 7, expansion: 4, science: 6, economy: 6 }, productionProfile: 'defensive_turtle' },
+      ];
+      ge.units = [
+        { id: 'a1', type: 'warriors', civilizationId: 1, attack: 2, defense: 1, col: 5, row: 5 },
+        { id: 'a2', type: 'warriors', civilizationId: 1, attack: 2, defense: 1, col: 6, row: 5 },
+        { id: 'a3', type: 'warriors', civilizationId: 1, attack: 2, defense: 1, col: 7, row: 5 },
+        { id: 'd1', type: 'warriors', civilizationId: 0, attack: 1, defense: 1, col: 10, row: 10 },
+      ];
+      ge.cities = [{ id: 'c1', civilizationId: 0, col: 10, row: 10 }];
+      dm = new DiplomacyManager(ge);
+      dm.initialize([0, 1]);
+
+      ge.roundManager.getRoundNumber = () => 5;
+      dm.processAIDiplomacy(1);
+
+      expect(dm.isAtWar(1, 0)).toBe(false);
+    });
+  });
+
   // ─── Reset ─────────────────────────────────────────────────────────
 
   describe('reset', () => {
