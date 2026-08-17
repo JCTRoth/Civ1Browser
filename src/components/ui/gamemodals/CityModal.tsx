@@ -35,7 +35,7 @@ const CityModal: React.FC<CityModalProps> = ({
   useEffect(() => {
     if (!selectedCity) return;
     setAutoProduction((selectedCity as any)?.autoProduction || false);
-  }, [selectedCity?.id, (selectedCity as any)?.autoProduction]);
+  }, [selectedCity, selectedCity.id]);
 
   if (!selectedCity) return null;
 
