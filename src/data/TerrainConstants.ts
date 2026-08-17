@@ -227,15 +227,6 @@ export const SPECIAL_RESOURCES: SpecialResource[] = [
         description: 'High production value (Swamp)'
     },
     {
-        name: 'Furs',
-        terrain: TERRAIN_TYPES.TUNDRA,
-        terrains: `${TERRAIN_TYPES.TUNDRA}`,
-        food: 2,
-        production: 0,
-        trade: 0,
-        description: 'Increases food production (Tundra)'
-    },
-    {
         name: 'Game',
         terrain: TERRAIN_TYPES.FOREST,
         terrains: `${TERRAIN_TYPES.FOREST}`,
@@ -268,7 +259,6 @@ export const TERRAIN_RESOURCES: Record<string, string | null> = {
     [TERRAIN_TYPES.HILLS]: 'Coal',
     [TERRAIN_TYPES.OCEAN]: 'Fish',
     [TERRAIN_TYPES.SWAMP]: 'Oil',
-    [TERRAIN_TYPES.TUNDRA]: 'Furs',
     [TERRAIN_TYPES.FOREST]: 'Game',
     [TERRAIN_TYPES.GRASSLAND]: null,
     [TERRAIN_TYPES.DESERT]: 'Oasis',

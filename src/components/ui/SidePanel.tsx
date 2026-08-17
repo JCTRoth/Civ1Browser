@@ -298,7 +298,7 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
                 className="side-panel-research-btn"
                 onClick={() => actions.showDialog('tech')}
               >
-                Tech Tree
+                Tech 
               </button>
             </>
           ) : researchInfo.nextInPath ? (

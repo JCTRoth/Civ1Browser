@@ -73,7 +73,6 @@ describe('Civ1 terrain data', () => {
     expect(TERRAIN_RESOURCES[TERRAIN_TYPES.HILLS]).toBe('Coal');
     expect(TERRAIN_RESOURCES[TERRAIN_TYPES.OCEAN]).toBe('Fish');
     expect(TERRAIN_RESOURCES[TERRAIN_TYPES.SWAMP]).toBe('Oil');
-    expect(TERRAIN_RESOURCES[TERRAIN_TYPES.TUNDRA]).toBe('Furs');
     expect(TERRAIN_RESOURCES[TERRAIN_TYPES.FOREST]).toBe('Game');
     expect(TERRAIN_RESOURCES[TERRAIN_TYPES.DESERT]).toBe('Oasis');
     expect(TERRAIN_RESOURCES[TERRAIN_TYPES.GRASSLAND]).toBeNull();

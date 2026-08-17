@@ -28,11 +28,10 @@ const RESOURCE_GLYPHS: Record<string, string> = {
   seal: '🦭',
   gems: '💎',
   horses: '🐎',
-  gold: '🪙',
-  coal: '⬛',
+  gold: '💰',
+  coal: '🪨',
   fish: '🐟',
   oil: '🛢️',
-  furs: '🦊',
   game: '🦌',
   oasis: '🌴',
 };
@@ -1332,7 +1331,7 @@ export class MapRenderer {
       }
     }
 
-    // Civ1 special-resource glyph (Seal, Gems, Horses, Gold, Coal, Fish, Oil, Furs, Game, Oasis).
+    // Civ1 special-resource glyph (Seal, Gems, Horses, Gold, Coal, Fish, Oil, Game, Oasis).
     const resource = terrain.resource ? String(terrain.resource) : null;
     if (drawBase && resource && RESOURCE_GLYPHS[resource.toLowerCase()]) {
       try {
