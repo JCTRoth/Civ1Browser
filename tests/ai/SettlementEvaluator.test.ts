@@ -138,6 +138,18 @@ describe('SettlementEvaluator', () => {
       }
     });
 
+    it('keeps the complete workable area separate from friendly cities', () => {
+      mockCities.set('10,10', { id: 'city1', civilizationId: 1 });
+      const result = SettlementEvaluator.findBestSettlementLocation(
+        10, 10, getTileAt, getCityAt, getUnitAt,
+        SettlementEvaluator.balancedGrowthWeights(), 3, 1, getVisibilityAt, canReach
+      );
+
+      if (result) {
+        expect(Math.max(Math.abs(result.col - 10), Math.abs(result.row - 10))).toBeGreaterThanOrEqual(5);
+      }
+    });
+
     it('should not place city where another unit exists', () => {
       mockUnits.set('10,10', { id: 'unit1', civilizationId: 1 });
 

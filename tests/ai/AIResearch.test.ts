@@ -87,6 +87,42 @@ describe('AIResearch.scoreTechnology', () => {
     expect(result.reason).toBeTypeOf('string');
     expect(result.techId).toBe('pottery');
   });
+
+  it('strongly delays naval research for a landlocked civ in the early game', () => {
+    const landlocked = AIResearch.scoreTechnology(
+      'sailing', personality, 'balanced_growth', baseGameState({ hasWaterAccess: false, currentYear: -3000 })
+    );
+    const coastal = AIResearch.scoreTechnology(
+      'sailing', personality, 'balanced_growth', baseGameState({ hasWaterAccess: true, currentYear: -3000 })
+    );
+
+    expect(landlocked.score).toBeLessThan(coastal.score);
+    expect(landlocked.reason).toContain('no-coastal-city');
+  });
+
+  it('also delays Map Making for a landlocked civ, but permits it for a coastal civ', () => {
+    const landlocked = AIResearch.scoreTechnology(
+      'map_making', personality, 'balanced_growth', baseGameState({ hasWaterAccess: false, currentYear: -3000 })
+    );
+    const coastal = AIResearch.scoreTechnology(
+      'map_making', personality, 'balanced_growth', baseGameState({ hasWaterAccess: true, currentYear: -3000 })
+    );
+
+    expect(landlocked.score).toBeLessThan(coastal.score);
+    expect(landlocked.reason).toContain('no-coastal-city');
+  });
+
+  it('does not select Sailing early when the civ has no direct coastal city', () => {
+    const civ = baseCiv();
+    const result = AIResearch.selectResearch(
+      civ,
+      'balanced_growth',
+      baseGameState({ hasWaterAccess: false, currentYear: -3000 }),
+    );
+
+    expect(result).not.toBe('sailing');
+    expect(result).not.toBe('map_making');
+  });
 });
 
 describe('AIResearch.getAvailableTechnologies', () => {

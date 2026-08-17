@@ -74,6 +74,11 @@ export class AutoProduction {
 
       const threatAssessment = this.evaluateCityThreat(city);
 
+      // Re-evaluate queued follow-ups when the strategic situation changes.
+      // In particular, an aggressive civ must not keep a peaceful building
+      // queue after war or an offensive plan has started.
+      this.reconsiderAggressiveQueue(city);
+
       if (city.currentProduction) {
         if (threatAssessment?.needsDefense && !this.isDefensiveProduction(city.currentProduction)) {
           console.log('[AutoProduction] City under threat, overriding existing production');
@@ -320,6 +325,13 @@ export class AutoProduction {
     const numMilitary = this.gameEngine.units.filter(
       (u: Unit) => u.civilizationId === city.civilizationId && this.isOffensiveUnitType(u.type)
     ).length;
+
+    const aggressivePosture = this.isAggressivePosture(city.civilizationId);
+    if (aggressivePosture &&
+        (this.isCivAtWar(city.civilizationId) || this.shouldSupportOffensivePlan(city))) {
+      console.log('[AutoProduction] Aggressive posture: prioritizing attacker over buildings');
+      return this.buildOffensiveProduction(city);
+    }
 
     // Check if building is high-priority enough to build over a unit
     if (buildingPlan && AIBuildingStrategy.shouldBuildOverUnit(
@@ -579,6 +591,39 @@ export class AutoProduction {
 
     const offensiveUnits = this.countOffensiveUnits(city.civilizationId);
     return offensiveUnits < plan.requiredUnits;
+  }
+
+  /** Aggressive posture is driven by both identity and the current war plan. */
+  private isAggressivePosture(civilizationId: number): boolean {
+    const civ = this.gameEngine.civilizations?.[civilizationId];
+    const strategy = this.getStrategyForCiv(civilizationId);
+    return strategy === 'military_expansion' || (((civ as any)?.personality?.aggression ?? 5) >= 7);
+  }
+
+  private isCivAtWar(civilizationId: number): boolean {
+    return (this.gameEngine.civilizations?.[civilizationId]?.warWith?.size ?? 0) > 0;
+  }
+
+  /**
+   * Remove stale peaceful follow-ups from an aggressive wartime queue. The
+   * current production item is intentionally preserved; only future items
+   * are reconsidered and replenished by ensureProductionQueue().
+   */
+  private reconsiderAggressiveQueue(city: City): void {
+    if (!this.isAggressivePosture(city.civilizationId) ||
+        (!this.isCivAtWar(city.civilizationId) && !this.shouldSupportOffensivePlan(city)) ||
+        !Array.isArray(city.buildQueue)) {
+      return;
+    }
+
+    const original = city.buildQueue;
+    const offensiveQueue = original.filter((item: QueueItem) =>
+      item.type === 'unit' && !!item.itemType && this.isOffensiveUnitType(item.itemType)
+    );
+    if (offensiveQueue.length !== original.length) {
+      city.buildQueue = offensiveQueue;
+      console.log(`[AutoProduction] Reconsidered aggressive queue for ${city.name}: ${original.length} → ${offensiveQueue.length} peaceful follow-ups removed`);
+    }
   }
 
   private countOffensiveUnits(civilizationId: number): number {

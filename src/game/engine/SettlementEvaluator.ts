@@ -21,6 +21,13 @@ interface SettlementScore {
 }
 
 /**
+ * City radius is a 5x5 square in the current Civ1 rules.  A centre distance
+ * of five (Chebyshev) is therefore the minimum that guarantees two cities do
+ * not compete for any workable tile.
+ */
+export const MIN_CITY_CENTER_DISTANCE = 5;
+
+/**
  * Settlement Evaluator - Determines optimal city placement locations
  */
 export class SettlementEvaluator {
@@ -352,17 +359,18 @@ export class SettlementEvaluator {
           continue;
         }
 
-        // Check distance from friendly cities (own civilization)
-        // Never settle within 2x2 area of own cities
+        // Check distance from friendly cities (own civilization).  Do not
+        // merely keep city centres apart: the whole workable/resource area
+        // must be disjoint as well.
         let tooCloseToFriendlyCity = false;
         if (currentCivilizationId !== undefined) {
-          for (let checkDy = -2; checkDy <= 2; checkDy++) {
-            for (let checkDx = -2; checkDx <= 2; checkDx++) {
-              if (checkDx === 0 && checkDy === 0) continue;
+          for (let checkDy = -MIN_CITY_CENTER_DISTANCE + 1; checkDy < MIN_CITY_CENTER_DISTANCE; checkDy++) {
+            for (let checkDx = -MIN_CITY_CENTER_DISTANCE + 1; checkDx < MIN_CITY_CENTER_DISTANCE; checkDx++) {
+              if (Math.max(Math.abs(checkDx), Math.abs(checkDy)) >= MIN_CITY_CENTER_DISTANCE) continue;
               const nearbyCity = getCityAt(col + checkDx, row + checkDy);
-              if (nearbyCity && nearbyCity.civilizationId === currentCivilizationId) {
+              if (nearbyCity?.civilizationId === currentCivilizationId) {
                 tooCloseToFriendlyCity = true;
-                console.log(`[SettlementEvaluator] findBestSettlementLocation: Too close to friendly city at (${col + checkDx}, ${row + checkDy})`);
+                console.log(`[SettlementEvaluator] findBestSettlementLocation: Workable area overlaps friendly city at (${col + checkDx}, ${row + checkDy})`);
                 break;
               }
             }

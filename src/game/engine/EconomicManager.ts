@@ -293,12 +293,54 @@ export class EconomicManager {
     return { food, production, trade };
   }
 
+  /** Return the complete 20-tile Civ1 workable area around a city. */
+  private cityTerritory(city: City): Array<{ col: number; row: number }> {
+    const territory: Array<{ col: number; row: number }> = [];
+    for (let dCol = -CITY_RADIUS; dCol <= CITY_RADIUS; dCol++) {
+      for (let dRow = -CITY_RADIUS; dRow <= CITY_RADIUS; dRow++) {
+        if (dCol === 0 && dRow === 0) continue;
+        // Civ1 excludes the four diagonal corner tiles at distance 2.
+        if (Math.abs(dCol) === CITY_RADIUS && Math.abs(dRow) === CITY_RADIUS) continue;
+        const col = city.col + dCol;
+        const row = city.row + dRow;
+        const valid = typeof this.gameEngine.squareGrid?.isValidSquare === 'function'
+          ? this.gameEngine.squareGrid.isValidSquare(col, row)
+          : col >= 0 && row >= 0 &&
+            col < (this.gameEngine.squareGrid?.width ?? Number.POSITIVE_INFINITY) &&
+            row < (this.gameEngine.squareGrid?.height ?? Number.POSITIVE_INFINITY);
+        if (valid) {
+          territory.push({ col, row });
+        }
+      }
+    }
+    return territory;
+  }
+
+  /**
+   * Resolve a single owner for a tile when cities overlap in an old save or
+   * from a legacy placement path. New cities are kept five tiles apart, but
+   * this deterministic tie-break prevents two cities from both consuming the
+   * same resource while such a map is still playable.
+   */
+  private territoryOwner(col: number, row: number): City | null {
+    const cities = (this.gameEngine.cities ?? []) as City[];
+    return cities
+      .map((candidate, index) => ({
+        candidate,
+        index,
+        distance: Math.max(Math.abs(candidate.col - col), Math.abs(candidate.row - row)),
+      }))
+      .filter(({ distance }) => distance <= CITY_RADIUS)
+      .sort((a, b) => a.distance - b.distance || a.index - b.index)[0]?.candidate ?? null;
+  }
+
   /**
    * The tiles a city works: the city-center tile (min 2F/1P/1T) plus the best
-   * (population − 1) tiles within the city radius, ranked by total yield.
-   * Returns null when the map isn't available (e.g. unit tests).
+   * (population − 1) tiles in its complete 20-tile territory, ranked by total
+   * yield. A tile is assigned to only one city, even if cities overlap in a
+   * legacy map. Returns null when the map isn't available (e.g. unit tests).
    */
-  private cityWorkedTiles(city: City): Array<{ yields: { food: number; production: number; trade: number } }> | null {
+  private cityWorkedTiles(city: City): Array<{ col: number; row: number; yields: { food: number; production: number; trade: number } }> | null {
     if (!city || typeof this.gameEngine?.getTileAt !== 'function' || !this.gameEngine?.squareGrid) {
       return null;
     }
@@ -312,23 +354,30 @@ export class EconomicManager {
       trade: Math.max(CITY_CENTER_MIN.trade, center.trade),
     };
 
-    const grid = this.gameEngine.squareGrid;
-    const candidates: Array<{ yields: { food: number; production: number; trade: number } }> = [];
-    const range = typeof grid.getSquaresInRange === 'function'
-      ? grid.getSquaresInRange(city.col, city.row, CITY_RADIUS)
-      : [];
-    for (const sq of range) {
-      if (sq.col === city.col && sq.row === city.row) continue;
+    const candidates: Array<{ col: number; row: number; yields: { food: number; production: number; trade: number } }> = [];
+    for (const sq of this.cityTerritory(city)) {
+      const owner = this.territoryOwner(sq.col, sq.row);
+      if (owner && owner.id !== city.id) continue;
       const tile = this.getTile(sq.col, sq.row);
       if (!tile) continue;
-      candidates.push({ yields: this.tileYields(tile) });
+      candidates.push({ col: sq.col, row: sq.row, yields: this.tileYields(tile) });
     }
     const total = (y: { food: number; production: number; trade: number }): number =>
       y.food + y.production + y.trade;
     candidates.sort((a, b) => total(b.yields) - total(a.yields));
 
     const pop = Math.max(1, city.population ?? 1);
-    return [{ yields: centerYields }, ...candidates.slice(0, pop - 1)];
+    const worked = [
+      { col: city.col, row: city.row, yields: centerYields },
+      ...candidates.slice(0, pop - 1),
+    ];
+
+    // Keep the actual assignment visible to the city UI/debugger. The economy
+    // is authoritative because it is what feeds food, production and trade.
+    (city as City & { workingTiles?: string[] }).workingTiles = worked.map(
+      ({ col, row }) => `${col},${row}`
+    );
+    return worked;
   }
 
   private buildingBonuses(city: City): { trade: number; science: number } {

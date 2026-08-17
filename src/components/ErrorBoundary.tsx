@@ -44,7 +44,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
               <p><strong>Error:</strong> {this.state.error && this.state.error.toString()}</p>
               <p><strong>Stack Trace:</strong></p>
               <pre className="bg-light p-2 border">
-                {this.state.errorInfo.componentStack}
+                {this.state.errorInfo?.componentStack || 'No component stack available.'}
               </pre>
             </div>
           </details>

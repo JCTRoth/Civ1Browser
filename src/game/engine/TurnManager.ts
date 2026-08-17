@@ -415,6 +415,7 @@ export class TurnManager {
           isAtWar: (civ.warWith?.size ?? 0) > 0,
           hasLibrary: cities.some((c: any) => c.buildings?.some?.((b: any) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
           totalScience: this.gameEngine.cities?.reduce((s: number, c: any) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
+          hasWaterAccess: cities.some((city: any) => this.cityHasDirectWaterAccess(city)),
         };
 
         const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
@@ -428,6 +429,17 @@ export class TurnManager {
     }
 
     this.emit('RESEARCH_PHASE', { civilizationId });
+  }
+
+  private cityHasDirectWaterAccess(city: { col: number; row: number }): boolean {
+    for (let dCol = -1; dCol <= 1; dCol++) {
+      for (let dRow = -1; dRow <= 1; dRow++) {
+        if (dCol === 0 && dRow === 0) continue;
+        const tile = this.gameEngine.getTileAt?.(city.col + dCol, city.row + dRow);
+        if (tile?.type === 'ocean' || tile?.type === 'sea') return true;
+      }
+    }
+    return false;
   }
 
   private finalizeEndPhase(civilizationId: number) {

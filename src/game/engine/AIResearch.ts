@@ -34,6 +34,8 @@ interface GameStateSnapshot {
   isAtWar: boolean;
   hasLibrary: boolean;
   totalScience: number;
+  /** True when at least one own city directly borders ocean/sea. */
+  hasWaterAccess?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +138,17 @@ const KEY_UNLOCK_SCORES: Record<string, number> = {
 // ---------------------------------------------------------------------------
 
 export class AIResearch {
+  private static isNavalTech(techId: string): boolean {
+    return techId === 'sailing' || techId === 'map_making';
+  }
+
+  private static isEarlyLandlocked(gameState: GameStateSnapshot): boolean {
+    // Treat missing/unknown access as landlocked for this early-game gate.
+    // Research should not assume naval infrastructure is useful without a
+    // confirmed coastal city.
+    return gameState.currentYear < -1000 && gameState.hasWaterAccess !== true;
+  }
+
   /**
    * Select the best technology for an AI civilization to research.
    * 
@@ -160,10 +173,19 @@ export class AIResearch {
       techId, personality, strategy, gameState
     ));
 
-    // Sort descending by score
-    scored.sort((a, b) => b.score - a.score);
+    // Never choose an early naval branch for a landlocked civilization while
+    // another technology is available. The score penalty remains useful for
+    // diagnostics and tie-breaking, while this filter makes the behaviour
+    // deterministic even when all normal candidates score very low.
+    const selectable = AIResearch.isEarlyLandlocked(gameState)
+      ? scored.filter(result => !AIResearch.isNavalTech(result.techId))
+      : scored;
+    const candidates = selectable.length > 0 ? selectable : scored;
 
-    const best = scored[0];
+    // Sort descending by score
+    candidates.sort((a, b) => b.score - a.score);
+
+    const best = candidates[0];
     if (best) {
       console.log(`[AIResearch] Selected ${best.techId} (score: ${best.score.toFixed(1)}) — ${best.reason}`);
       return best.techId;
@@ -242,6 +264,14 @@ export class AIResearch {
     if (gameState.numCities < 2 && techId === 'pottery') {
       score += 6;  // Granary critical for first cities
       reasons.push('early-growth');
+    }
+
+    // Sailing and Map Making are dead-end investments for a landlocked
+    // civilization in the early game. Do not let expansion/science weights
+    // pull the AI into a naval branch before one of its cities touches water.
+    if (AIResearch.isNavalTech(techId) && AIResearch.isEarlyLandlocked(gameState)) {
+      score -= 100;
+      reasons.push('no-coastal-city');
     }
 
     // 7. Era progression — slight bonus for advancing to new eras

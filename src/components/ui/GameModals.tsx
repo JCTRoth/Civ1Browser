@@ -7,6 +7,7 @@ import CityModal from './gamemodals/CityModal';
 import HexDetailModal from './gamemodals/HexDetailModal';
 import RatesModal from './gamemodals/RatesModal';
 import GovernmentModal from './gamemodals/GovernmentModal';
+import StatisticsModal from './gamemodals/StatisticsModal';
 import VillageModal from './gamemodals/VillageModal';
 import { useGameStore } from '@/stores/GameStore';
 import { UNIT_PROPS } from '@/utils/Constants';
@@ -1742,6 +1743,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <HexDetailModal show={uiState.activeDialog === 'hex-details'} onHide={handleCloseDialog} selectedHex={selectedHex} map={map} units={units} cities={cities} />
       <RatesModal show={uiState.activeDialog === 'rates'} onHide={handleCloseDialog} gameEngine={gameEngine} />
       <GovernmentModal show={uiState.activeDialog === 'government'} onHide={handleCloseDialog} gameEngine={gameEngine} />
+      <StatisticsModal show={uiState.activeDialog === 'statistics'} onHide={handleCloseDialog} />
       <VillageModal show={uiState.activeDialog === 'village'} onHide={actions.clearVillageResult} />
       {renderCityProduction()}
       {renderCityPurchase()}

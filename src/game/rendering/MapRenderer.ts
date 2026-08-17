@@ -761,6 +761,43 @@ export class MapRenderer {
     const margin = this.tileSize * 2;
     const scaledTileSize = this.tileSize * cameraZoom;
 
+    // A selected city owns the 20 tiles in its Civ1 city radius. Highlight
+    // them immediately on city click so the player can see where the city's
+    // resources come from. Draw this before units/cities so those stay clear.
+    const selectedCity = gameState.selectedCity
+      ? cities.find(city => city.id === gameState.selectedCity)
+      : null;
+    if (selectedCity) {
+      for (let dCol = -2; dCol <= 2; dCol++) {
+        for (let dRow = -2; dRow <= 2; dRow++) {
+          if (dCol === 0 && dRow === 0) continue;
+          if (Math.abs(dCol) === 2 && Math.abs(dRow) === 2) continue;
+
+          const col = selectedCity.col + dCol;
+          const row = selectedCity.row + dRow;
+          if (row < bounds.startRow || row >= bounds.endRow || col < bounds.startCol || col >= bounds.endCol) continue;
+
+          const { x, y } = squareToScreen(col, row);
+          if (this.isOutsideViewport(x, y, canvasSize.width, canvasSize.height, margin)) continue;
+
+          const half = scaledTileSize / 2;
+          ctx.fillStyle = 'rgba(255, 214, 0, 0.16)';
+          ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          ctx.strokeStyle = 'rgba(255, 214, 0, 0.9)';
+          ctx.lineWidth = Math.max(1, cameraZoom);
+          ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+        }
+      }
+
+      // Outline the city centre as well, while leaving the resource grid
+      // readable around it.
+      const center = squareToScreen(selectedCity.col, selectedCity.row);
+      const half = scaledTileSize / 2;
+      ctx.strokeStyle = '#ffe066';
+      ctx.lineWidth = Math.max(2, cameraZoom * 2);
+      ctx.strokeRect(center.x - half, center.y - half, scaledTileSize, scaledTileSize);
+    }
+
     // Draw movement range overlay first (so it's under everything else)
     if (reachableTiles && reachableTiles.size > 0) {
       // Determine if the selected unit is naval

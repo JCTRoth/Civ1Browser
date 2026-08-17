@@ -20,6 +20,7 @@ interface GameMenuSheetProps {
   onHelp: () => void;
   onDiplomacy: () => void;
   onTechTree: () => void;
+  onStatistics: () => void;
 }
 
 interface MenuItemProps {
@@ -63,6 +64,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
   onHelp,
   onDiplomacy,
   onTechTree,
+  onStatistics,
 }) => {
   if (!activeMenu) {
     return null;
@@ -107,6 +109,7 @@ const GameMenuSheet: React.FC<GameMenuSheetProps> = ({
             <MenuItem icon="📊" label="Rates" onClick={onOpenRates} />
             <MenuItem icon="🏛️" label="Government" onClick={onOpenGovernment} />
             <MenuItem icon="🌳" label="Tech Tree" onClick={onTechTree} />
+            <MenuItem icon="📈" label="Statistics" onClick={onStatistics} />
           </>
         )}
 

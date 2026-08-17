@@ -8,7 +8,7 @@
 import { AIUtility, scanAreaForEnemies, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
 import { UNIT_PROPS, TERRAIN_PROPS } from '@/utils/Constants';
-import { SettlementEvaluator } from './SettlementEvaluator';
+import { SettlementEvaluator, MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
 import { AICoordinator } from './AICoordinator';
 import { AIResearch } from './AIResearch';
@@ -177,18 +177,24 @@ export class AIManager {
     const combatUnits = this.gameEngine.units.filter(
       (u: Unit) => u.civilizationId === civilizationId && this.isCombatUnit(u)
     );
+    const reserveIds = this.getCityDefenseReserveIds(civilizationId, combatUnits);
+    const offensiveUnits = combatUnits.filter((unit: Unit) => !reserveIds.has(unit.id));
     const targets = this.getKnownEnemyTargets(civilizationId, storage);
 
-    if (combatUnits.length >= 3 && targets.length > 0) {
+    if (offensiveUnits.length >= 3 && targets.length > 0) {
       const distFn = (c1: number, r1: number, c2: number, r2: number) =>
         this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
 
       aiState.armyGroups = AICoordinator.formArmyGroups(
-        combatUnits, targets, aiState.armyGroups, distFn
+        offensiveUnits, targets, aiState.armyGroups, distFn
       );
       AICoordinator.updateGroupStatuses(
-        aiState.armyGroups, combatUnits, distFn
+        aiState.armyGroups, offensiveUnits, distFn
       );
+    } else if (aiState.armyGroups.length > 0) {
+      // Do not keep stale groups when all available combat units are needed
+      // for city defense.
+      aiState.armyGroups = [];
     }
 
     // Save updated state back
@@ -378,7 +384,10 @@ export class AIManager {
         } else {
           // Pathfind towards target and take next step
           console.log(`[AI] Pathfinding to non-adjacent target (${target.col},${target.row})`);
-          const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, new Set());
+          const obstacles = unit.type === 'settler'
+            ? this.getSettlerPathObstacles(unit.id, target)
+            : new Set<string>();
+          const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, obstacles, this.gameEngine.getPassabilityFilter?.());
           if (path.length > 1) {
             let next = path[1];
             console.log(`[AI] Path found, next step to (${next.col},${next.row}), path length: ${path.length}`);
@@ -635,8 +644,16 @@ export class AIManager {
             (col1, row1, col2, row2) => this.gameEngine.squareGrid!.squareDistance(col1, row1, col2, row2)
           );
           if (nearestCity) {
-            console.log(`[AI-SCOUT] Scout returning to nearest city at (${nearestCity.col}, ${nearestCity.row})`);
-            return { col: nearestCity.col, row: nearestCity.row };
+            // Once home, clear the return order so this scout can resume
+            // reconnaissance next turn. Leaving enemyFound set made it
+            // select its own city forever and starved the army's intelligence.
+            if (nearestCity.col === unit.col && nearestCity.row === unit.row) {
+              unit.enemyFound = false;
+              unit.enemyLocation = undefined;
+            } else {
+              console.log(`[AI-SCOUT] Scout returning to nearest city at (${nearestCity.col}, ${nearestCity.row})`);
+              return { col: nearestCity.col, row: nearestCity.row };
+            }
           }
         }
 
@@ -757,6 +774,18 @@ export class AIManager {
       (col, row) => this.gameEngine.getUnitAt(col, row)
     );
     if (enemy) {
+      // Scouts are intelligence units, not disposable melee units.  When a
+      // hostile unit blocks the direct route, choose a passable waypoint on
+      // either side of it.  This creates a real flanking/scouting flow: the
+      // scout keeps looking for a route around the enemy and can reach the
+      // unexplored territory behind it instead of repeating contact/retreat.
+      if (unit.type === 'scout') {
+        const flank = this.findScoutRouteAroundEnemy(unit, enemy as { col: number; row: number });
+        if (flank) {
+          console.log(`[AI-SCOUT] Routing around enemy at (${enemy.col},${enemy.row}) via (${flank.col},${flank.row})`);
+          return flank;
+        }
+      }
       console.log(`[AI] Chose enemy unit at (${enemy.col},${enemy.row})`);
       return { col: enemy.col, row: enemy.row };
     }
@@ -784,7 +813,7 @@ export class AIManager {
       const staleTarget = this.gameEngine.scoutMemory.getNearestStaleTarget?.(
         unit.col, unit.row, unit.civilizationId
       );
-      if (staleTarget) {
+      if (staleTarget && (staleTarget.col !== unit.col || staleTarget.row !== unit.row)) {
         console.log(`[AI-SCOUT] ScoutMemory target at (${staleTarget.col},${staleTarget.row})`);
         return { col: staleTarget.col, row: staleTarget.row };
       }
@@ -825,6 +854,35 @@ export class AIManager {
 
     console.log(`[AI] No valid target found for unit ${unit.id}`);
     return null;
+  }
+
+  /** Pick a safe waypoint that moves a scout around a nearby blocking enemy. */
+  public findScoutRouteAroundEnemy(
+    scout: Pick<Unit, 'col' | 'row' | 'civilizationId'>,
+    enemy: Pick<Unit, 'col' | 'row'>
+  ): { col: number; row: number } | null {
+    const grid = this.gameEngine.squareGrid;
+    if (!grid) return null;
+
+    const dx = scout.col - enemy.col;
+    const dy = scout.row - enemy.row;
+    const side = Math.abs(dx) >= Math.abs(dy) ? { col: 0, row: 1 } : { col: 1, row: 0 };
+    const candidates = [
+      { col: enemy.col + side.col * 2, row: enemy.row + side.row * 2 },
+      { col: enemy.col - side.col * 2, row: enemy.row - side.row * 2 },
+      { col: enemy.col + side.col * 3, row: enemy.row + side.row * 3 },
+      { col: enemy.col - side.col * 3, row: enemy.row - side.row * 3 },
+    ];
+
+    return candidates
+      .filter((candidate) => grid.isValidSquare(candidate.col, candidate.row))
+      .filter((candidate) => this.gameEngine.isTilePassable?.(candidate.col, candidate.row) ?? true)
+      .filter((candidate) => !this.gameEngine.getUnitAt?.(candidate.col, candidate.row))
+      .map((candidate) => ({
+        ...candidate,
+        distance: grid.squareDistance(scout.col, scout.row, candidate.col, candidate.row),
+      }))
+      .sort((a, b) => a.distance - b.distance)[0] ?? null;
   }
 
   // ─── AI diplomat units (Civ I: diplomats move to an enemy city/unit to
@@ -1004,7 +1062,12 @@ export class AIManager {
         this.gameEngine.canBuildImprovement(unit.id, 'mine')) {
       return 'mine';
     }
-    if (['grassland', 'plains', 'desert', 'jungle', 'swamp'].includes(terrain) &&
+    const hasFreshWater = this.gameEngine.squareGrid.getNeighbors(unit.col, unit.row).some((neighbor: { col: number; row: number }) => {
+      const neighborTile = this.gameEngine.getTileAt(neighbor.col, neighbor.row);
+      const neighborTerrain = neighborTile?.terrain || neighborTile?.type;
+      return neighborTerrain === 'river';
+    });
+    if (hasFreshWater && ['grassland', 'plains', 'desert', 'jungle', 'swamp'].includes(terrain) &&
         this.gameEngine.canBuildImprovement(unit.id, 'irrigation')) {
       return 'irrigation';
     }
@@ -1016,7 +1079,11 @@ export class AIManager {
   /**
    * Find best settlement location for a settler
    */
-  private findBestSettlementForSettler(unit: any, strategy: StrategyProfile = 'balanced_growth'): { col: number; row: number; score: number } | null {
+  private findBestSettlementForSettler(
+    unit: any,
+    strategy: StrategyProfile = 'balanced_growth',
+    replanDepth = 0,
+  ): { col: number; row: number; score: number } | null {
     console.log(`[AI-SETTLER] Evaluating settlement locations for settler at (${unit.col}, ${unit.row})`);
 
     // Track position history to detect oscillation
@@ -1041,6 +1108,44 @@ export class AIManager {
     }, {});
 
     const isOscillating = Object.values(positionCounts).some((count: number) => count >= 3);
+
+    // Keep a settlement destination stable across turns. The search window is
+    // centred on the moving settler, so recomputing the maximum every turn can
+    // make the destination drift and cause a produced settler to wander.
+    const lockedTarget = (unit as any)._lastSettlementTarget as { col: number; row: number } | undefined;
+    const blockedTargets = this.getBlockedSettlementTargets(unit);
+
+    // A target that repeatedly sends the settler back and forth is no longer
+    // useful. Mark it unavailable and immediately choose another reachable
+    // site instead of allowing the settler to spend the rest of the game in a
+    // two-tile loop.
+    if (lockedTarget && isOscillating) {
+      const lastPosition = history[history.length - 1];
+      const previousPosition = history[history.length - 2];
+      if (lastPosition !== previousPosition) {
+        blockedTargets.add(this.settlementTargetKey(lockedTarget));
+        (unit as any)._blockedSettlementTargets = blockedTargets;
+        delete (unit as any)._lastSettlementTarget;
+        console.warn(`[AI-SETTLER] Abandoning oscillating settlement target (${lockedTarget.col},${lockedTarget.row})`);
+        if (replanDepth === 0) {
+          return this.findBestSettlementForSettler(unit, strategy, 1);
+        }
+      }
+    }
+
+    if (lockedTarget && this.isSettlementTargetValid(unit, lockedTarget)) {
+      if (lockedTarget.col === unit.col && lockedTarget.row === unit.row) {
+        console.log(`[AI-SETTLER] Reached locked settlement target (${lockedTarget.col},${lockedTarget.row}), founding city`);
+        this.gameEngine.foundCityWithSettler(unit.id);
+        return null;
+      }
+      console.log(`[AI-SETTLER] Continuing to locked settlement target (${lockedTarget.col},${lockedTarget.row})`);
+      return { ...lockedTarget, score: 0 };
+    }
+    if (lockedTarget) {
+      // A city, unit, visibility, or terrain change invalidated the old site.
+      delete (unit as any)._lastSettlementTarget;
+    }
 
     // First, check if current location is a good settlement spot
     const currentTile = this.gameEngine.getTileAt(unit.col, unit.row);
@@ -1069,10 +1174,10 @@ export class AIManager {
       unit.col,
       unit.row,
       (col, row) => this.gameEngine.getTileAt(col, row),
-      (col, row) => this.gameEngine.getCityAt(col, row),
+      (col, row) => this.gameEngine.getCityAt(col, row) || blockedTargets.has(`${col},${row}`),
       (col, row) => this.gameEngine.getUnitAt(col, row),
       weights,
-      3, // minDistanceFromOtherCities
+      MIN_CITY_CENTER_DISTANCE, // keep complete workable areas separate
       unit.civilizationId,
       (col, row) => {
         // Check visibility - AI can only settle on visible tiles
@@ -1082,7 +1187,14 @@ export class AIManager {
       (fromCol, fromRow, toCol, toRow) => {
         // Check if settler can reach the location (simple path check)
         if (!this.gameEngine.squareGrid) return false;
-        const path = this.gameEngine.squareGrid.findPath(fromCol, fromRow, toCol, toRow, new Set());
+        const path = this.gameEngine.squareGrid.findPath(
+          fromCol,
+          fromRow,
+          toCol,
+          toRow,
+          this.getSettlerPathObstacles(unit.id, { col: toCol, row: toRow }),
+          this.gameEngine.getPassabilityFilter?.(),
+        );
         return path.length > 0;
       }
     );
@@ -1130,7 +1242,14 @@ export class AIManager {
       // If we have a pathfinding grid available, precompute and store a path
       try {
         if (this.gameEngine.squareGrid && this.gameEngine.roundManager) {
-          const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, bestLocation.col, bestLocation.row, new Set());
+          const path = this.gameEngine.squareGrid.findPath(
+            unit.col,
+            unit.row,
+            bestLocation.col,
+            bestLocation.row,
+            this.getSettlerPathObstacles(unit.id, bestLocation),
+            this.gameEngine.getPassabilityFilter?.(),
+          );
           if (path && path.length > 0) {
             console.log(`[AI-SETTLER] Precomputed path for settler ${unit.id} with ${path.length} steps`);
             this.gameEngine.roundManager.setUnitPath(unit.id, path);
@@ -1168,6 +1287,85 @@ export class AIManager {
 
     console.log(`[AI-SETTLER] No suitable settlement location found`);
     return null;
+  }
+
+  /** Validate a cached destination without allowing the settler to chase it. */
+  private isSettlementTargetValid(
+    unit: { col: number; row: number; civilizationId: number },
+    target: { col: number; row: number },
+  ): boolean {
+    const tile = this.gameEngine.getTileAt?.(target.col, target.row);
+    if (!tile || tile.type === 'ocean' || tile.type === 'mountains') return false;
+    if (this.gameEngine.getCityAt?.(target.col, target.row)) return false;
+
+    const occupant = this.gameEngine.getUnitAt?.(target.col, target.row);
+    // Settlers cannot enter an occupied tile, regardless of ownership. The
+    // old check only rejected enemy units, so a cached target behind a friendly
+    // unit could still produce an impossible route.
+    if (occupant) return false;
+
+    // Keep the whole 20-tile workable area separate from friendly cities.
+    const tooClose = this.gameEngine.cities?.some((city: City) =>
+      city.civilizationId === unit.civilizationId &&
+      Math.max(Math.abs(target.col - city.col), Math.abs(target.row - city.row)) < MIN_CITY_CENTER_DISTANCE
+    );
+    if (tooClose) return false;
+
+    // SettlementEvaluator uses the tile's visible/explored state. Keep the
+    // cached-target check consistent with it; some headless/test engines do
+    // not mirror those flags through isExploredByPlayer yet.
+    const tileKnown = !!tile.visible || !!tile.explored ||
+      (typeof this.gameEngine.isExploredByPlayer === 'function' &&
+        this.gameEngine.isExploredByPlayer(unit.civilizationId, target.col, target.row));
+    if (!tileKnown) {
+      return false;
+    }
+
+    const path = this.gameEngine.squareGrid?.findPath(
+      unit.col,
+      unit.row,
+      target.col,
+      target.row,
+      this.getSettlerPathObstacles((unit as any).id, target),
+      this.gameEngine.getPassabilityFilter?.(),
+    );
+    return Array.isArray(path) && path.length > 0;
+  }
+
+  private settlementTargetKey(target: { col: number; row: number }): string {
+    return `${target.col},${target.row}`;
+  }
+
+  private getBlockedSettlementTargets(unit: any): Set<string> {
+    const existing = (unit as any)._blockedSettlementTargets;
+    if (existing instanceof Set) return new Set(existing);
+    if (Array.isArray(existing)) return new Set(existing);
+    return new Set<string>();
+  }
+
+  /**
+   * Build obstacles using the rules settlers actually obey when moving.
+   * SquareGrid's terrain-only pathfinder otherwise routes through units and
+   * cities, after which moveUnit rejects the next step and the settler can
+   * oscillate around the blocker.
+   */
+  private getSettlerPathObstacles(
+    unitId: string,
+    target?: { col: number; row: number },
+  ): Set<string> {
+    const obstacles = new Set<string>();
+    for (const otherUnit of this.gameEngine.units ?? []) {
+      if (otherUnit.id !== unitId) {
+        obstacles.add(`${otherUnit.col},${otherUnit.row}`);
+      }
+    }
+    for (const city of this.gameEngine.cities ?? []) {
+      const key = `${city.col},${city.row}`;
+      if (!target || key !== this.settlementTargetKey(target)) {
+        obstacles.add(key);
+      }
+    }
+    return obstacles;
   }
 
   /**
@@ -1368,6 +1566,14 @@ export class AIManager {
     const storage = this.gameEngine.getPlayerStorage(unit.civilizationId);
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
 
+    // Keep one combat unit assigned to each city unless that city is under
+    // immediate threat. Reserve units do not join offensive plans or patrol
+    // away from the city network.
+    const reserveTarget = this.getCityDefenseReserveTarget(unit, storage, roundNumber);
+    if (reserveTarget) {
+      return reserveTarget;
+    }
+
     // The explicit offensive plan (a deliberate siege decision, already gated
     // on army strength and NOT when a city is critically threatened) takes
     // priority over generic defensive shuffling. Previously defense ran first,
@@ -1416,7 +1622,12 @@ export class AIManager {
     }
 
     const availableStrength = this.calculateAvailableArmyStrength(civilizationId);
-    const requiredStrength = this.estimateRequiredStrength(bestTarget.location.type);
+    const personality = this.gameEngine.civilizations?.[civilizationId]?.personality;
+    const aggression = personality?.aggression ?? 5;
+    // Aggressive civilizations commit earlier, while cautious ones keep
+    // forming up. Situation (threats and relative strength) still dominates.
+    const requiredStrength = this.estimateRequiredStrength(bestTarget.location.type) *
+      (aggression >= 8 ? 0.8 : aggression <= 3 ? 1.15 : 1);
 
     if (availableStrength < requiredStrength) {
       storage.turnData.offensivePlan = null;
@@ -1424,7 +1635,9 @@ export class AIManager {
     }
 
     const combatUnits = this.gameEngine.units.filter((unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit));
-    const requiredUnits = Math.min(combatUnits.length, Math.max(3, Math.ceil(requiredStrength / 2)));
+    const reserveIds = this.getCityDefenseReserveIds(civilizationId, combatUnits);
+    const offensiveUnits = combatUnits.filter((unit: Unit) => !reserveIds.has(unit.id));
+    const requiredUnits = Math.min(offensiveUnits.length, Math.max(3, Math.ceil(requiredStrength / 2)));
 
     storage.turnData.offensivePlan = {
       target: { col: bestTarget.location.col, row: bestTarget.location.row },
@@ -1439,6 +1652,10 @@ export class AIManager {
   private getOffensivePlanTarget(unit: Unit, storage: any): { col: number; row: number } | null {
     const plan = storage?.turnData?.offensivePlan;
     if (!plan || !plan.target) {
+      return null;
+    }
+
+    if (this.getCityDefenseReserveIds(unit.civilizationId).has(unit.id)) {
       return null;
     }
 
@@ -1502,9 +1719,73 @@ export class AIManager {
     return best;
   }
 
+  /** Choose one strong/nearby combat unit to remain with each own city. */
+  private getCityDefenseReserveIds(civilizationId: number, combatUnits?: Unit[]): Set<string> {
+    const units = combatUnits ?? this.gameEngine.units.filter(
+      (unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit)
+    );
+    const cities = this.gameEngine.cities
+      .filter((city: City) => city.civilizationId === civilizationId);
+    const reserves = new Set<string>();
+
+    for (const city of cities) {
+      const candidates = units
+        .filter((unit: Unit) => !reserves.has(unit.id))
+        .map((unit: Unit) => ({
+          unit,
+          distance: this.gameEngine.squareGrid?.squareDistance(unit.col, unit.row, city.col, city.row) ?? Infinity,
+        }))
+        .sort((a, b) => {
+          const aInGarrisonRange = a.distance <= 2 ? 0 : 1;
+          const bInGarrisonRange = b.distance <= 2 ? 0 : 1;
+          if (aInGarrisonRange !== bInGarrisonRange) return aInGarrisonRange - bInGarrisonRange;
+          if (a.distance !== b.distance) return a.distance - b.distance;
+          const aDefense = a.unit.defense ?? 0;
+          const bDefense = b.unit.defense ?? 0;
+          return bDefense - aDefense;
+        });
+
+      if (candidates[0]) {
+        reserves.add(candidates[0].unit.id);
+      }
+    }
+    return reserves;
+  }
+
+  /** Keep a reserve unit in/near a city when it is not answering a threat. */
+  private getCityDefenseReserveTarget(
+    unit: Unit,
+    storage: any,
+    roundNumber: number,
+  ): { col: number; row: number } | null {
+    if (!this.getCityDefenseReserveIds(unit.civilizationId).has(unit.id)) {
+      return null;
+    }
+
+    const cities = this.gameEngine.cities
+      .filter((city: City) => city.civilizationId === unit.civilizationId)
+      .sort((a: City, b: City) => {
+        const da = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, a.col, a.row);
+        const db = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, b.col, b.row);
+        return da - db;
+      });
+    const city = cities[0];
+    if (!city) return null;
+
+    // A real threat is handled by the normal defensive assignment below.
+    const threatened = this.findDefensiveAssignment(unit, storage, roundNumber);
+    if (threatened) return threatened;
+
+    const distance = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, city.col, city.row);
+    return distance > 2 ? { col: city.col, row: city.row } : { col: unit.col, row: unit.row };
+  }
+
   private calculateAvailableArmyStrength(civilizationId: number): number {
-    return this.gameEngine.units
-      .filter((unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit))
+    const combatUnits = this.gameEngine.units
+      .filter((unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit));
+    const reserveIds = this.getCityDefenseReserveIds(civilizationId, combatUnits);
+    return combatUnits
+      .filter((unit: Unit) => !reserveIds.has(unit.id))
       .reduce((total: number, unit: Unit) => {
         const attackStrength = Math.max(1, unit.attack || 0);
         const defenseSupport = Math.max(0, (unit.defense || 0) * 0.5); // count half of defensive stat for offensive push
@@ -1534,6 +1815,15 @@ export class AIManager {
       return null;
     }
 
+    // Before a coordinated force exists, keep combat units defensive instead
+    // of sending isolated attackers toward a known enemy position.
+    const combatUnits = this.gameEngine.units
+      .filter((candidate: Unit) => candidate.civilizationId === unit.civilizationId && this.isCombatUnit(candidate));
+    const reserveIds = this.getCityDefenseReserveIds(unit.civilizationId, combatUnits);
+    if (combatUnits.filter((candidate: Unit) => !reserveIds.has(candidate.id)).length < 3) {
+      return null;
+    }
+
     let bestTarget: { col: number; row: number; score: number } | null = null;
 
     for (const enemyList of storage.enemyLocations.values()) {
@@ -1549,12 +1839,14 @@ export class AIManager {
             && this.gameEngine.squareGrid!.squareDistance(u.col, u.row, location.col, location.row) <= 5
         ).length;
 
+        const personality = this.gameEngine.civilizations?.[unit.civilizationId]?.personality;
         const { score } = scoreEnemyTarget({
           location,
           distance,
           currentRound: roundNumber,
           isCurrentlyVisible: isVisible,
           nearbyAlliedUnits: nearbyAllied,
+          strategicValue: Math.max(0, (personality?.aggression ?? 5) - 5) * 3,
         });
 
         if (score < 10) {
@@ -1667,6 +1959,7 @@ export class AIManager {
     threatenedCitiesCount: number;
     hasLibrary: boolean;
     totalScience: number;
+    hasWaterAccess: boolean;
   } {
     const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) || [];
     const civ = this.gameEngine.civilizations?.[civilizationId];
@@ -1705,6 +1998,7 @@ export class AIManager {
     // Check for library in any city
     const hasLibrary = cities.some((c: any) => c.buildings?.includes('library'));
     const totalScience = cities.reduce((sum: number, c: any) => sum + (c.science || 0), 0);
+    const hasWaterAccess = cities.some((city: City) => this.cityHasDirectWaterAccess(city));
 
     return {
       currentYear: this.gameEngine.currentYear ?? -4000,
@@ -1724,7 +2018,20 @@ export class AIManager {
       threatenedCitiesCount: threatened.length,
       hasLibrary,
       totalScience,
+      hasWaterAccess,
     };
+  }
+
+  /** A city has direct water access only when an adjacent tile is ocean/sea. */
+  private cityHasDirectWaterAccess(city: City): boolean {
+    for (let dCol = -1; dCol <= 1; dCol++) {
+      for (let dRow = -1; dRow <= 1; dRow++) {
+        if (dCol === 0 && dRow === 0) continue;
+        const tile = this.gameEngine.getTileAt?.(city.col + dCol, city.row + dRow);
+        if (tile?.type === 'ocean' || tile?.type === 'sea') return true;
+      }
+    }
+    return false;
   }
 
   /** Estimate total enemy combat strength in 4-tile radius around a unit.

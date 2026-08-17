@@ -1006,6 +1006,10 @@ function App() {
           actions.showDialog('tech');
           setActiveMenu(null);
         }}
+        onStatistics={() => {
+          actions.showDialog('statistics');
+          setActiveMenu(null);
+        }}
       />
 
       {/* Mobile primary action bar (thumb zone) */}
@@ -1084,4 +1088,3 @@ function App() {
 }
 
 export default App;
-

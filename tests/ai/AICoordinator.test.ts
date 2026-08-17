@@ -111,6 +111,35 @@ describe('AICoordinator.getGroupTarget', () => {
   });
 });
 
+describe('AICoordinator.updateGroupStatuses', () => {
+  it('keeps a scattered army in forming until most units reach the rally point', () => {
+    const group: ArmyGroup = {
+      id: 'scattered',
+      unitIds: ['a', 'b', 'c'],
+      targetLocation: { col: 20, row: 20 },
+      rallyPoint: { col: 0, row: 0 },
+      status: 'forming',
+      requiredStrength: 5,
+      currentStrength: 6,
+    };
+    const units = [
+      makeUnit({ id: 'a', col: 0, row: 0 }),
+      makeUnit({ id: 'b', col: 10, row: 0 }),
+      makeUnit({ id: 'c', col: 10, row: 10 }),
+    ];
+
+    AICoordinator.updateGroupStatuses([group], units, distanceFn);
+    expect(group.status).toBe('forming');
+
+    units[1].col = 1;
+    units[1].row = 0;
+    units[2].col = 0;
+    units[2].row = 1;
+    AICoordinator.updateGroupStatuses([group], units, distanceFn);
+    expect(group.status).toBe('marching');
+  });
+});
+
 describe('AICoordinator.shouldRetreat', () => {
   it('should retreat when enemy strength is much higher', () => {
     expect(AICoordinator.shouldRetreat(3, 10, false)).toBe(true);

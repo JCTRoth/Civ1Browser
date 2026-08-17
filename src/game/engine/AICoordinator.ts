@@ -171,10 +171,16 @@ export class AICoordinator {
       ) / groupUnits.length;
 
       if (group.status === 'forming') {
-        // Transition to marching when most units are near rally point
-        if (avgDistToRally <= 2 || groupUnits.length >= group.unitIds.length * 0.75) {
+        // Transition to marching only when most units are actually near the
+        // rally point. The old comparison used groupUnits.length on both
+        // sides, so every group instantly left the forming phase and marched
+        // as a scattered line.
+        const gatheredUnits = groupUnits.filter((unit) =>
+          distanceFn(unit.col, unit.row, group.rallyPoint.col, group.rallyPoint.row) <= 2
+        ).length;
+        if (avgDistToRally <= 2 || gatheredUnits >= groupUnits.length * 0.75) {
           group.status = 'marching';
-          console.log(`[AICoordinator] Army group ${group.id}: forming -> marching (avg rally dist: ${avgDistToRally.toFixed(1)})`);
+          console.log(`[AICoordinator] Army group ${group.id}: forming -> marching (${gatheredUnits}/${groupUnits.length} gathered, avg rally dist: ${avgDistToRally.toFixed(1)})`);
         }
       }
 

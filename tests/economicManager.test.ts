@@ -414,6 +414,27 @@ describe('EconomicManager tile-based commerce', () => {
     expect(city.scienceBonus).toBe(0);
   });
 
+  it('assigns an overlapping resource tile to only one city', () => {
+    const civ = makeCiv(0);
+    const first = makeCity(0, 0, 3, { id: 'first', col: 5, row: 5 });
+    const second = makeCity(0, 0, 3, { id: 'second', col: 9, row: 5 });
+    const engine = makeEngine({
+      civilizations: [civ],
+      cities: [first, second],
+      squareGrid: makeTileGrid(),
+      getTileAt: () => makeTile('grassland'),
+    });
+    const econ = new EconomicManager(engine);
+
+    econ.recomputeCityYields(first);
+    econ.recomputeCityYields(second);
+
+    const firstTiles = new Set(first.workingTiles);
+    const secondTiles = new Set(second.workingTiles);
+    const overlap = [...firstTiles].filter((tile) => secondTiles.has(tile));
+    expect(overlap).toEqual([]);
+  });
+
   it('applies building science bonuses to the science output', () => {
     const civ = makeCiv(0, { taxRate: 0, scienceRate: 100, luxuryRate: 0 });
     const engine = makeEngine({ civilizations: [civ], cities: [], units: [] });

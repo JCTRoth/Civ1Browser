@@ -92,6 +92,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       units: units.length,
       cities: cities.length,
       selectedHex: selectedHex ? `${selectedHex.col},${selectedHex.row}` : null,
+      selectedCity: gameState.selectedCity || null,
       selectedUnit: gameState.selectedUnit || null,
       reachableTilesSize: reachableTiles.size,
       cameraX: Math.round(camera.x),
@@ -110,6 +111,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
                     currentState.units !== lastGameState.current.units ||
                     currentState.cities !== lastGameState.current.cities ||
                     currentState.selectedHex !== lastGameState.current.selectedHex ||
+                    currentState.selectedCity !== lastGameState.current.selectedCity ||
                     currentState.selectedUnit !== lastGameState.current.selectedUnit ||
                     currentState.reachableTilesSize !== lastGameState.current.reachableTilesSize ||
                     currentState.cameraX !== lastGameState.current.cameraX ||
@@ -121,7 +123,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       return true;
     }
     return false;
-  }, [camera, cities.length, gameState.activePlayer, gameState.currentTurn, gameState.selectedUnit, reachableTiles.size, selectedHex, units.length]);
+  }, [camera, cities.length, gameState.activePlayer, gameState.currentTurn, gameState.selectedCity, gameState.selectedUnit, reachableTiles.size, selectedHex, units.length]);
 
   const renderTerrainToOffscreen = useCallback((terrainGrid: TerrainRenderGrid | null) => {
     if (!terrainGrid || !mapData) return;
@@ -1785,7 +1787,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   // Trigger render when selection changes
   useEffect(() => {
     triggerRender();
-  }, [selectedHex]);
+  }, [selectedHex, gameState.selectedCity]);
 
   // Trigger render when terrain changes
   useEffect(() => {

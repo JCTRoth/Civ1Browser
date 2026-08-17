@@ -30,6 +30,7 @@ import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
 import { AIResearch } from './AIResearch';
+import { MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
 import type { GameActions, Unit, City, Civilization, VillageResult } from '../../../types/game';
 
 
@@ -2447,7 +2448,7 @@ export default class GameEngine {
 
     // Check if too close to another city
     for (const city of this.cities) {
-      if (this.squareGrid.squareDistance(settler.col, settler.row, city.col, city.row) < 3) {
+      if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
         return false;
       }
     }
@@ -2536,7 +2537,7 @@ export default class GameEngine {
     if (!tile || tile.type === Constants.TERRAIN.OCEAN) return false;
 
     for (const city of this.cities) {
-      if (this.squareGrid.squareDistance(settler.col, settler.row, city.col, city.row) < 3) {
+      if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
         return false;
       }
     }
