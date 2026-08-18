@@ -828,6 +828,19 @@ export class AIManager {
       }
     }
 
+    // ── Village (goody hut) seeking ────────────────────────────────────
+    // Military units and scouts actively seek visible villages for their
+    // random rewards (free tech, gold, units, or even a new city via
+    // Advanced Tribe).  Only tiles the AI has explored are considered so
+    // we don't cheat with map knowledge.
+    if (this.isCombatUnit(unit) || unit.type === 'scout') {
+      const villageTarget = this.findNearestVillage(unit);
+      if (villageTarget) {
+        console.log(`[AI] Unit ${unit.id} (${unit.type}) heading to village at (${villageTarget.col},${villageTarget.row})`);
+        return villageTarget;
+      }
+    }
+
     // 3) Choose best neighbor based on terrain cost
     console.log(`[AI] No unexplored or enemy targets found, choosing best neighbor`);
 
@@ -1126,10 +1139,22 @@ export class AIManager {
         blockedTargets.add(this.settlementTargetKey(lockedTarget));
         (unit as any)._blockedSettlementTargets = blockedTargets;
         delete (unit as any)._lastSettlementTarget;
+        // Clear history so the next evaluation starts fresh and doesn't
+        // immediately re-trigger oscillation with stale position data.
+        history.length = 0;
         console.warn(`[AI-SETTLER] Abandoning oscillating settlement target (${lockedTarget.col},${lockedTarget.row})`);
         if (replanDepth === 0) {
           return this.findBestSettlementForSettler(unit, strategy, 1);
         }
+        // Already retried once — force settle at current tile to break loop.
+        const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+        const city = this.gameEngine.getCityAt(unit.col, unit.row);
+        const valid = tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city;
+        if (valid) {
+          console.log(`[AI-SETTLER] 🔄 Replan exhausted, founding at current tile (${unit.col},${unit.row})`);
+          this.gameEngine.foundCityWithSettler(unit.id);
+        }
+        return null;
       }
     }
 
@@ -1441,6 +1466,50 @@ export class AIManager {
     if (civilian.has(u.type)) return false;
     const props = UNIT_PROPS[u.type];
     return !!props && (props.defense || 0) > 0;
+  }
+
+  /**
+   * Find the nearest visible/known village (goody hut) from a unit's position.
+   * Uses BFS up to 15 tiles to avoid long detours. Only considers tiles the
+   * AI has explored so we don't leak map information.
+   */
+  private findNearestVillage(
+    unit: { col: number; row: number; civilizationId: number }
+  ): { col: number; row: number } | null {
+    const map = this.gameEngine.map;
+    const grid = this.gameEngine.squareGrid;
+    if (!map || !grid) return null;
+
+    const maxRadius = 15;
+    const startCol = Math.max(0, unit.col - maxRadius);
+    const endCol = Math.min(map.width - 1, unit.col + maxRadius);
+    const startRow = Math.max(0, unit.row - maxRadius);
+    const endRow = Math.min(map.height - 1, unit.row + maxRadius);
+
+    let nearest: { col: number; row: number; dist: number } | null = null;
+
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        const tileIndex = row * map.width + col;
+        const tile = map.tiles?.[tileIndex];
+        if (!tile || !tile.village) continue;
+
+        // Only target villages the AI has explored
+        const storage = this.gameEngine.getPlayerStorage?.(unit.civilizationId);
+        const explored = storage?.explored?.[tileIndex] ?? tile.explored ?? false;
+        if (!explored) continue;
+
+        // Don't target a village another unit is already heading to
+        const dist = grid.squareDistance(unit.col, unit.row, col, row);
+        if (dist === 0) continue;
+
+        if (!nearest || dist < nearest.dist) {
+          nearest = { col, row, dist };
+        }
+      }
+    }
+
+    return nearest ? { col: nearest.col, row: nearest.row } : null;
   }
 
   /**

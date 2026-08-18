@@ -169,7 +169,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           visible: visibility?.[idx] ?? tile.visible ?? false,
           explored: revealed?.[idx] ?? tile.explored ?? false,
           hasRoad: tile.hasRoad ?? false,
-          hasRiver: tile.hasRiver ?? false
+          hasRiver: tile.hasRiver ?? false,
+          village: tile.village ?? false
         };
       }
     }

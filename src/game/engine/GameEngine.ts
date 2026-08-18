@@ -1783,7 +1783,7 @@ export default class GameEngine {
       }
     }
 
-    const target = Math.max(4, Math.floor((width * height) / 80));
+    const target = Math.max(1, Math.floor((width * height) / 150));
     let placed = 0;
     let attempts = 0;
     while (placed < target && attempts < target * 40) {

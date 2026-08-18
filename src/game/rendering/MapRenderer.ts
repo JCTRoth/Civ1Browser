@@ -376,8 +376,13 @@ export class MapRenderer {
     const ctx = offscreenCanvas.getContext('2d');
     if (!ctx) return;
 
-    const mapWidth = map.width * this.tileSize;
-    const mapHeight = map.height * this.tileSize;
+    // Render at 2× resolution so terrain symbols and edges stay crisp when
+    // the player zooms in.  drawTerrainFromOffscreen uses imageSmoothingEnabled=false
+    // to preserve the pixel-perfect result.
+    const resolutionScale = 2;
+    const scaledTile = this.tileSize * resolutionScale;
+    const mapWidth = map.width * scaledTile;
+    const mapHeight = map.height * scaledTile;
 
     if (offscreenCanvas.width !== mapWidth || offscreenCanvas.height !== mapHeight) {
       offscreenCanvas.width = mapWidth;
@@ -391,22 +396,22 @@ export class MapRenderer {
         const tile = terrainGrid[row]?.[col];
         if (!tile) continue;
 
-        const x = col * this.tileSize;
-        const y = row * this.tileSize;
+        const x = col * scaledTile;
+        const y = row * scaledTile;
 
         if (!tile.explored) {
-          this.drawSquare(ctx, x, y, this.tileSize, '#000000', '#000000', true);
+          this.drawSquare(ctx, x, y, scaledTile, '#000000', '#000000', true);
           continue;
         }
 
         const terrainInfo = this.resolveTerrain(tile.type);
-        this.drawSquare(ctx, x, y, this.tileSize, terrainInfo.color, '#333', true);
+        this.drawSquare(ctx, x, y, scaledTile, terrainInfo.color, '#333', true);
         const tileWithoutImprovement = { ...tile, improvement: null, hasRoad: false };
-        this.drawTerrainSymbol(ctx, x + this.tileSize / 2, y + this.tileSize / 2, tileWithoutImprovement, { drawBase: true, drawRivers: true });
+        this.drawTerrainSymbol(ctx, x + scaledTile / 2, y + scaledTile / 2, tileWithoutImprovement, { drawBase: true, drawRivers: true });
 
         if (!tile.visible) {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-          ctx.fillRect(x, y, this.tileSize, this.tileSize);
+          ctx.fillRect(x, y, scaledTile, scaledTile);
         }
       }
     }
@@ -670,11 +675,16 @@ export class MapRenderer {
     camera: CameraState,
     canvasSize: CanvasSize
   ): void {
-    const srcX = camera.x;
-    const srcY = camera.y;
-    const srcWidth = canvasSize.width / camera.zoom;
-    const srcHeight = canvasSize.height / camera.zoom;
+    // The offscreen canvas is rendered at 2× tile resolution, so source
+    // coordinates must be scaled accordingly.
+    const resolutionScale = 2;
+    const srcX = camera.x * resolutionScale;
+    const srcY = camera.y * resolutionScale;
+    const srcWidth = (canvasSize.width / camera.zoom) * resolutionScale;
+    const srcHeight = (canvasSize.height / camera.zoom) * resolutionScale;
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(offscreenCanvas, srcX, srcY, srcWidth, srcHeight, 0, 0, canvasSize.width, canvasSize.height);
+    ctx.imageSmoothingEnabled = true;
   }
 
   /**
@@ -1434,13 +1444,17 @@ export class MapRenderer {
     if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return;
     const char = terrainInfo.char ?? '';
 
+    // Scale terrain symbols proportionally to tile size (base: 32px → 16px font)
+    const symbolScale = this.tileSize / 32;
+    const baseFontSize = Math.round(16 * symbolScale);
+
     if (drawBase && typeof char === 'string' && char.length > 0) {
       ctx.fillStyle = '#000';
-      ctx.font = `16px ${TERRAIN_FONT_FAMILY}`;
+      ctx.font = `${baseFontSize}px ${TERRAIN_FONT_FAMILY}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       try {
-        ctx.fillText(char, centerX, centerY - 8);
+        ctx.fillText(char, centerX, centerY - 8 * symbolScale);
       } catch (err) {
         console.warn('[MapRenderer] drawTerrainSymbol fillText failed', err);
       }
@@ -1450,9 +1464,9 @@ export class MapRenderer {
     const resource = terrain.resource ? String(terrain.resource) : null;
     if (drawBase && resource && RESOURCE_GLYPHS[resource.toLowerCase()]) {
       try {
-        ctx.font = `16px ${TERRAIN_FONT_FAMILY}`;
+        ctx.font = `${baseFontSize}px ${TERRAIN_FONT_FAMILY}`;
         ctx.fillStyle = '#000';
-        ctx.fillText(RESOURCE_GLYPHS[resource.toLowerCase()], centerX - 10, centerY + 10);
+        ctx.fillText(RESOURCE_GLYPHS[resource.toLowerCase()], centerX - 10 * symbolScale, centerY + 10 * symbolScale);
       } catch (err) {
         console.warn('[MapRenderer] drawTerrainSymbol resource fillText failed', err);
       }
@@ -1463,9 +1477,11 @@ export class MapRenderer {
     // and disappears the moment a unit claims/destroys the hut.
     if (terrain.village && !drawBase) {
       try {
-        ctx.font = `14px ${TERRAIN_FONT_FAMILY}`;
-        ctx.fillStyle = '#8B4513';
-        ctx.fillText('🏠', centerX + 9, centerY - 9);
+        const villageSize = Math.round(20 * symbolScale);
+        ctx.font = `${villageSize}px "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🛖', centerX, centerY - 4 * symbolScale);
       } catch (err) {
         console.warn('[MapRenderer] drawTerrainSymbol village fillText failed', err);
       }
@@ -1476,9 +1492,9 @@ export class MapRenderer {
 
     if (drawRivers && terrain.hasRiver) {
       try {
-        ctx.font = `16px ${TERRAIN_FONT_FAMILY}`;
+        ctx.font = `${baseFontSize}px ${TERRAIN_FONT_FAMILY}`;
         ctx.fillStyle = '#0066FF';
-        ctx.fillText('~', centerX + 8, centerY + 8);
+        ctx.fillText('~', centerX + 8 * symbolScale, centerY + 8 * symbolScale);
       } catch (err) {
         console.warn('[MapRenderer] drawTerrainSymbol river fillText failed', err);
       }
@@ -1487,10 +1503,10 @@ export class MapRenderer {
     const drawDisplayGlyph = (display?: ImprovementDisplayConfig | null): boolean => {
       if (!display || !display.glyph) return false;
       try {
-        ctx.font = display.font ?? 'bold 14px monospace';
+        ctx.font = display.font ?? `bold ${Math.round(14 * symbolScale)}px monospace`;
         ctx.fillStyle = display.color ?? '#8B4513';
-        const dx = display.offsetX ?? 0;
-        const dy = display.offsetY ?? 12;
+        const dx = (display.offsetX ?? 0) * symbolScale;
+        const dy = (display.offsetY ?? 12) * symbolScale;
         ctx.fillText(display.glyph, centerX + dx, centerY + dy);
         return true;
       } catch (err) {
