@@ -190,6 +190,8 @@ export interface City {
   autoProduction?: boolean; // When true, the engine auto-selects production for this city
   output?: any;
   processTurn?: (gameMap: any, turn: number) => void;
+  /** Tile keys (e.g. "col,row") that citizens are currently working. */
+  workingTiles?: Set<string>;
 }
 
 /**

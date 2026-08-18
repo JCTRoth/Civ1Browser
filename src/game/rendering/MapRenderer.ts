@@ -761,13 +761,72 @@ export class MapRenderer {
     const margin = this.tileSize * 2;
     const scaledTileSize = this.tileSize * cameraZoom;
 
-    // A selected city owns the 20 tiles in its Civ1 city radius. Highlight
-    // them immediately on city click so the player can see where the city's
-    // resources come from. Draw this before units/cities so those stay clear.
+    // ── City radius highlights ───────────────────────────────────────────
+    //
+    // Two layers:
+    //   1. **Other cities' radii** — drawn first so they sit behind
+    //      everything else.  Tiles that belong to a *different* city are
+    //      tinted red to signal "blocked / owned by someone else".
+    //   2. **Selected city** — drawn on top.  Its full 20-tile diamond is
+    //      shown in gold/yellow.  Tiles that are **actively worked** by
+    //      citizens get a stronger green tint so the player can instantly
+    //      see which tiles contribute yields.
+    //
+    // The city center is always worked and gets a thick gold outline.
+
+    // Build a set of "blocked by another city" keys for fast lookup.
+    // A tile is blocked when it falls inside a *different* city's radius.
+    const blockedByOtherCity = new Set<string>();
     const selectedCity = gameState.selectedCity
       ? cities.find(city => city.id === gameState.selectedCity)
       : null;
+
     if (selectedCity) {
+      // Gather all tiles in the selected city's radius (including center).
+      const ownRadiusKeys = new Set<string>();
+      for (let dCol = -2; dCol <= 2; dCol++) {
+        for (let dRow = -2; dRow <= 2; dRow++) {
+          if (Math.abs(dCol) === 2 && Math.abs(dRow) === 2) continue;
+          const key = `${selectedCity.col + dCol},${selectedCity.row + dRow}`;
+          ownRadiusKeys.add(key);
+        }
+      }
+
+      // Scan every *other* city and mark overlapping radius tiles.
+      for (const otherCity of cities) {
+        if (otherCity.id === selectedCity.id) continue;
+        for (let dCol = -2; dCol <= 2; dCol++) {
+          for (let dRow = -2; dRow <= 2; dRow++) {
+            if (Math.abs(dCol) === 2 && Math.abs(dRow) === 2) continue;
+            const key = `${otherCity.col + dCol},${otherCity.row + dRow}`;
+            if (ownRadiusKeys.has(key)) {
+              blockedByOtherCity.add(key);
+            }
+          }
+        }
+      }
+
+      // ── Layer 1: blocked tiles from other cities ──
+      if (blockedByOtherCity.size > 0) {
+        for (const key of blockedByOtherCity) {
+          const [col, row] = key.split(',').map(Number);
+          if (row < bounds.startRow || row >= bounds.endRow ||
+              col < bounds.startCol || col >= bounds.endCol) continue;
+          const { x, y } = squareToScreen(col, row);
+          if (this.isOutsideViewport(x, y, canvasSize.width, canvasSize.height, margin)) continue;
+          const half = scaledTileSize / 2;
+          ctx.fillStyle = 'rgba(220, 50, 50, 0.18)';
+          ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          ctx.strokeStyle = 'rgba(220, 50, 50, 0.85)';
+          ctx.lineWidth = Math.max(1, cameraZoom);
+          ctx.setLineDash([4, 3]);
+          ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          ctx.setLineDash([]);
+        }
+      }
+
+      // ── Layer 2: selected city radius (full diamond) ──
+      const workedTiles = selectedCity.workingTiles;
       for (let dCol = -2; dCol <= 2; dCol++) {
         for (let dRow = -2; dRow <= 2; dRow++) {
           if (dCol === 0 && dRow === 0) continue;
@@ -775,27 +834,46 @@ export class MapRenderer {
 
           const col = selectedCity.col + dCol;
           const row = selectedCity.row + dRow;
-          if (row < bounds.startRow || row >= bounds.endRow || col < bounds.startCol || col >= bounds.endCol) continue;
+          if (row < bounds.startRow || row >= bounds.endRow ||
+              col < bounds.startCol || col >= bounds.endCol) continue;
 
           const { x, y } = squareToScreen(col, row);
           if (this.isOutsideViewport(x, y, canvasSize.width, canvasSize.height, margin)) continue;
 
           const half = scaledTileSize / 2;
-          ctx.fillStyle = 'rgba(255, 214, 0, 0.16)';
-          ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
-          ctx.strokeStyle = 'rgba(255, 214, 0, 0.9)';
-          ctx.lineWidth = Math.max(1, cameraZoom);
-          ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          const tileKey = `${col},${row}`;
+          const isWorked = workedTiles?.has(tileKey) ?? false;
+
+          if (isWorked) {
+            // Actively worked tile — strong green tint
+            ctx.fillStyle = 'rgba(50, 200, 80, 0.28)';
+            ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+            ctx.strokeStyle = 'rgba(50, 200, 80, 0.9)';
+            ctx.lineWidth = Math.max(1.5, cameraZoom);
+            ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          } else if (blockedByOtherCity.has(tileKey)) {
+            // Already drawn as red blocked — skip yellow overlay
+            // (red layer was drawn first)
+          } else {
+            // Unworked radius tile — subtle gold
+            ctx.fillStyle = 'rgba(255, 214, 0, 0.12)';
+            ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+            ctx.strokeStyle = 'rgba(255, 214, 0, 0.6)';
+            ctx.lineWidth = Math.max(1, cameraZoom);
+            ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          }
         }
       }
 
-      // Outline the city centre as well, while leaving the resource grid
-      // readable around it.
+      // City center — always worked, thick gold outline
       const center = squareToScreen(selectedCity.col, selectedCity.row);
       const half = scaledTileSize / 2;
       ctx.strokeStyle = '#ffe066';
       ctx.lineWidth = Math.max(2, cameraZoom * 2);
       ctx.strokeRect(center.x - half, center.y - half, scaledTileSize, scaledTileSize);
+      // Green fill to indicate it's worked
+      ctx.fillStyle = 'rgba(50, 200, 80, 0.28)';
+      ctx.fillRect(center.x - half, center.y - half, scaledTileSize, scaledTileSize);
     }
 
     // Draw movement range overlay first (so it's under everything else)
