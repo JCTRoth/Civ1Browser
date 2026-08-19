@@ -400,12 +400,12 @@ export class MapRenderer {
         const y = row * scaledTile;
 
         if (!tile.explored) {
-          this.drawSquare(ctx, x, y, scaledTile, '#000000', '#000000', true);
+          this.drawSquare(ctx, x, y, scaledTile, '#000000', 'transparent', true);
           continue;
         }
 
         const terrainInfo = this.resolveTerrain(tile.type);
-        this.drawSquare(ctx, x, y, scaledTile, terrainInfo.color, '#333', true);
+        this.drawSquare(ctx, x, y, scaledTile, terrainInfo.color, 'transparent', true);
         const tileWithoutImprovement = { ...tile, improvement: null, hasRoad: false };
         this.drawTerrainSymbol(ctx, x + scaledTile / 2, y + scaledTile / 2, tileWithoutImprovement, { drawBase: true, drawRivers: true });
 
@@ -722,13 +722,13 @@ export class MapRenderer {
         if (!tile) continue;
 
         if (!tile.explored) {
-          this.drawSquare(ctx, x, y, scaledTileSize, '#000000', '#000000');
+          this.drawSquare(ctx, x, y, scaledTileSize, '#000000', 'transparent');
           continue;
         }
 
         const terrainInfo = this.resolveTerrain(tile.type);
         const isSelectedHex = selectedHex?.col === col && selectedHex?.row === row;
-        this.drawSquare(ctx, x, y, scaledTileSize, terrainInfo.color, isSelectedHex ? '#FF0000' : '#333');
+        this.drawSquare(ctx, x, y, scaledTileSize, terrainInfo.color, isSelectedHex ? '#FF0000' : 'transparent');
 
         if (camera.zoom > 0.5) {
           this.drawTerrainSymbol(ctx, x, y, tile, { drawBase: true, drawRivers: true });
@@ -1664,7 +1664,10 @@ export class MapRenderer {
     ctx.beginPath();
     ctx.fillStyle = pulseColor;
     ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+    const backgroundAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = backgroundAlpha * 0.3;
     ctx.fill();
+    ctx.globalAlpha = backgroundAlpha;
 
     // Add a subtle glow effect
     ctx.strokeStyle = highlightColor;
@@ -1691,7 +1694,10 @@ export class MapRenderer {
       ctx.fillStyle = pulseColor;
       ctx.beginPath();
       ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+      const backgroundAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = backgroundAlpha * 0.3;
       ctx.fill();
+      ctx.globalAlpha = backgroundAlpha;
 
       const iconColor = this.isLightColor(pulseColor) ? '#111' : '#FFF';
       let emoji = '';
@@ -1772,7 +1778,10 @@ export class MapRenderer {
       ctx.beginPath();
       ctx.fillStyle = civColor;
       ctx.arc(centerX, centerY, innerRadius, 0, 2.7 * Math.PI);
+      const backgroundAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = backgroundAlpha * 0.3;
       ctx.fill();
+      ctx.globalAlpha = backgroundAlpha;
       
       // Draw the PNG/SVG image icon on top of the colored circle
       const iconSize = innerRadius * 2;
@@ -1788,7 +1797,10 @@ export class MapRenderer {
       ctx.beginPath();
       ctx.fillStyle = civColor;
       ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+      const backgroundAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = backgroundAlpha * 0.3;
       ctx.fill();
+      ctx.globalAlpha = backgroundAlpha;
 
       const iconColor = this.isLightColor(civColor) ? '#111' : '#FFF';
       let emoji = '';
