@@ -374,9 +374,9 @@ export class EconomicManager {
 
     // Keep the actual assignment visible to the city UI/debugger. The economy
     // is authoritative because it is what feeds food, production and trade.
-    (city as City & { workingTiles?: string[] }).workingTiles = worked.map(
+    city.workingTiles = new Set(worked.map(
       ({ col, row }) => `${col},${row}`
-    );
+    ));
     return worked;
   }
 

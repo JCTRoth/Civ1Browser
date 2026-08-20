@@ -1346,7 +1346,7 @@ export default class GameEngine {
       autoProduction: true, // Auto Production is selected by default for every new city
       buildings: [],
       wonders: [],
-      workingTiles: [], // Tiles being worked by citizens
+      workingTiles: new Set<string>(), // Tiles being worked by citizens
       isCapital: this.cities.filter(c => c.civilizationId === civilizationId).length === 0,
       happiness: {
         happy: 0,
