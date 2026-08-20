@@ -3,13 +3,14 @@
  *
  * Two-layer rendering system inspired by Battle for Wesnoth:
  *
- *  Layer 1 — base ground tiles (seamless, flat top-down, 256×256)
- *    HILLS and RIVER reuse existing grass/ocean textures.
- *    Transitions are color-gradient based — no blob patterns.
+ *  Layer 1 — base ground tiles (seamless, flat top-down, 256x256)
+ *    Drawn first for every tile. Transitions use smooth color gradients
+ *    (no texture bleeding = no blob patterns at corners).
  *
- *  Layer 2 — feature sprites (isometric, transparent bg, 256×384 = 1.5:1)
- *    Drawn in painter's-algorithm row order. Each sprite is offset upward
- *    by 0.5 tile so the feature slightly extends into the row above.
+ *  Layer 2 — feature sprites (isometric, transparent bg, 256x512)
+ *    Drawn in painter's-algorithm row order so lower-row features
+ *    appear in front. Each sprite is offset upward by one tile height
+ *    so mountain peaks / tree tops extend into the row above.
  */
 
 export const TERRAIN_TEXTURE_FILES: Record<string, string> = {
@@ -18,13 +19,13 @@ export const TERRAIN_TEXTURE_FILES: Record<string, string> = {
   GRASSLAND: '/assets/tiles/terrain_grassland.png',
   FOREST:    '/assets/tiles/terrain_forest.png',
   JUNGLE:    '/assets/tiles/terrain_jungle.png',
-  HILLS:     '/assets/tiles/terrain_grassland.png',  // hills use grass base
+  HILLS:     '/assets/tiles/terrain_hills.png',
   MOUNTAINS: '/assets/tiles/terrain_mountains.png',
   DESERT:    '/assets/tiles/terrain_desert.png',
   SWAMP:     '/assets/tiles/terrain_swamp.png',
   TUNDRA:    '/assets/tiles/terrain_tundra.png',
   ARCTIC:    '/assets/tiles/terrain_arctic.png',
-  RIVER:     '/assets/tiles/terrain_ocean.png',      // river uses ocean base
+  RIVER:     '/assets/tiles/terrain_river.png',
 };
 
 export const FEATURE_TEXTURE_FILES: Partial<Record<string, string>> = {
@@ -150,8 +151,8 @@ export class TerrainTextureManager {
     neighborType: string,
     tileX: number, tileY: number, tileSize: number,
     direction: 'N' | 'E' | 'S' | 'W',
-    blendFraction = 0.40,
-    maxAlpha       = 0.65,
+    blendFraction = 0.32,
+    maxAlpha       = 0.60,
   ): void {
     const colorBase = TERRAIN_BLEND_COLOR[neighborType.toUpperCase()];
     if (!colorBase) return;
@@ -183,29 +184,10 @@ export class TerrainTextureManager {
     ctx.restore();
   }
 
-  /** Radial gradient at a tile corner for diagonal neighbour blending. */
-  drawCornerBlend(
-    ctx: CanvasRenderingContext2D,
-    neighborType: string,
-    cornerX: number,
-    cornerY: number,
-    radius: number,
-    maxAlpha = 0.32,
-  ): void {
-    const colorBase = TERRAIN_BLEND_COLOR[neighborType.toUpperCase()];
-    if (!colorBase) return;
-    const g = ctx.createRadialGradient(cornerX, cornerY, 0, cornerX, cornerY, radius);
-    g.addColorStop(0,    `${colorBase}${maxAlpha})`);
-    g.addColorStop(0.6,  `${colorBase}${(maxAlpha * 0.3).toFixed(2)})`);
-    g.addColorStop(1,    'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(cornerX - radius, cornerY - radius, radius * 2, radius * 2);
-  }
-
   // ── Feature sprite (painter's algorithm, upward offset) ─────────────────
   //
-  // Sprites are 1.5:1 (width : 1.5*width = 256×384).
-  // Feature sits in the lower part; top 0.5 tile extends above the tile edge.
+  // Sprite is 1:2 (width : 2*width). Bottom aligns with tile bottom;
+  // top extends one full tileSize above — creating depth like Wesnoth trees.
 
   drawFeature(
     ctx: CanvasRenderingContext2D,
@@ -214,7 +196,6 @@ export class TerrainTextureManager {
   ): void {
     const img = this.getFeatureTexture(terrainType);
     if (!img) return;
-    // Offset up by 0.5 tiles; total height = 1.5 tiles
-    ctx.drawImage(img, tileX, tileY - tileSize * 0.5, tileSize, tileSize * 1.5);
+    ctx.drawImage(img, tileX, tileY - tileSize, tileSize, tileSize * 2);
   }
 }
