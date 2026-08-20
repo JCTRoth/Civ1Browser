@@ -22,6 +22,7 @@ import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
 import { TERRAIN_FONT_FAMILY } from '@/utils/terrainFont';
 import type { MapState, CameraState, Unit, City, GameState, Civilization, CombatAnimation } from '../../../types/game';
+import { TerrainTextureManager, TERRAIN_PRIORITY, TERRAIN_BLEND_COLOR } from './TerrainTextureManager';
 
 /** Civ1 special-resource glyphs rendered on the map (keyed by lowercase name). */
 const RESOURCE_GLYPHS: Record<string, string> = {
@@ -311,6 +312,9 @@ export class MapRenderer {
   /** Size of each map tile in pixels */
   private readonly tileSize: number;
 
+  /** Optional texture manager for AI-generated terrain images with transitions. */
+  textureManager: TerrainTextureManager | null = null;
+
   /**
    * Creates a new MapRenderer instance.
    * @param tileSize - Size of each map tile in pixels (defaults to TILE_SIZE)
@@ -376,42 +380,124 @@ export class MapRenderer {
     const ctx = offscreenCanvas.getContext('2d');
     if (!ctx) return;
 
-    // Render at 2× resolution so terrain symbols and edges stay crisp when
-    // the player zooms in.  drawTerrainFromOffscreen uses imageSmoothingEnabled=false
-    // to preserve the pixel-perfect result.
     const resolutionScale = 2;
-    const scaledTile = this.tileSize * resolutionScale;
-    const mapWidth = map.width * scaledTile;
-    const mapHeight = map.height * scaledTile;
+    const scaledTile  = this.tileSize * resolutionScale;
+    const mapWidth    = map.width  * scaledTile;
+    const mapHeight   = map.height * scaledTile;
 
     if (offscreenCanvas.width !== mapWidth || offscreenCanvas.height !== mapHeight) {
-      offscreenCanvas.width = mapWidth;
+      offscreenCanvas.width  = mapWidth;
       offscreenCanvas.height = mapHeight;
     }
 
     ctx.clearRect(0, 0, mapWidth, mapHeight);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
+    const tm = this.textureManager;
+
+    // ── Pass 1: base ground textures ─────────────────────────────────────
     for (let row = 0; row < map.height; row++) {
       for (let col = 0; col < map.width; col++) {
         const tile = terrainGrid[row]?.[col];
         if (!tile) continue;
-
         const x = col * scaledTile;
         const y = row * scaledTile;
 
         if (!tile.explored) {
-          this.drawSquare(ctx, x, y, scaledTile, '#000000', 'transparent', true);
+          ctx.fillStyle = '#111118';
+          ctx.fillRect(x, y, scaledTile, scaledTile);
           continue;
         }
 
         const terrainInfo = this.resolveTerrain(tile.type);
-        this.drawSquare(ctx, x, y, scaledTile, terrainInfo.color, 'transparent', true);
-        const tileWithoutImprovement = { ...tile, improvement: null, hasRoad: false };
-        this.drawTerrainSymbol(ctx, x + scaledTile / 2, y + scaledTile / 2, tileWithoutImprovement, { drawBase: true, drawRivers: true });
+        if (tm) {
+          tm.drawTile(ctx, tile.type, x, y, scaledTile, terrainInfo.color, true);
+        } else {
+          ctx.fillStyle = terrainInfo.color;
+          ctx.fillRect(x, y, scaledTile, scaledTile);
+        }
+      }
+    }
+
+    // ── Pass 2: color-based edge + corner transitions ─────────────────────
+    //
+    // Cardinal edges: wider blend band for smoother blending (was 0.25, now 0.40).
+    // Diagonal corners: small radial gradient so corners don't look sharply cut.
+    if (tm && tm.isReady) {
+      for (let row = 0; row < map.height; row++) {
+        for (let col = 0; col < map.width; col++) {
+          const tile = terrainGrid[row]?.[col];
+          if (!tile?.explored) continue;
+          const x = col * scaledTile;
+          const y = row * scaledTile;
+          const tPriority = tm.getPriority(tile.type);
+
+          // Cardinal edges — wider blend = smoother transition
+          const edges: Array<{ dcol: number; drow: number; dir: 'N'|'E'|'S'|'W' }> = [
+            { dcol: 0, drow: -1, dir: 'N' },
+            { dcol: 1, drow:  0, dir: 'E' },
+            { dcol: 0, drow:  1, dir: 'S' },
+            { dcol:-1, drow:  0, dir: 'W' },
+          ];
+          for (const { dcol, drow, dir } of edges) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            const diff  = nPriority - tPriority;
+            const alpha = Math.min(0.78, 0.50 + diff * 0.05);
+            const blend = Math.min(0.50, 0.40 + diff * 0.02);
+            tm.drawColorTransition(ctx, n.type, x, y, scaledTile, dir, blend, alpha);
+          }
+
+          // Diagonal corners — fill gaps where only the diagonal neighbour differs
+          const corners: Array<{ dcol: number; drow: number; cx: number; cy: number }> = [
+            { dcol: -1, drow: -1, cx: x,               cy: y               },
+            { dcol:  1, drow: -1, cx: x + scaledTile,  cy: y               },
+            { dcol:  1, drow:  1, cx: x + scaledTile,  cy: y + scaledTile  },
+            { dcol: -1, drow:  1, cx: x,               cy: y + scaledTile  },
+          ];
+          for (const { dcol, drow, cx, cy } of corners) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            tm.drawCornerBlend(ctx, n.type, cx, cy, scaledTile * 0.52, 0.32);
+          }
+        }
+      }
+    }
+
+    // ── Pass 3: terrain symbols (rivers, resources) + fog ────────────────
+    for (let row = 0; row < map.height; row++) {
+      for (let col = 0; col < map.width; col++) {
+        const tile = terrainGrid[row]?.[col];
+        if (!tile?.explored) continue;
+        const x = col * scaledTile;
+        const y = row * scaledTile;
+
+        const tileNoImprove = { ...tile, improvement: null, hasRoad: false };
+        this.drawTerrainSymbol(ctx, x + scaledTile / 2, y + scaledTile / 2, tileNoImprove, { drawBase: false, drawRivers: true });
 
         if (!tile.visible) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
           ctx.fillRect(x, y, scaledTile, scaledTile);
+        }
+      }
+    }
+
+    // ── Pass 4: feature sprites (painter's algorithm — row 0 first) ──────
+    // Features extend one tileSize above their tile so they occlude the row
+    // above. Drawing in row order (top→bottom) means lower rows appear in front.
+    if (tm && tm.isReady) {
+      for (let row = 0; row < map.height; row++) {
+        for (let col = 0; col < map.width; col++) {
+          const tile = terrainGrid[row]?.[col];
+          if (!tile?.explored || !tile.visible) continue;
+          const x = col * scaledTile;
+          const y = row * scaledTile;
+          tm.drawFeature(ctx, tile.type, x, y, scaledTile);
         }
       }
     }
@@ -682,9 +768,9 @@ export class MapRenderer {
     const srcY = camera.y * resolutionScale;
     const srcWidth = (canvasSize.width / camera.zoom) * resolutionScale;
     const srcHeight = (canvasSize.height / camera.zoom) * resolutionScale;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(offscreenCanvas, srcX, srcY, srcWidth, srcHeight, 0, 0, canvasSize.width, canvasSize.height);
     ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(offscreenCanvas, srcX, srcY, srcWidth, srcHeight, 0, 0, canvasSize.width, canvasSize.height);
   }
 
   /**
@@ -722,22 +808,76 @@ export class MapRenderer {
         if (!tile) continue;
 
         if (!tile.explored) {
-          this.drawSquare(ctx, x, y, scaledTileSize, '#000000', 'transparent');
+          const half2 = scaledTileSize / 2;
+          ctx.fillStyle = '#111118';
+          ctx.fillRect(x - half2, y - half2, scaledTileSize, scaledTileSize);
           continue;
         }
 
         const terrainInfo = this.resolveTerrain(tile.type);
         const isSelectedHex = selectedHex?.col === col && selectedHex?.row === row;
-        this.drawSquare(ctx, x, y, scaledTileSize, terrainInfo.color, isSelectedHex ? '#FF0000' : 'transparent');
+        const half = scaledTileSize / 2;
+        const tileX = x - half;
+        const tileY = y - half;
+        const tm = this.textureManager;
+
+        // Draw base terrain texture
+        if (tm) {
+          tm.drawTile(ctx, tile.type, tileX, tileY, scaledTileSize, terrainInfo.color, true);
+        } else {
+          ctx.fillStyle = terrainInfo.color;
+          ctx.fillRect(tileX, tileY, scaledTileSize, scaledTileSize);
+        }
+
+        // Color-based edge transitions
+        if (tm && tm.isReady) {
+          const tPriority = tm.getPriority(tile.type);
+          const edges: Array<{ dcol: number; drow: number; dir: 'N'|'E'|'S'|'W' }> = [
+            { dcol: 0, drow: -1, dir: 'N' },
+            { dcol: 1, drow:  0, dir: 'E' },
+            { dcol: 0, drow:  1, dir: 'S' },
+            { dcol:-1, drow:  0, dir: 'W' },
+          ];
+          for (const { dcol, drow, dir } of edges) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            const diff  = nPriority - tPriority;
+            const alpha = Math.min(0.72, 0.42 + diff * 0.05);
+            const blend = Math.min(0.42, 0.25 + diff * 0.025);
+            tm.drawColorTransition(ctx, n.type, tileX, tileY, scaledTileSize, dir, blend, alpha);
+          }
+        }
+
+        if (isSelectedHex) {
+          ctx.strokeStyle = '#FF0000';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(tileX + 1, tileY + 1, scaledTileSize - 2, scaledTileSize - 2);
+        }
 
         if (camera.zoom > 0.5) {
-          this.drawTerrainSymbol(ctx, x, y, tile, { drawBase: true, drawRivers: true });
+          this.drawTerrainSymbol(ctx, x, y, tile, { drawBase: false, drawRivers: true });
         }
 
         if (!tile.visible) {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+          ctx.fillRect(tileX, tileY, scaledTileSize, scaledTileSize);
+        }
+      }
+    }
+
+    // Feature sprites pass — drawn row by row for correct depth sorting
+    if (this.textureManager?.isReady) {
+      const tm = this.textureManager;
+      for (let row = bounds.startRow; row < bounds.endRow; row++) {
+        for (let col = bounds.startCol; col < bounds.endCol; col++) {
+          const tile = terrainGrid[row]?.[col];
+          if (!tile?.explored || !tile.visible) continue;
+          const { x, y } = squareToScreen(col, row);
+          if (this.isOutsideViewport(x, y + scaledTileSize / 2, canvasSize.width, canvasSize.height, scaledTileSize * 2)) continue;
           const half = scaledTileSize / 2;
-          ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          tm.drawFeature(ctx, tile.type, x - half, y - half, scaledTileSize);
         }
       }
     }
@@ -1038,8 +1178,8 @@ export class MapRenderer {
           ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
         }
 
-        // Debug coordinates (high zoom only)
-        if (cameraZoom > 1.5) {
+        // Debug coordinates (very high zoom only)
+        if (cameraZoom > 4.0) {
           ctx.fillStyle = '#000';
           ctx.font = '8px monospace';
           ctx.textAlign = 'center';

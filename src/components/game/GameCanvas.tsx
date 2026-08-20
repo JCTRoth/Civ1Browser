@@ -3,6 +3,7 @@ import { useGameStore } from '@/stores/GameStore';
 import { useShallow } from 'zustand/react/shallow';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { MapRenderer, TerrainRenderGrid, TerrainTileRenderInfo, UnitPathStep } from '@/game/rendering/MapRenderer';
+import { TerrainTextureManager } from '@/game/rendering/TerrainTextureManager';
 import type { City, GameEngine, GameState, MapState, Unit } from '../../../types/game';
 import '../../styles/civ1GameCanvas.css';
 import UnitActionsModal from './UnitActionsModal';
@@ -30,6 +31,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const mapRendererRef = useRef<MapRenderer>(new MapRenderer());
+  const textureManagerRef = useRef<TerrainTextureManager | null>(null);
   const gameState = useGameStore(useShallow(state => state.gameState));
   const mapData = useGameStore(state => state.map);
   const camera = useGameStore(state => state.camera);
@@ -56,6 +58,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const lastGameState = useRef<any>(null);
   const animationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticRenderedRef = useRef<boolean>(false);
+  const terrainRebuildNeededRef = useRef<boolean>(false);
+  const [texturesLoaded, setTexturesLoaded] = useState(false);
 
   // ---- Touch / gesture state (mobile support) ----
   const touchStartRef = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -142,6 +146,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     }
     if (!animationCanvasRef.current && typeof document !== 'undefined') {
       animationCanvasRef.current = document.createElement('canvas');
+    }
+    // Initialize texture manager once and attach to renderer
+    if (!textureManagerRef.current) {
+      const tm = new TerrainTextureManager(() => {
+        // Textures finished loading — rebuild offscreen terrain and re-render
+        terrainRebuildNeededRef.current = true;
+        needsRender.current = true;
+        staticRenderedRef.current = false;
+        setTexturesLoaded(true);
+      });
+      textureManagerRef.current = tm;
+      mapRendererRef.current.textureManager = tm;
     }
   }, []);
 
@@ -572,6 +588,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // Rebuild offscreen terrain canvas if textures just loaded
+    if (terrainRebuildNeededRef.current) {
+      terrainRebuildNeededRef.current = false;
+      renderTerrainToOffscreen(terrain);
+    }
+
     const rect = canvas.getBoundingClientRect();
     if (canvas.width !== rect.width || canvas.height !== rect.height) {
       canvas.width = rect.width;
@@ -628,7 +650,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
     staticRenderedRef.current = true;
     // console.log('[GameCanvas] Static content rendered and saved');
-  }, [camera, canvasRef, civilizations, cities, combatAnimations, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units]);
+  }, [camera, canvasRef, civilizations, cities, combatAnimations, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units, texturesLoaded, renderTerrainToOffscreen]);
 
   const renderAnimationLayer = useCallback((currentTime: number) => {
     if (!canvasRef.current || !animationCanvasRef.current) return;

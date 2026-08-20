@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useGameStore } from './stores/GameStore';
+import { CIVILIZATIONS } from '@/data/GameData';
 import GameEngine from '@/game/engine/GameEngine';
 import GameCanvas from './components/game/GameCanvas';
 import HexDetailModal from './components/ui/HexDetailModal';
@@ -103,7 +104,7 @@ function App() {
   useGameEngine(gameEngine);
 
   // Handle game start with chosen settings
-  const handleGameStart = async (gameSettings) => {
+  const handleGameStart = useCallback(async (gameSettings) => {
     try {
       console.log('Starting new game with settings:', gameSettings);
       setShowGameSetup(false);
@@ -174,7 +175,35 @@ function App() {
       console.error('Game start error:', error);
       setError(error.message);
     }
-  };
+  }, [actions]);
+
+  // Quick-start mode: when the URL contains `?quickstart`, skip the setup
+  // modal and launch directly into a game with sensible defaults and
+  // developer mode enabled.  Useful for rapid iteration during development.
+  const quickstartRef = useRef(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('quickstart')) {
+      quickstartRef.current = true;
+      // Clean up the URL so a page refresh doesn't loop.
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!quickstartRef.current || gameEngine || !showGameSetup) return;
+    const defaultCivIndex = CIVILIZATIONS.findIndex(c => c.name === 'Germans');
+    const quickSettings = {
+      playerCivilization: defaultCivIndex >= 0 ? defaultCivIndex : 0,
+      difficulty: 'PRINCE',
+      numberOfCivilizations: 2,
+      mapType: 'NORMAL_SKIRMISH',
+      devMode: true,
+    };
+    console.log('[App] Quick-start mode — launching game with defaults:', quickSettings);
+    handleGameStart(quickSettings);
+  }, [gameEngine, showGameSetup, handleGameStart]);
 
   // Handle end turn confirmation
   const handleEndTurnConfirm = useCallback(() => {
