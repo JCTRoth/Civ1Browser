@@ -7,10 +7,10 @@
  *    Drawn first for every tile. Transitions use smooth color gradients
  *    (no texture bleeding = no blob patterns at corners).
  *
- *  Layer 2 — feature sprites (isometric, transparent bg, 256x512)
+ *  Layer 2 — feature sprites (isometric, transparent bg, 256x384 = 1.5:1)
  *    Drawn in painter's-algorithm row order so lower-row features
- *    appear in front. Each sprite is offset upward by one tile height
- *    so mountain peaks / tree tops extend into the row above.
+ *    appear in front. Each sprite is offset upward by half a tile height
+ *    so mountain peaks / tree tops extend a little into the row above.
  */
 
 export const TERRAIN_TEXTURE_FILES: Record<string, string> = {
@@ -19,13 +19,15 @@ export const TERRAIN_TEXTURE_FILES: Record<string, string> = {
   GRASSLAND: '/assets/tiles/terrain_grassland.png',
   FOREST:    '/assets/tiles/terrain_forest.png',
   JUNGLE:    '/assets/tiles/terrain_jungle.png',
-  HILLS:     '/assets/tiles/terrain_hills.png',
   MOUNTAINS: '/assets/tiles/terrain_mountains.png',
   DESERT:    '/assets/tiles/terrain_desert.png',
   SWAMP:     '/assets/tiles/terrain_swamp.png',
   TUNDRA:    '/assets/tiles/terrain_tundra.png',
   ARCTIC:    '/assets/tiles/terrain_arctic.png',
-  RIVER:     '/assets/tiles/terrain_river.png',
+  // River reuses the ocean water texture; banks come from colour transitions.
+  RIVER:     '/assets/tiles/terrain_ocean.png',
+  // Hills reuses the grass base texture; the hill feature sprite adds the relief.
+  HILLS:     '/assets/tiles/terrain_plains.png',
 };
 
 export const FEATURE_TEXTURE_FILES: Partial<Record<string, string>> = {
@@ -175,9 +177,13 @@ export class TerrainTextureManager {
       case 'E': g = ctx.createLinearGradient(tileX + tileSize, 0, tileX, 0);            break;
       case 'W': g = ctx.createLinearGradient(tileX,            0, tileX + tileSize, 0); break;
     }
-    g.addColorStop(0,            `${colorBase}${maxAlpha})`);
-    g.addColorStop(blendFraction,'rgba(0,0,0,0)');
-    g.addColorStop(1,            'rgba(0,0,0,0)');
+    // Ease-out falloff: strong at the shared edge, then a soft mid stop so the
+    // blend fades smoothly instead of ending in a visible painted band.
+    const mid = Math.max(0.02, blendFraction * 0.5);
+    g.addColorStop(0,             `${colorBase}${maxAlpha})`);
+    g.addColorStop(mid,           `${colorBase}${(maxAlpha * 0.45).toFixed(3)})`);
+    g.addColorStop(blendFraction, 'rgba(0,0,0,0)');
+    g.addColorStop(1,             'rgba(0,0,0,0)');
 
     ctx.fillStyle = g;
     ctx.fillRect(tileX, tileY, tileSize, tileSize);
@@ -186,8 +192,9 @@ export class TerrainTextureManager {
 
   // ── Feature sprite (painter's algorithm, upward offset) ─────────────────
   //
-  // Sprite is 1:2 (width : 2*width). Bottom aligns with tile bottom;
-  // top extends one full tileSize above — creating depth like Wesnoth trees.
+  // Sprite is 1.5:1 (width : 1.5*width). The lower width×width portion sits on
+  // the tile; only the top half-tile extends above — enough to hide the tile
+  // edge without covering the whole row above.
 
   drawFeature(
     ctx: CanvasRenderingContext2D,
@@ -196,6 +203,7 @@ export class TerrainTextureManager {
   ): void {
     const img = this.getFeatureTexture(terrainType);
     if (!img) return;
-    ctx.drawImage(img, tileX, tileY - tileSize, tileSize, tileSize * 2);
+    const overhang = tileSize * 0.5;
+    ctx.drawImage(img, tileX, tileY - overhang, tileSize, tileSize * 1.5);
   }
 }

@@ -52,3 +52,44 @@ What it does:
 
 Use this when you want to get into gameplay as fast as possible during development or when
 debugging game-engine logic, AI behaviour, rendering, or UI issues.
+
+## Tile Generator & Terrain Textures
+
+The AI tile generator lives in the sibling `tile-generator/` folder (repo root) and writes its
+output directly into `Zivilisation_1/public/assets/tiles/`. It is a Wesnoth-style **two-layer**
+system:
+
+- **Layer 1 — base ground tiles**: 256×256, flat top-down, seamless. Named `terrain_<type>.png`.
+- **Layer 2 — feature sprites**: 256×384 (1.5:1), transparent background. Named
+  `terrain_<type>_feature.png`. Drawn on top of the base tile with the painter's algorithm.
+
+### Running it
+```bash
+cd tile-generator
+npm start                     # UI + proxy server on http://localhost:3456 (needs FAL_AI_KEY)
+FAL_AI_KEY=... node generate_terrain_v4.mjs   # batch-generate the current terrain set
+```
+`generate_terrain_v4.mjs` is the current script — it uses `fal-ai/flux-2/turbo`. Older scripts
+(`generate_terrain.mjs`, `_v2.mjs`, `_v3.mjs`) are kept for history; update v4, don't add v5.
+
+### Feature sprite rules (important)
+- Aspect ratio is **1.5:1 (256×384)**, NOT 2:1. The lower 256×256 sits on the tile; only the
+  top 128px extends over the tile above.
+- The feature content must sit in the **lower ~70%** of the image; only a little may cross the
+  top edge.
+- Trees/forest/jungle/swamp must be seen **from above (top-down canopy)**, not from the side.
+  Emphasise circular canopy shapes; trunks should barely be visible.
+- Generate raw first (`*_feature_raw`), then remove the background (rembg) and rename to
+  `terrain_<type>_feature.png`.
+
+### Terrain special cases
+- **River**: no dedicated base texture. River tiles reuse the ocean/water texture; the water-to-land
+  banks come from the colour-transition pass in `TerrainTextureManager.ts`.
+- **Hills**: no dedicated base texture. Hills reuse the grass texture and place the hill feature
+  sprite on top.
+- **Grassland**: keep it desaturated / low contrast — not neon green.
+
+### After regenerating assets
+Verify visually with dev mode: `http://localhost:3000/?quickstart` (reveals the whole map).
+The renderer reads `TERRAIN_TEXTURE_FILES` / `FEATURE_TEXTURE_FILES` in
+`src/game/rendering/TerrainTextureManager.ts` — if a texture filename changes, update that map.

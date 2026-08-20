@@ -442,8 +442,10 @@ export class MapRenderer {
             const nPriority = tm.getPriority(n.type);
             if (nPriority <= tPriority) continue;
             const diff    = nPriority - tPriority;
-            const alpha   = Math.min(0.72, 0.42 + diff * 0.05);
-            const blend   = Math.min(0.42, 0.25 + diff * 0.025);
+            // Softer, wider blends than v1 — transitions should read as a
+            // gentle merge, not a hard painted band along the seam.
+            const alpha   = Math.min(0.55, 0.30 + diff * 0.04);
+            const blend   = Math.min(0.55, 0.30 + diff * 0.02);
             tm.drawColorTransition(ctx, n.type, x, y, scaledTile, dir, blend, alpha);
           }
         }
