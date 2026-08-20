@@ -37,3 +37,18 @@ New feature tests must NOT re-check connectivity on their own; they rely on the 
   to fail on uncaught exceptions when relevant.
 - After changing a spec, run `npx playwright test e2e/setup` first, then the affected feature spec,
   then the full suite.
+
+## Quick-start / Dev mode
+
+Append `?quickstart` to the local URL (e.g. `http://localhost:3000/?quickstart`) to skip the
+setup modal and launch directly into a game with sensible defaults and **developer mode** enabled.
+
+What it does:
+- Skips the civilization/difficulty/map setup screen entirely.
+- Starts a 2-player NORMAL_SKIRMISH game on Prince difficulty with the Germans civilization.
+- Enables **dev mode** — reveals the full map (no fog of war), shows all players on the minimap,
+  and allows switching between civilizations for debugging.
+- Cleans the `?quickstart` parameter from the URL after reading it (so a refresh doesn't loop).
+
+Use this when you want to get into gameplay as fast as possible during development or when
+debugging game-engine logic, AI behaviour, rendering, or UI issues.
