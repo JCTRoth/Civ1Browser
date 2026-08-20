@@ -86,6 +86,11 @@ const UNIT_ICON_OVERRIDES: UnitIconOverride[] = [
     unitType: 'riflemen',
     svgPath: 'riflemen.svg',
     fallbackEmoji: UNIT_PROPERTIES['riflemen']?.icon
+  },
+  {
+    unitType: 'musketeer',
+    svgPath: 'musketeer.svg',
+    fallbackEmoji: UNIT_PROPERTIES['musketeer']?.icon
   }
 ];
 
