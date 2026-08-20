@@ -420,7 +420,10 @@ export class MapRenderer {
       }
     }
 
-    // ── Pass 2: color-based edge transitions (clean, no blob patterns) ───
+    // ── Pass 2: color-based edge + corner transitions ─────────────────────
+    //
+    // Cardinal edges: wider blend band for smoother blending (was 0.25, now 0.40).
+    // Diagonal corners: small radial gradient so corners don't look sharply cut.
     if (tm && tm.isReady) {
       for (let row = 0; row < map.height; row++) {
         for (let col = 0; col < map.width; col++) {
@@ -430,6 +433,7 @@ export class MapRenderer {
           const y = row * scaledTile;
           const tPriority = tm.getPriority(tile.type);
 
+          // Cardinal edges — wider blend = smoother transition
           const edges: Array<{ dcol: number; drow: number; dir: 'N'|'E'|'S'|'W' }> = [
             { dcol: 0, drow: -1, dir: 'N' },
             { dcol: 1, drow:  0, dir: 'E' },
@@ -441,10 +445,25 @@ export class MapRenderer {
             if (!n?.explored || n.type === tile.type) continue;
             const nPriority = tm.getPriority(n.type);
             if (nPriority <= tPriority) continue;
-            const diff    = nPriority - tPriority;
-            const alpha   = Math.min(0.72, 0.42 + diff * 0.05);
-            const blend   = Math.min(0.42, 0.25 + diff * 0.025);
+            const diff  = nPriority - tPriority;
+            const alpha = Math.min(0.78, 0.50 + diff * 0.05);
+            const blend = Math.min(0.50, 0.40 + diff * 0.02);
             tm.drawColorTransition(ctx, n.type, x, y, scaledTile, dir, blend, alpha);
+          }
+
+          // Diagonal corners — fill gaps where only the diagonal neighbour differs
+          const corners: Array<{ dcol: number; drow: number; cx: number; cy: number }> = [
+            { dcol: -1, drow: -1, cx: x,               cy: y               },
+            { dcol:  1, drow: -1, cx: x + scaledTile,  cy: y               },
+            { dcol:  1, drow:  1, cx: x + scaledTile,  cy: y + scaledTile  },
+            { dcol: -1, drow:  1, cx: x,               cy: y + scaledTile  },
+          ];
+          for (const { dcol, drow, cx, cy } of corners) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            tm.drawCornerBlend(ctx, n.type, cx, cy, scaledTile * 0.52, 0.32);
           }
         }
       }
