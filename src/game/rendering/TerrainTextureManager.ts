@@ -70,6 +70,12 @@ export const TERRAIN_BLEND_COLOR: Record<string, string> = {
   GRASSLAND:  'rgba( 40,160, 40,',
 };
 
+/**
+ * How far terrain transitions bleed into the current tile, as a fraction
+ * of the tile size (0–0.5).  Tweak this to control edge/corner distance.
+ */
+export const TRANSITION_DISTANCE = 0.15;
+
 export class TerrainTextureManager {
   private readonly baseCache    = new Map<string, HTMLImageElement>();
   private readonly featureCache = new Map<string, HTMLImageElement>();
@@ -185,8 +191,8 @@ export class TerrainTextureManager {
     tCtx.drawImage(img, 0, 0, tileSize, tileSize);
 
     // Scale blend strength with priority difference; clamp to a reasonable range.
-    const edgeAlpha = 1.0 // Math.min(0.82, 0.55 + priorityDiff * 0.06);
-    const fadeFrac  = Math.min(0.45, 0.28 + priorityDiff * 0.03);
+    const edgeAlpha = 1.0;
+    const fadeFrac  = Math.min(0.45, TRANSITION_DISTANCE + priorityDiff * 0.03);
 
     // Mask with a gradient: opaque at the shared edge, transparent at fadeFrac.
     tCtx.globalCompositeOperation = 'destination-in';
@@ -283,7 +289,7 @@ export class TerrainTextureManager {
     
     // Calculate priority difference for gradient strength
     const priorityDiff = winner.priority - this.getPriority(currentType);
-    const radius = Math.min(0.45, 0.28 + priorityDiff * 0.03) * tileSize;
+    const radius = Math.min(0.45, TRANSITION_DISTANCE + priorityDiff * 0.03) * tileSize;
     const peak   = 1.0;
 
     tCtx.globalCompositeOperation = 'destination-in';
