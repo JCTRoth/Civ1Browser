@@ -226,29 +226,35 @@ export class AutoProduction {
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
     const strategy: StrategyProfile = this.getStrategyForCiv(city.civilizationId);
 
-    // Check for city defenders
-    const unitsInCity = this.gameEngine.units.filter(
-      (u: Unit) => u.col === city.col && u.row === city.row && u.civilizationId === city.civilizationId
-    );
-    
+    // Check for city defenders: any friendly unit with a defensive role
+    // within 2 tiles of the city counts as garrison. Counting ONLY units ON
+    // the city tile made a city build defenders forever — each produced unit
+    // walked off to garrison the area, so the tile was never occupied and the
+    // "no defender" branch never cleared (the 167-round log: Berlin produced
+    // phalanxes all game while its units sat 1-4 tiles away).
+    const squareGrid = this.gameEngine.squareGrid;
+    const garrisonUnits = this.gameEngine.units.filter((u: Unit) => {
+      if (u.civilizationId !== city.civilizationId) return false;
+      const dist = squareGrid?.squareDistance
+        ? squareGrid.squareDistance(u.col, u.row, city.col, city.row)
+        : (u.col === city.col && u.row === city.row ? 0 : 99);
+      return dist <= 2;
+    });
+
     // A queued unit with defense also counts toward the garrison.
     const plannedHasDefender = plannedTypes.some((t: string) => {
       const unitProps = UNIT_PROPS[t];
       return unitProps && (unitProps.defense || 0) > 0;
     });
-    const hasDefender = plannedHasDefender || unitsInCity.some((u: Unit) => {
+    const hasDefender = plannedHasDefender || garrisonUnits.some((u: Unit) => {
       const unitProps = UNIT_PROPS[u.type];
       return unitProps && unitProps.defense > 0;
     });
 
-    // 1. Build a defender if none exists
-    if (!hasDefender || threatAssessment?.needsDefense) {
-      console.log('[AutoProduction] City needs defender (threat-triggered:', !!threatAssessment?.needsDefense, ')');
-      return this.buildDefenderProduction(city, threatAssessment);
-    }
-
-    if (threatAssessment && threatAssessment.netThreat > 0) {
-      console.log('[AutoProduction] Elevated threat detected, reinforcing garrison');
+    // 1. A city under direct threat must build a defender FIRST (survival
+    //    beats comfort). Minor border pressure alone does not preempt it.
+    if (threatAssessment?.needsDefense) {
+      console.log('[AutoProduction] City needs defender (threat-triggered)');
       return this.buildDefenderProduction(city, threatAssessment);
     }
 
@@ -262,6 +268,41 @@ export class AutoProduction {
     if (civ && econ) {
       const happyState = econ.cityHappiness(city, civ);
       needsHappiness = happyState.disorder || happyState.unhappiness >= happyState.happiness;
+    }
+
+    // 1b. Happiness emergency BEFORE the plain "no defender" check. A city
+    //     spending 40%+ of its commerce on luxury (or in disorder) must build
+    //     a temple NOW. Otherwise the "no defender within 2 tiles" branch
+    //     below keeps firing (defenders walk out to garrison the area, so the
+    //     city rarely shows one on the tile) and the temple that would fix
+    //     the economy is never built — the civ stays at 70% luxury / 0
+    //     science for the whole game and never produces a real army.
+    const luxuryRate = civ?.luxuryRate ?? 0;
+    if (needsHappiness || luxuryRate >= 40) {
+      const existingBuildings = new Set(city.buildings ?? []);
+      const happyBuilding = ['temple', 'colosseum', 'cathedral']
+        .find((b) => !existingBuildings.has(b) && !plannedTypes.includes(b));
+      const bProps = happyBuilding ? (BUILDING_PROPS[happyBuilding] || BUILDING_PROPERTIES[happyBuilding]) : null;
+      if (bProps) {
+        console.log(`[AutoProduction] Happiness emergency: building ${happyBuilding} (luxury ${luxuryRate}%, disorder ${needsHappiness})`);
+        return {
+          type: 'building',
+          itemType: happyBuilding,
+          name: bProps.name,
+          cost: bProps.cost
+        };
+      }
+    }
+
+    // 2. Build a defender if none exists
+    if (!hasDefender) {
+      console.log('[AutoProduction] City needs defender');
+      return this.buildDefenderProduction(city, threatAssessment);
+    }
+
+    if (threatAssessment && threatAssessment.netThreat > 0) {
+      console.log('[AutoProduction] Elevated threat detected, reinforcing garrison');
+      return this.buildDefenderProduction(city, threatAssessment);
     }
 
     // 3. Settler expansion FIRST (right after defense) so the civ actually
@@ -307,35 +348,9 @@ export class AutoProduction {
       (p: BuildingPlan) => !plannedTypes.includes(p.buildingType)
     );
 
-    // 4b. Happiness emergency: build a happiness building (temple/colosseum/
-    //     cathedral) BEFORE general buildings so large cities stay content
-    //     with less luxury. Fires both when the city is actually in disorder
-    //     AND when luxury is already absorbing a large share of commerce to
-    //     mask unhappiness (e.g. 70% luxury / 0% science). The latter is the
-    //     AI-vs-AI death spiral: luxury masks the need, no temple is built,
-    //     science collapses, and the economy never recovers.
-    const luxuryRate = civ?.luxuryRate ?? 0;
-    if (needsHappiness || luxuryRate >= 40) {
-      const existingBuildings = new Set(city.buildings ?? []);
-      const happyPlan = availableBuildingPlans.find(
-        (p: BuildingPlan) => (BUILDING_PROPERTIES[p.buildingType]?.effects?.happiness ?? 0) > 0
-      ) ?? ['temple', 'colosseum', 'cathedral']
-        .filter((b) => !existingBuildings.has(b) && !plannedTypes.includes(b))
-        .map((b) => ({ buildingType: b, priority: 99, reason: 'happiness-crisis' }))[0];
-      if (happyPlan) {
-        const bProps = BUILDING_PROPS[happyPlan.buildingType] || BUILDING_PROPERTIES[happyPlan.buildingType];
-        if (bProps) {
-          console.log(`[AutoProduction] Happiness emergency: building ${happyPlan.buildingType} (luxury ${luxuryRate}%, disorder ${needsHappiness})`);
-          return {
-            type: 'building',
-            itemType: happyPlan.buildingType,
-            name: bProps.name,
-            cost: bProps.cost
-          };
-        }
-      }
-    }
-
+    // (The happiness emergency now runs before the defender check above — a
+    //  crisis city gets its temple instead of yet another defender, so it is
+    //  not stuck at 70% luxury / 0 science for the whole game.)
     const buildingPlan = availableBuildingPlans.length > 0 ? availableBuildingPlans[0] : null;
     const numMilitary = this.gameEngine.units.filter(
       (u: Unit) => u.civilizationId === city.civilizationId && this.isOffensiveUnitType(u.type)

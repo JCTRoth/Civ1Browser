@@ -219,3 +219,83 @@ describe('AutoProduction scout corps', () => {
     expect(item.itemType).not.toBe('scout');
   });
 });
+
+/**
+ * Happiness economy regression: a city spending 40%+ of its commerce on
+ * luxury must build a temple BEFORE a defender. Otherwise the "no defender"
+ * branch keeps producing military (each unit walks off the tile, so the city
+ * never shows a defender) and the temple that would fix the economy is never
+ * built — the civ stays at 70% luxury / 0 science all game (the 167-round
+ * AI-vs-AI log: both civs stalled this way and never fought a real war).
+ */
+describe('AutoProduction happiness emergency', () => {
+  const createHappinessMockEngine = () => {
+    const city = {
+      id: 'city-1',
+      name: 'Testopolis',
+      civilizationId: 1,
+      col: 0,
+      row: 0,
+      population: 3,
+      buildings: [],
+      currentProduction: null,
+      autoProduction: true,
+    };
+    const productionManager = { setCityProduction: vi.fn().mockReturnValue({ success: true }) };
+    const engine: any = {
+      cities: [city],
+      units: [],
+      civilizations: [
+        null,
+        {
+          id: 1,
+          name: 'TestCiv',
+          technologies: new Set(['warrior_code']),
+          personality: { aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5 },
+          warWith: new Set(),
+          luxuryRate: 0,
+        },
+      ],
+      productionManager,
+      getPlayerStorage: () => ({ turnData: {} }),
+      squareGrid: { squareDistance: () => 1 },
+      roundManager: { getRoundNumber: () => 0 },
+      currentYear: -500,
+      gameSettings: { difficulty: 'PRINCE' },
+      getCityAt: () => null,
+      getUnitAt: () => null,
+      map: { width: 20, height: 20 },
+    };
+    return { engine, productionManager };
+  };
+
+  it('builds a temple in a luxury crisis even with no defender on the tile', () => {
+    const { engine, productionManager } = createHappinessMockEngine();
+    // No defender anywhere → the (old) "needs defender" branch would fire.
+    // 60% luxury → isHappinessCrisis true, so the temple must win.
+    engine.civilizations[1].luxuryRate = 60;
+
+    new AutoProduction(engine).setAutoProduction('city-1');
+
+    expect(productionManager.setCityProduction).toHaveBeenCalled();
+    const item = productionManager.setCityProduction.mock.calls[0][1];
+    expect(item.type).toBe('building');
+    expect(item.itemType).toBe('temple');
+  });
+
+  it('counts a defender within 2 tiles as garrison (no endless defender builds)', () => {
+    const { engine, productionManager } = createHappinessMockEngine();
+    // A defender sits adjacent (mock squareDistance always returns 1) instead
+    // of ON the city tile — it must still satisfy the garrison check so the
+    // city stops producing defenders forever.
+    engine.units = [{ id: 'def', type: 'warrior', civilizationId: 1, col: 1, row: 1, attack: 1, defense: 1 }];
+
+    new AutoProduction(engine).setAutoProduction('city-1');
+
+    const item = productionManager.setCityProduction.mock.calls[0][1];
+    // Not another defender (the garrison is satisfied) — falls through to the
+    // settler/expansion branch.
+    expect(item.itemType).not.toBe('warrior');
+    expect(item.itemType).not.toBe('phalanx');
+  });
+});

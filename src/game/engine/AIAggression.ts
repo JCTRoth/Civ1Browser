@@ -20,7 +20,7 @@ export const AGGRESSION_TRIGGER_THRESHOLD = 50;
 /** Width of the stochastic band around the threshold. */
 export const AGGRESSION_TRIGGER_BAND = 15;
 /** Bulk attacks require this much available strength relative to target defense. */
-export const BULK_ATTACK_STRENGTH_RATIO = 0.85;
+export const BULK_ATTACK_STRENGTH_RATIO = 0.7;
 /** Default defensive strength assumed for an unknown/unbuilt enemy city. */
 export const UNKNOWN_CITY_DEFENSE = 8;
 /** Default defensive strength assumed for an enemy unit. */
