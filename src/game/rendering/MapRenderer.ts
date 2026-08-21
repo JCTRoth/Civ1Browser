@@ -444,6 +444,21 @@ export class MapRenderer {
             const diff = nPriority - tPriority;
             tm.drawTextureTransition(ctx, n.type, x, y, scaledTile, dir, diff);
           }
+
+          const corners: Array<{ dcol: number; drow: number; corner: 'NW'|'NE'|'SW'|'SE' }> = [
+            { dcol:-1, drow:-1, corner: 'NW' },
+            { dcol: 1, drow:-1, corner: 'NE' },
+            { dcol:-1, drow: 1, corner: 'SW' },
+            { dcol: 1, drow: 1, corner: 'SE' },
+          ];
+          for (const { dcol, drow, corner } of corners) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            const diff = nPriority - tPriority;
+            tm.drawCornerTransition(ctx, n.type, x, y, scaledTile, corner, diff);
+          }
         }
       }
     }
@@ -824,6 +839,21 @@ export class MapRenderer {
             if (nPriority <= tPriority) continue;
             const diff = nPriority - tPriority;
             tm.drawTextureTransition(ctx, n.type, tileX, tileY, scaledTileSize, dir, diff);
+          }
+
+          const corners: Array<{ dcol: number; drow: number; corner: 'NW'|'NE'|'SW'|'SE' }> = [
+            { dcol:-1, drow:-1, corner: 'NW' },
+            { dcol: 1, drow:-1, corner: 'NE' },
+            { dcol:-1, drow: 1, corner: 'SW' },
+            { dcol: 1, drow: 1, corner: 'SE' },
+          ];
+          for (const { dcol, drow, corner } of corners) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            const diff = nPriority - tPriority;
+            tm.drawCornerTransition(ctx, n.type, tileX, tileY, scaledTileSize, corner, diff);
           }
         }
 

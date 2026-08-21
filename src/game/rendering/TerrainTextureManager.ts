@@ -185,7 +185,7 @@ export class TerrainTextureManager {
     tCtx.drawImage(img, 0, 0, tileSize, tileSize);
 
     // Scale blend strength with priority difference; clamp to a reasonable range.
-    const edgeAlpha = Math.min(0.82, 0.55 + priorityDiff * 0.06);
+    const edgeAlpha = 1.0 // Math.min(0.82, 0.55 + priorityDiff * 0.06);
     const fadeFrac  = Math.min(0.45, 0.28 + priorityDiff * 0.03);
 
     // Mask with a gradient: opaque at the shared edge, transparent at fadeFrac.
@@ -207,6 +207,58 @@ export class TerrainTextureManager {
     tCtx.globalCompositeOperation = 'source-over';
 
     // Composite the masked texture onto the main canvas, clipped to this tile.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(tileX, tileY, tileSize, tileSize);
+    ctx.clip();
+    ctx.drawImage(tc, tileX, tileY);
+    ctx.restore();
+  }
+
+  // ── Diagonal corner transitions ──────────────────────────────────────────
+  //
+  // Fills the corner area of the current tile with the diagonal neighbor's
+  // texture, masked by a radial gradient that peaks at the corner vertex and
+  // fades toward the center.  Covers the "cut-off" notch left by the four
+  // cardinal edge transitions.
+
+  drawCornerTransition(
+    ctx: CanvasRenderingContext2D,
+    neighborType: string,
+    tileX: number, tileY: number, tileSize: number,
+    corner: 'NW' | 'NE' | 'SW' | 'SE',
+    priorityDiff = 1,
+  ): void {
+    const img = this.getTexture(neighborType);
+    if (!img || !img.complete || img.naturalWidth === 0) return;
+
+    if (!this.transitionCanvas) {
+      this.transitionCanvas = document.createElement('canvas');
+    }
+    const tc = this.transitionCanvas;
+    if (tc.width !== tileSize || tc.height !== tileSize) {
+      tc.width  = tileSize;
+      tc.height = tileSize;
+    }
+    const tCtx = tc.getContext('2d')!;
+    tCtx.clearRect(0, 0, tileSize, tileSize);
+    tCtx.drawImage(img, 0, 0, tileSize, tileSize);
+
+    // Radial gradient centered at the corner vertex.
+    const cx = corner === 'NW' || corner === 'SW' ? 0        : tileSize;
+    const cy = corner === 'NW' || corner === 'NE' ? 0        : tileSize;
+    const radius = Math.min(0.42, 0.22 + priorityDiff * 0.025) * tileSize;
+    const peak   = 1.0; //Math.min(0.72, 0.42 + priorityDiff * 0.05);
+
+    tCtx.globalCompositeOperation = 'destination-in';
+    const g = tCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+    g.addColorStop(0,    `rgba(0,0,0,${peak.toFixed(2)})`);
+    g.addColorStop(0.45, `rgba(0,0,0,${(peak * 0.25).toFixed(2)})`);
+    g.addColorStop(1,    'rgba(0,0,0,0)');
+    tCtx.fillStyle = g;
+    tCtx.fillRect(0, 0, tileSize, tileSize);
+    tCtx.globalCompositeOperation = 'source-over';
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(tileX, tileY, tileSize, tileSize);
