@@ -81,6 +81,8 @@ export class TerrainTextureManager {
   private readonly featureCache = new Map<string, HTMLImageElement>();
   /** Reusable offscreen canvas for texture-based transition compositing. */
   private transitionCanvas: HTMLCanvasElement | null = null;
+  /** Dedicated offscreen canvas for feature blending (wider than a tile). */
+  private featureCanvas: HTMLCanvasElement | null = null;
 
   readonly ready: Promise<void>;
   private loadedCount = 0;
@@ -356,11 +358,16 @@ export class TerrainTextureManager {
     ctx.restore();
   }
 
-  // ── Feature sprite (painter's algorithm, upward offset) ─────────────────
+  // ── Feature sprite (painter's algorithm, upward offset + side bleed) ──────
   //
   // Sprite is 1.5:1 (width : 1.5*width). The lower width×width portion sits on
-  // the tile; only the top half-tile extends above — enough to hide the tile
-  // edge without covering the whole row above.
+  // the tile; the top half-tile extends above.
+  //
+  // To soften hard tile-boundary edges the sprite is drawn at 1.5× tile width
+  // (25% bleed into each side neighbor).  A horizontal gradient mask fades the
+  // bleed zones to transparent, so adjacent same-type features blend together
+  // and isolated features have soft edges — identical in spirit to the base
+  // terrain edge transitions.
 
   drawFeature(
     ctx: CanvasRenderingContext2D,
@@ -369,7 +376,41 @@ export class TerrainTextureManager {
   ): void {
     const img = this.getFeatureTexture(terrainType);
     if (!img) return;
-    const overhang = tileSize * 0.5;
-    ctx.drawImage(img, tileX, tileY - overhang, tileSize, tileSize * 1.5);
+
+    const overhang  = tileSize * 0.5;
+    const sideBleed = tileSize * 0.15;   // always bleed 25 % into each side neighbor
+    const drawW     = tileSize + sideBleed * 2;
+    const drawH     = tileSize * 1.5;
+    const drawX     = tileX - sideBleed;
+    const drawY     = tileY - overhang;
+
+    if (!this.featureCanvas) {
+      this.featureCanvas = document.createElement('canvas');
+    }
+    const fc = this.featureCanvas;
+    const needW = Math.ceil(drawW);
+    const needH = Math.ceil(drawH);
+    if (fc.width < needW || fc.height < needH) {
+      fc.width  = needW;
+      fc.height = needH;
+    }
+    const fCtx = fc.getContext('2d')!;
+    fCtx.clearRect(0, 0, needW, needH);
+    fCtx.drawImage(img, 0, 0, drawW, drawH);
+
+    // Fade the bleed zones to transparent so adjacent features blend
+    // into each other rather than cutting off at the tile boundary.
+    fCtx.globalCompositeOperation = 'destination-in';
+    const fadeStop = (sideBleed * 1.5) / drawW;
+    const g = fCtx.createLinearGradient(0, 0, drawW, 0);
+    g.addColorStop(0,            'rgba(0,0,0,0)');
+    g.addColorStop(fadeStop,     'rgba(0,0,0,1)');
+    g.addColorStop(1 - fadeStop, 'rgba(0,0,0,1)');
+    g.addColorStop(1,            'rgba(0,0,0,0)');
+    fCtx.fillStyle = g;
+    fCtx.fillRect(0, 0, drawW, drawH);
+    fCtx.globalCompositeOperation = 'source-over';
+
+    ctx.drawImage(fc, 0, 0, drawW, drawH, drawX, drawY, drawW, drawH);
   }
 }
