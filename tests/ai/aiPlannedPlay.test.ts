@@ -123,6 +123,26 @@ describe('AI planned play — probing', () => {
     expect(dist).toBeGreaterThan(0);
     expect(dist).toBeLessThanOrEqual(12);
   });
+
+  it('reserves are not recalled for distance alone — they probe outward (no walk up/down)', () => {
+    const { engine } = createMockEngine();
+    engine.cities = [{ id: 'friendly', civilizationId: 1, col: 0, row: 0 }];
+    engine.units = [
+      combatUnit('guard', 1, 3, 0), // reserve, 3 tiles from the (safe) city
+      combatUnit('prober', 1, 5, 5),
+    ];
+    engine.isExploredByPlayer = (_civ: number, col: number, row: number) =>
+      (col === 3 && row === 0) || (col === 5 && row === 5);
+
+    const aiManager = new AIManager(engine);
+    const guardTarget = (aiManager as any).chooseAITarget(engine.units[0]);
+
+    // No threat → the reserve must NOT be pulled back to the city just for
+    // being >2 tiles away (that recall → probe → recall loop was the
+    // walk-up-and-down). It keeps a stable outward probe target instead.
+    expect(guardTarget).not.toBeNull();
+    expect(guardTarget).not.toEqual({ col: 0, row: 0 });
+  });
 });
 
 describe('AI planned play — scouts', () => {

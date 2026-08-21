@@ -638,18 +638,39 @@ export class AIManager {
         return { col: closest.col, row: closest.row };
       }
 
+      // ── Sticky commitment: keep the previous target for a few rounds so the
+      // unit does not flip between target sources every single turn (defend
+      // home ↔ attack enemy ↔ probe), which is the "walk up and down" pattern.
+      // Combat (enemy within scan radius, handled above) and retreat still
+      // preempt the sticky target.
+      const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
+      const committed = (unit as any)._aiCommittedTarget as { target: { col: number; row: number }; round: number } | undefined;
+      if (committed) {
+        if (committed.target.col === unit.col && committed.target.row === unit.row) {
+          delete (unit as any)._aiCommittedTarget; // reached — pick something new
+        } else if (roundNumber - committed.round < 4 && this.isCommittedTargetValid(unit, committed.target)) {
+          return committed.target;
+        } else {
+          delete (unit as any)._aiCommittedTarget; // stale or invalid — re-evaluate
+        }
+      }
+      const remember = (target: { col: number; row: number } | null): { col: number; row: number } | null => {
+        if (target) (unit as any)._aiCommittedTarget = { target, round: roundNumber };
+        return target;
+      };
+
       // ── Respond to threat alerts from allied units ──
       const alertTarget = this.getActiveAlertTarget(unit, storage);
       if (alertTarget) {
         console.log(`[AI] Unit ${unit.id} responding to threat alert at (${alertTarget.col},${alertTarget.row})`);
-        return alertTarget;
+        return remember(alertTarget);
       }
 
       // ── Defend threatened cities ──
       const strategicTarget = this.selectStrategicTarget(unit as Unit);
       if (strategicTarget) {
         console.log(`[AI] Strategic target chosen for ${unit.type} ${unit.id} -> (${strategicTarget.col}, ${strategicTarget.row})`);
-        return strategicTarget;
+        return remember(strategicTarget);
       }
 
       // ── Probe outward when idle: idle military units expand the frontier ──
@@ -658,7 +679,7 @@ export class AIManager {
       const probeTarget = this.findCombatProbeTarget(unit, storage, distFn);
       if (probeTarget) {
         console.log(`[AI] Probe target for ${unit.id}: (${probeTarget.col},${probeTarget.row})`);
-        return probeTarget;
+        return remember(probeTarget);
       }
 
       // ── Patrol between cities when idle ──
@@ -670,7 +691,7 @@ export class AIManager {
       );
       if (patrolTarget) {
         console.log(`[AI] Patrol waypoint for ${unit.id}: (${patrolTarget.col},${patrolTarget.row})`);
-        return patrolTarget;
+        return remember(patrolTarget);
       }
     }
 
@@ -1611,6 +1632,25 @@ export class AIManager {
     const grid = this.gameEngine.squareGrid;
     if (!map || !grid) return null;
 
+    // Commit to a locked probe target so the unit walks a stable line instead
+    // of re-picking the nearest unexplored tile every turn — recomputing made
+    // units zig-zag (and even double back) as the tiles they passed became
+    // explored and the "nearest" frontier jumped sideways.
+    const locked = (unit as any)._probeTarget as { col: number; row: number } | undefined;
+    if (locked) {
+      if (locked.col === unit.col && locked.row === unit.row) {
+        delete (unit as any)._probeTarget; // reached the frontier tile
+      } else if (this.isProbeTargetValid(unit, locked)) {
+        const lockedDist = distFn(unit.col, unit.row, locked.col, locked.row);
+        if (lockedDist <= 24) {
+          return { col: locked.col, row: locked.row };
+        }
+        delete (unit as any)._probeTarget; // went stale (unit was diverted far away)
+      } else {
+        delete (unit as any)._probeTarget; // became impassable / occupied
+      }
+    }
+
     const searchRadius = 12;
     const startCol = Math.max(0, unit.col - searchRadius);
     const endCol = Math.min(map.width - 1, unit.col + searchRadius);
@@ -1639,7 +1679,31 @@ export class AIManager {
       }
     }
 
-    return best ? { col: best.col, row: best.row } : null;
+    if (best) {
+      (unit as any)._probeTarget = { col: best.col, row: best.row };
+      return { col: best.col, row: best.row };
+    }
+    return null;
+  }
+
+  /** A locked probe tile is usable when still passable and unoccupied by us. */
+  private isProbeTargetValid(unit: Unit, target: { col: number; row: number }): boolean {
+    if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(target.col, target.row)) return false;
+    const occupant = this.gameEngine.getUnitAt?.(target.col, target.row);
+    if (occupant && occupant.civilizationId === unit.civilizationId) return false;
+    const city = this.gameEngine.getCityAt?.(target.col, target.row);
+    if (city && city.civilizationId === unit.civilizationId) return false;
+    return true;
+  }
+
+  /** A committed target is still usable when passable and not our own city/unit. */
+  private isCommittedTargetValid(unit: Unit, target: { col: number; row: number }): boolean {
+    if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(target.col, target.row)) return false;
+    const occupant = this.gameEngine.getUnitAt?.(target.col, target.row);
+    if (occupant && occupant.civilizationId === unit.civilizationId) return false;
+    const city = this.gameEngine.getCityAt?.(target.col, target.row);
+    if (city && city.civilizationId === unit.civilizationId) return false;
+    return true;
   }
 
   /**
@@ -2050,8 +2114,12 @@ export class AIManager {
 
   /**
    * Keep one reserve unit in/near a city when it is answering a threat.
-   * When the city is safe, return null so the combat unit can patrol or
-   * receive an offensive target instead of being held indefinitely.
+   * The reserve comes home ONLY when its city is actually threatened — it is
+   * never recalled for distance alone. A distance-based recall ("come back if
+   * you're more than 2 tiles away") combined with outward probing made units
+   * oscillate: recalled home, then sent back out by the probe, then recalled
+   * again — walking up and down every turn. With a single defender that also
+   * trapped the civ at home forever, never exploring or finding the enemy.
    */
   private getCityDefenseReserveTarget(
     unit: Unit,
@@ -2076,8 +2144,7 @@ export class AIManager {
     const threatened = this.findDefensiveAssignment(unit, storage, roundNumber);
     if (threatened) return threatened;
 
-    const distance = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, city.col, city.row);
-    return distance > 2 ? { col: city.col, row: city.row } : null;
+    return null;
   }
 
   private calculateAvailableArmyStrength(civilizationId: number): number {

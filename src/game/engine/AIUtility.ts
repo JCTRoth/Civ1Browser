@@ -585,80 +585,22 @@ export function findInterceptPosition(
 }
 
 /**
- * Find a patrol waypoint between two cities.
- * Returns a position roughly midway along the border/frontier.
+ * Idle military units hold position. There is no active "patrol" target:
+ * every version of one (circling the capital, marching to the midpoint
+ * between cities, being recalled to the capital) sent units marching at a
+ * tile they could NOT enter — their own city — so they bounced back and
+ * forth forever ("units walk up and down"). Idle units get real missions
+ * from the combat / alert / strategic / probe / village branches; when none
+ * apply the correct behaviour is to stay put and defend.
  */
 export function findPatrolWaypoint(
-  unit: any,
-  unitCol: number,
-  unitRow: number,
-  cities: Array<{ col: number; row: number; civilizationId: number }>,
-  civilizationId: number,
-  distanceFn: (c1: number, r1: number, c2: number, r2: number) => number
+  _unit: any,
+  _unitCol: number,
+  _unitRow: number,
+  _cities: Array<{ col: number; row: number; civilizationId: number }>,
+  _civilizationId: number,
+  _distanceFn: (c1: number, r1: number, c2: number, r2: number) => number
 ): { col: number; row: number } | null {
-  const ownCities = cities.filter(c => c.civilizationId === civilizationId);
-  if (ownCities.length < 2) {
-    // Single city: patrol around it at distance 3-4
-    if (ownCities.length === 1) {
-      const city = ownCities[0];
-      const dist = distanceFn(unitCol, unitRow, city.col, city.row);
-      if (dist > 4) {
-        // Move back toward city
-        return { col: city.col, row: city.row };
-      }
-      // Circle around city: pick a point ~3 tiles away in a different direction
-      const angle = Math.atan2(unitRow - city.row, unitCol - city.col) + Math.PI / 3;
-      const patrolCol = Math.round(city.col + Math.cos(angle) * 3);
-      const patrolRow = Math.round(city.row + Math.sin(angle) * 3);
-      return { col: patrolCol, row: patrolRow };
-    }
-    return null;
-  }
-
-  // Find the two cities furthest apart to define frontier
-  let maxDist = 0;
-  let cityA = ownCities[0];
-  let cityB = ownCities[1];
-  for (let i = 0; i < ownCities.length; i++) {
-    for (let j = i + 1; j < ownCities.length; j++) {
-      const d = distanceFn(ownCities[i].col, ownCities[i].row, ownCities[j].col, ownCities[j].row);
-      if (d > maxDist) {
-        maxDist = d;
-        cityA = ownCities[i];
-        cityB = ownCities[j];
-      }
-    }
-  }
-
-  // Patrol waypoint is the midpoint between the two cities
-  const midCol = Math.round((cityA.col + cityB.col) / 2);
-  const midRow = Math.round((cityA.row + cityB.row) / 2);
-
-  // If unit is near the midpoint, send to one of the cities instead
-  const distToMid = distanceFn(unitCol, unitRow, midCol, midRow);
-  if (distToMid <= 2) {
-    // STICKY target: remember which city we're marching to and keep heading
-    // there until we arrive. Without this, moving one tile re-balances which
-    // city is "farther" and the unit ping-pongs between the two forever
-    // (wasting moves and tripping the AI "stuck" detector).
-    const sticky = (unit as any)._patrolTarget;
-    if (sticky && (sticky.col === cityA.col && sticky.row === cityA.row
-      || sticky.col === cityB.col && sticky.row === cityB.row)) {
-      const distToSticky = distanceFn(unitCol, unitRow, sticky.col, sticky.row);
-      if (distToSticky > 1) return { col: sticky.col, row: sticky.row };
-      // Arrived — clear the sticky target so we pick a new one next time.
-      delete (unit as any)._patrolTarget;
-    }
-    const distToA = distanceFn(unitCol, unitRow, cityA.col, cityA.row);
-    const distToB = distanceFn(unitCol, unitRow, cityB.col, cityB.row);
-    const chosen = distToA >= distToB
-      ? { col: cityA.col, row: cityA.row }
-      : { col: cityB.col, row: cityB.row };
-    (unit as any)._patrolTarget = chosen;
-    return chosen;
-  }
-
-  delete (unit as any)._patrolTarget;
-  return { col: midCol, row: midRow };
+  return null;
 }
 
