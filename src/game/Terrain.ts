@@ -363,11 +363,14 @@ export class Tile {
 
         // Apply unit-specific modifiers
         const unitProps = Constants.UNIT_PROPS[unit.type];
-        if (unitProps.naval && this.terrain !== Constants.TERRAIN.OCEAN) {
+        const terrainKey = String(this.terrain ?? '').trim().toLowerCase();
+        const isWaterTerrain = terrainKey === Constants.TERRAIN.OCEAN || terrainKey === 'sea';
+
+        if (unitProps.naval && !isWaterTerrain) {
             return Infinity; // Naval units can't enter land
         }
 
-        if (!unitProps.naval && this.terrain === Constants.TERRAIN.OCEAN) {
+        if (!unitProps.naval && isWaterTerrain) {
             return Infinity; // Land units can't enter ocean
         }
 

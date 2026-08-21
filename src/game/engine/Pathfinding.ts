@@ -35,17 +35,20 @@ export class Pathfinding {
   ): number {
     if (!tile) return Infinity;
 
+    const terrainKey = String(tile.type ?? tile.terrain ?? '').trim().toLowerCase();
+
     // Check if tile is passable for this unit type
-    const terrainProps = TERRAIN_PROPS[tile.type];
+    const terrainProps = TERRAIN_PROPS[terrainKey];
 
     // Determine if unit is land or water based
-    const isWaterUnit = unitType === 'trireme' || unitType === 'caravel' || unitType === 'ironclad';
+    const normalizedType = String(unitType ?? '').trim().toLowerCase();
+    const isWaterUnit = ['trireme', 'caravel', 'ironclad', 'frigate', 'destroyer', 'cruiser', 'battleship', 'submarine', 'carrier', 'transport', 'sail'].includes(normalizedType);
     const isLandUnit = !isWaterUnit;
 
     // Check passability
     if (terrainProps) {
       // Civ1: only deep ocean is water; rivers are a land terrain type.
-      const isWaterTerrain = tile.type === 'ocean' || tile.type === 'sea';
+      const isWaterTerrain = terrainKey === 'ocean' || terrainKey === 'sea';
 
       // Land units cannot pass deep water (ocean)
       if (isLandUnit && isWaterTerrain) {

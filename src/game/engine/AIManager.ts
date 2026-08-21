@@ -1837,7 +1837,11 @@ export class AIManager {
     return reserves;
   }
 
-  /** Keep a reserve unit in/near a city when it is not answering a threat. */
+  /**
+   * Keep one reserve unit in/near a city when it is answering a threat.
+   * When the city is safe, return null so the combat unit can patrol or
+   * receive an offensive target instead of being held indefinitely.
+   */
   private getCityDefenseReserveTarget(
     unit: Unit,
     storage: any,
@@ -1862,7 +1866,7 @@ export class AIManager {
     if (threatened) return threatened;
 
     const distance = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, city.col, city.row);
-    return distance > 2 ? { col: city.col, row: city.row } : { col: unit.col, row: unit.row };
+    return distance > 2 ? { col: city.col, row: city.row } : null;
   }
 
   private calculateAvailableArmyStrength(civilizationId: number): number {

@@ -163,4 +163,29 @@ describe('Civ1 settler rules', () => {
     (e.roundManager as any).processCityGrowth(c);
     expect(c.foodStored).toBe(1);
   });
+
+  it('blocks land units from entering water tiles even when the tile uses terrain and uppercase ocean naming', async () => {
+    const e = await setup();
+    const c = city(1);
+    const warrior = {
+      id: 'warrior',
+      type: 'warrior',
+      civilizationId: 0,
+      col: c.col,
+      row: c.row,
+      movesRemaining: 2,
+      health: 100,
+      homeCityId: c.id,
+    };
+    (e as any).cities = [c];
+    (e as any).units = [warrior];
+
+    const neighbor = e.squareGrid!.getNeighbors(c.col, c.row)[0];
+    const water = e.getTileAt(neighbor.col, neighbor.row) as any;
+    water.type = undefined;
+    water.terrain = 'OCEAN';
+
+    expect(e.canUnitMoveTo(warrior.id, neighbor.col, neighbor.row)).toBe(false);
+    expect(e.moveUnit(warrior.id, neighbor.col, neighbor.row).success).toBe(false);
+  });
 });

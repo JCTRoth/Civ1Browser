@@ -25,7 +25,7 @@ import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
-import { getCivProductionProfile, getCivPersonality } from './AITypes';
+import { canBuildUnit, getCivProductionProfile, getCivPersonality } from './AITypes';
 import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
@@ -1304,10 +1304,9 @@ export default class GameEngine {
   }
 
   /**
-   * Decide an AI city's first production item. The first city starts a
-   * settler so the civ expands instead of building infrastructure (hospital/…)
-   * in a 1-city empire; subsequent cities build a scout (once) for exploration
-   * or a defender, so the AI stops flooding the map with scouts.
+   * Decide an AI city's first production item. A new capital first builds the
+   * cheapest valid land defender, then expands. Subsequent cities build a
+   * scout (once) for exploration or a defender.
    */
   private pickInitialAIProduction(civId: number): { type: string; itemType: string; name: string; cost: number } {
     const scoutCount = this.units.filter(
@@ -1316,7 +1315,26 @@ export default class GameEngine {
     const cityCount = this.cities.filter((c) => c.civilizationId === civId).length;
 
     if (cityCount <= 1) {
-      return { type: 'unit', itemType: 'settler', name: UNIT_PROPS.settler?.name || 'Settler', cost: UNIT_PROPS.settler?.cost || 40 };
+      const civ = this.civilizations[civId];
+      const defender = Object.entries(UNIT_PROPS)
+        .filter(([unitType, props]) =>
+          unitType !== 'scout' &&
+          props.type === 'military' &&
+          !props.naval &&
+          (props.defense || 0) > 0 &&
+          (!civ || canBuildUnit(civ, unitType))
+        )
+        .sort(([, a], [, b]) =>
+          a.cost - b.cost || (b.defense || 0) - (a.defense || 0)
+        )[0];
+      const defenderType = defender?.[0] ?? 'warrior';
+      const defenderProps = UNIT_PROPS[defenderType] ?? UNIT_PROPS.warrior;
+      return {
+        type: 'unit',
+        itemType: defenderType,
+        name: defenderProps.name,
+        cost: defenderProps.cost,
+      };
     }
     if (scoutCount === 0) {
       return { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 };
@@ -1455,6 +1473,15 @@ export default class GameEngine {
     return this.map.tiles[index] || null;
   }
 
+  private getTerrainKey(tile: { type?: string; terrain?: string } | null | undefined): string {
+    return String(tile?.type ?? tile?.terrain ?? '').trim().toLowerCase();
+  }
+
+  private isWaterTerrain(tile: { type?: string; terrain?: string } | null | undefined): boolean {
+    const terrainKey = this.getTerrainKey(tile);
+    return terrainKey === 'ocean' || terrainKey === 'sea';
+  }
+
   /**
    * Whether a tile is passable for land units (used by AI pathfinding).
    * Ocean and other impassable terrain return false.
@@ -1463,7 +1490,9 @@ export default class GameEngine {
     if (!this.squareGrid || !this.squareGrid.isValidSquare(col, row)) return false;
     const tile = this.getTileAt(col, row);
     if (!tile) return false;
-    return TERRAIN_PROPS[tile.type]?.passable !== false;
+    const terrainKey = this.getTerrainKey(tile);
+    if (this.isWaterTerrain(tile)) return false;
+    return TERRAIN_PROPS[terrainKey]?.passable !== false;
   }
 
   /** Passability callback for terrain-aware pathfinding (land units). */
@@ -1557,11 +1586,23 @@ export default class GameEngine {
       console.log(`[canUnitMoveTo] Target tile does not exist at (${targetCol}, ${targetRow}).`);
       return false;
     }
-    const targetTerrain = targetTile.type ?? targetTile.terrain;
-    if (unit.type === 'settler' && targetTerrain === Constants.TERRAIN.OCEAN) {
+
+    const targetTerrain = this.getTerrainKey(targetTile);
+    const isTargetWater = this.isWaterTerrain(targetTile);
+    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || (unit as any).isNaval || (unit as any).naval);
+
+    if (unit.type === 'settler' && isTargetWater) {
       return false;
     }
-    if (TERRAIN_PROPS[targetTile.type]?.passable === false) {
+    if (isTargetWater && !isUnitNaval) {
+      console.log(`[canUnitMoveTo] Target tile at (${targetCol}, ${targetRow}) is water and not passable for land unit ${unit.type}.`);
+      return false;
+    }
+    if (!isTargetWater && isUnitNaval) {
+      console.log(`[canUnitMoveTo] Naval unit ${unit.type} cannot enter land tile at (${targetCol}, ${targetRow}).`);
+      return false;
+    }
+    if (TERRAIN_PROPS[targetTerrain]?.passable === false) {
       console.log(`[canUnitMoveTo] Target tile at (${targetCol}, ${targetRow}) is not passable.`);
       return false;
     }
@@ -1617,10 +1658,21 @@ export default class GameEngine {
     // Check if target tile is passable
     const targetTile = this.getTileAt(targetCol, targetRow);
     if (!targetTile) return { success: false, reason: 'invalid_target' };
-    if (unit.type === 'settler' && (targetTile.type ?? targetTile.terrain) === Constants.TERRAIN.OCEAN) {
+
+    const targetTerrain = this.getTerrainKey(targetTile);
+    const isTargetWater = this.isWaterTerrain(targetTile);
+    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || (unit as any).isNaval || (unit as any).naval);
+
+    if (unit.type === 'settler' && isTargetWater) {
       return { success: false, reason: 'settler_cannot_enter_ocean' };
     }
-    if (TERRAIN_PROPS[targetTile.type]?.passable === false) return { success: false, reason: 'terrain_impassable' };
+    if (isTargetWater && !isUnitNaval) {
+      return { success: false, reason: 'terrain_impassable' };
+    }
+    if (!isTargetWater && isUnitNaval) {
+      return { success: false, reason: 'terrain_impassable' };
+    }
+    if (TERRAIN_PROPS[targetTerrain]?.passable === false) return { success: false, reason: 'terrain_impassable' };
 
     // Check if there's another unit at target (combat or stacking rules)
     const targetUnit = this.getUnitAt(targetCol, targetRow);
