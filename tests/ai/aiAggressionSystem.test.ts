@@ -7,7 +7,6 @@ import {
   estimateCityDefense,
   AGGRESSION_TRIGGER_THRESHOLD,
   AGGRESSION_TRIGGER_BAND,
-  BULK_ATTACK_STRENGTH_RATIO,
   UNKNOWN_CITY_DEFENSE,
 } from '@/game/engine/AIAggression';
 import type { EnemyLocation } from '@/game/engine/EnemySearcher';
@@ -178,7 +177,10 @@ describe('AIAggression.shouldTriggerAggression (random near threshold)', () => {
 describe('AIAggression.estimateCityDefense', () => {
   it('counts population, walls and nearby garrison', () => {
     const { engine } = createMockEngine();
-    const city = { id: 'ec', civilizationId: 2, col: 4, row: 4, population: 4, buildings: ['city_walls'] };
+    const city = {
+      id: 'ec', civilizationId: 2, col: 4, row: 4, population: 4, buildings: ['city_walls'],
+      name: 'Enemy', production: 0, food: 0, gold: 0, science: 0,
+    };
     engine.cities = [city];
     engine.units = [
       { id: 'g1', type: 'warrior', civilizationId: 2, col: 4, row: 4, attack: 1, defense: 3 },

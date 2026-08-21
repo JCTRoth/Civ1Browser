@@ -1639,7 +1639,7 @@ export class AIManager {
    */
   private findCombatProbeTarget(
     unit: Unit,
-    storage: any,
+    _storage: any,
     distFn: (c1: number, r1: number, c2: number, r2: number) => number,
   ): { col: number; row: number } | null {
     const map = this.gameEngine.map;
@@ -2130,7 +2130,7 @@ export class AIManager {
   }
 
   /** Flatten stored enemy intelligence into the known-target list for bulk planning. */
-  private collectKnownTargets(civilizationId: number, storage: any, roundNumber: number): KnownTarget[] {
+  private collectKnownTargets(_civilizationId: number, storage: any, roundNumber: number): KnownTarget[] {
     const targets: KnownTarget[] = [];
     if (!storage?.enemyLocations) return targets;
     for (const enemyList of storage.enemyLocations.values()) {

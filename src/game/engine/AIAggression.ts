@@ -9,7 +9,7 @@
  * choice is a weighted coin-flip, so games don't all play out identically.
  */
 
-import type { Unit, City } from '../../../types/game';
+import type { City } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Constants

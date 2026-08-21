@@ -49,7 +49,7 @@ const createMockEngine = () => {
     isTilePassable: () => true,
     isInScoutZone: () => true,
     assignScoutZones: () => {},
-    recordEnemyLocation: (civId: number, enemy: any) => {
+    recordEnemyLocation: (_civId: number, enemy: any) => {
       const owner = engine.units.find((u: any) => u.id === enemy.targetId)?.civilizationId
         ?? engine.cities.find((c: any) => c.id === enemy.targetId)?.civilizationId;
       if (owner === undefined) return;
