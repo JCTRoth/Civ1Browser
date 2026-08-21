@@ -347,9 +347,30 @@ export class AIManager {
           }
         }
 
+        // Civ1: a unit stacked on the same tile as an enemy attacks it directly.
+        // The engine's moveUnit handles same-tile combat, but AI target selection
+        // only scans neighbouring tiles — detect the stacked enemy here.
+        const stackedEnemy = this.gameEngine.units.find(u => u.col === unit.col && u.row === unit.row
+          && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
+        if (stackedEnemy) {
+          console.log(`[AI] Unit ${unit.id} attacks stacked enemy ${stackedEnemy.type} on the same tile`);
+          this.gameEngine.log('ai', `Attack — ${civ.name} ${unit.type}(${unit.id}) attacks enemy ${stackedEnemy.type} at (${unit.col},${unit.row})`, { civilizationId, action: 'attack', unitId: unit.id, unitType: unit.type, targetType: stackedEnemy.type, targetCol: unit.col, targetRow: unit.row });
+          this.gameEngine.combatUnit(unit, stackedEnemy);
+          if (!this.gameEngine.units.includes(unit)) break; // attacker fell
+          break; // combatUnit zeroes the attacker's moves
+        }
+
         const target = this.chooseAITarget(unit);
         if (!target) {
-          // No valid target, skip the unit's turn
+          // No valid target. A combat unit parked at/next to a friendly city is
+          // defending it — entrench (fortify) for the +50% defense bonus
+          // (Civ1: garrisons fortify instead of standing idle).
+          if (this.shouldFortifyForDefense(unit as Unit)) {
+            console.log(`[AI] No target — ${unit.type} fortifies to defend the city`);
+            this.gameEngine.log('ai', `Fortify — ${civ.name} ${unit.type}(${unit.id}) defends city`, { civilizationId, action: 'fortify', unitId: unit.id, unitType: unit.type });
+            this.gameEngine.unitFortify(unit.id);
+            break;
+          }
           console.log(`[AI] No target found for unit ${unit.id}, skipping`);
           this.gameEngine.log('ai', `No target — ${civ.name} ${unit.type}(${unit.id}) skipped at (${unit.col},${unit.row})`, { civilizationId, action: 'no_target', unitId: unit.id, unitType: unit.type, reason: 'no_target' });
           this.gameEngine.skipUnit(unit.id);
@@ -380,8 +401,16 @@ export class AIManager {
         // Target is the unit's own tile — it's already where it wants to be
         // (e.g. a scout garrisoning a threatened city via findScoutDefenseTarget).
         // Trying to "move" there makes the AI loop pathfind-to-self forever and
-        // trip the stuck detector. Skip the unit cleanly instead.
+        // trip the stuck detector. A combat unit garrisoned at its city
+        // fortifies for the +50% defense (Civ1: garrisons entrench); otherwise
+        // skip the unit cleanly.
         if (target.col === unit.col && target.row === unit.row) {
+          if (this.shouldFortifyForDefense(unit as Unit)) {
+            console.log(`[AI] Unit ${unit.id} fortifies to defend the city`);
+            this.gameEngine.log('ai', `Fortify — ${civ.name} ${unit.type}(${unit.id}) defends city`, { civilizationId, action: 'fortify', unitId: unit.id, unitType: unit.type });
+            this.gameEngine.unitFortify(unit.id);
+            break;
+          }
           console.log(`[AI] Unit ${unit.id} already at target (${target.col},${target.row}), skipping`);
           this.gameEngine.log('ai', `Already at target — ${civ.name} ${unit.type}(${unit.id}) holds (${target.col},${target.row})`, { civilizationId, action: 'hold', unitId: unit.id, unitType: unit.type, reason: 'already_at_target', targetCol: target.col, targetRow: target.row });
           this.gameEngine.skipUnit(unit.id);
@@ -2007,6 +2036,27 @@ export class AIManager {
       return false;
     }
     return (unit.attack || 0) > 0.5;
+  }
+
+  /** Whether the unit is standing on or immediately adjacent to one of its own cities. */
+  private isAtOrAdjacentToFriendlyCity(unit: Unit): boolean {
+    if (!this.gameEngine.squareGrid) return false;
+    const cities = this.gameEngine.cities ?? [];
+    for (const city of cities) {
+      if (city.civilizationId !== unit.civilizationId) continue;
+      const d = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, city.col, city.row);
+      if (d <= 1) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Whether an AI combat unit should entrench: it is defending — a combat unit
+   * holding on/next to one of its own cities and not already fortified. Used
+   * when the unit has no other order (no target / already at its garrison spot).
+   */
+  private shouldFortifyForDefense(unit: Unit): boolean {
+    return this.isCombatUnit(unit) && !unit.isFortified && this.isAtOrAdjacentToFriendlyCity(unit);
   }
 
   private selectStrategicTarget(unit: Unit): { col: number; row: number } | null {

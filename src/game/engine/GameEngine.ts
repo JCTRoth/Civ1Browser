@@ -1660,8 +1660,25 @@ export default class GameEngine {
       return false;
     }
 
-    // Check if there's another unit at target (combat or stacking rules)
-    const targetUnit = this.getUnitAt(targetCol, targetRow);
+    // Check if there's another unit at target (combat or stacking rules).
+    // `getUnitAt` returns the FIRST unit on a tile, so when the attacker shares
+    // its tile with an enemy the attacker itself may come back first and the
+    // tile would be treated as "allied". For the same-tile case scan explicitly
+    // for a stacked enemy so a same-tile attack is allowed.
+    let targetUnit = this.getUnitAt(targetCol, targetRow);
+    if (targetCol === unit.col && targetRow === unit.row) {
+      const stackedEnemy = this.units.find(u => u.col === targetCol && u.row === targetRow
+        && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
+      if (stackedEnemy) {
+        if (unit.type === 'settler') {
+          return false;
+        }
+        console.log(`[canUnitMoveTo] Enemy stacked on same tile — allowing attack.`);
+        return true;
+      }
+      // No enemy on our own tile — a unit cannot "move" onto itself.
+      return false;
+    }
     if (targetUnit && targetUnit.civilizationId !== unit.civilizationId) {
       if (unit.type === 'settler') {
         // Attack 0 settlers cannot enter an enemy unit's square; this is the
@@ -1728,8 +1745,16 @@ export default class GameEngine {
     }
     if (TERRAIN_PROPS[targetTerrain]?.passable === false) return { success: false, reason: 'terrain_impassable' };
 
-    // Check if there's another unit at target (combat or stacking rules)
-    const targetUnit = this.getUnitAt(targetCol, targetRow);
+    // Check if there's another unit at target (combat or stacking rules).
+    // `getUnitAt` returns the first unit on a tile — when the attacker shares
+    // its tile with an enemy, scan explicitly for the stacked enemy so a
+    // same-tile attack triggers combat (getUnitAt could return the attacker).
+    let targetUnit = this.getUnitAt(targetCol, targetRow);
+    if (targetCol === unit.col && targetRow === unit.row) {
+      const stackedEnemy = this.units.find(u => u.col === targetCol && u.row === targetRow
+        && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
+      if (stackedEnemy) targetUnit = stackedEnemy;
+    }
     if (targetUnit && targetUnit.civilizationId !== unit.civilizationId) {
       // Combat. combatUnit auto-declares war at its start, so we must NOT gate
       // on 'not_at_war' here — that pre-check made UI attacks impossible while
@@ -1847,6 +1872,8 @@ export default class GameEngine {
 
       unit.col = targetCol;
       unit.row = targetRow;
+      // Moving breaks fortification (Civ1).
+      unit.isFortified = false;
       // Standard case: subtract the tile cost. Civ1 exception case: the tile
       // cost more than we had left, so the (forced) move spends everything.
       unit.movesRemaining = (unit.movesRemaining || 0) >= moveCost
