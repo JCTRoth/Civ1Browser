@@ -222,3 +222,35 @@ describe('AI planned play — army buildup', () => {
     expect((auto as any).isOffensiveUnitType(item.itemType)).toBe(true);
   });
 });
+
+describe('AI planned play — villages', () => {
+  it('idle combat units collect scouted villages before probing outward', () => {
+    const { engine } = createMockEngine();
+    engine.cities = [{ id: 'friendly', civilizationId: 1, col: 0, row: 0 }];
+    engine.units = [combatUnit('collector', 1, 5, 5)];
+    // A goody hut at (9,5) that the civ has already explored (a unit passed
+    // within sight range of it). The village check must fire BEFORE the probe
+    // / forward picket — otherwise the unit chases unexplored tiles or enemy
+    // leads and the village is only ever collected by accident.
+    const tiles: any[] = Array.from({ length: 20 * 20 }, (_, i) => {
+      const col = i % 20;
+      const row = Math.floor(i / 20);
+      const t: any = { type: 'grassland', movement: 1, passable: true };
+      if (col === 9 && row === 5) {
+        t.village = true;
+        t.explored = true;
+      }
+      return t;
+    });
+    engine.map = { width: 20, height: 20, tiles };
+    // Everything else explored → no probe/picket target; the village is the
+    // only actionable target.
+    engine.isExploredByPlayer = () => true;
+
+    const aiManager = new AIManager(engine);
+    const target = (aiManager as any).chooseAITarget(engine.units[0]);
+
+    expect(target).not.toBeNull();
+    expect(target).toEqual({ col: 9, row: 5 });
+  });
+});

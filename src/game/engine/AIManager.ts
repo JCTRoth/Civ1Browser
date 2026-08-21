@@ -673,6 +673,19 @@ export class AIManager {
         return remember(strategicTarget);
       }
 
+      // ── Collect villages (goody huts) before probing outward ──
+      // Villages are one-time free rewards (tech/gold/units/city) sitting in
+      // territory the civ has already scouted. The old ordering checked
+      // villages LAST (after the probe and forward picket), so idle units
+      // always chased unexplored tiles or enemy leads first and villages were
+      // only ever collected by accident — the 167-round log shows a single
+      // village-granted mercenary in 167 rounds.
+      const villageTarget = this.findNearestVillage(unit);
+      if (villageTarget) {
+        console.log(`[AI] Unit ${unit.id} (${unit.type}) heading to village at (${villageTarget.col},${villageTarget.row})`);
+        return remember(villageTarget);
+      }
+
       // ── Probe outward when idle: idle military units expand the frontier ──
       // Without this the army sat in its capital forever and never made
       // contact with the enemy, so no intel → no war → no planned play.
@@ -748,6 +761,18 @@ export class AIManager {
         }
       } catch (error) {
         console.error(`[AI-SCOUT] Error in scout defense check:`, error);
+      }
+
+      // Scouts collect scouted villages before resuming zone exploration —
+      // the one-time rewards (free tech, units, gold, even a city) are worth
+      // a short detour, and the village is consumed so the scout returns to
+      // reconnaissance immediately after.
+      {
+        const scoutVillage = this.findNearestVillage(unit);
+        if (scoutVillage) {
+          console.log(`[AI-SCOUT] Scout ${unit.id} heading to village at (${scoutVillage.col},${scoutVillage.row})`);
+          return scoutVillage;
+        }
       }
 
       try {
@@ -943,19 +968,6 @@ export class AIManager {
       if (scoutExplorationTarget) {
         console.log(`[AI-SCOUT] Chose exploration target at (${scoutExplorationTarget.col},${scoutExplorationTarget.row})`);
         return { col: scoutExplorationTarget.col, row: scoutExplorationTarget.row };
-      }
-    }
-
-    // ── Village (goody hut) seeking ────────────────────────────────────
-    // Military units and scouts actively seek visible villages for their
-    // random rewards (free tech, gold, units, or even a new city via
-    // Advanced Tribe).  Only tiles the AI has explored are considered so
-    // we don't cheat with map knowledge.
-    if (this.isCombatUnit(unit) || unit.type === 'scout') {
-      const villageTarget = this.findNearestVillage(unit);
-      if (villageTarget) {
-        console.log(`[AI] Unit ${unit.id} (${unit.type}) heading to village at (${villageTarget.col},${villageTarget.row})`);
-        return villageTarget;
       }
     }
 
