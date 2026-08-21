@@ -40,8 +40,8 @@ export const FEATURE_TEXTURE_FILES: Partial<Record<string, string>> = {
 
 /** Higher value bleeds color over lower-value terrain at border transitions. */
 export const TERRAIN_PRIORITY: Record<string, number> = {
-  OCEAN:      10,
-  RIVER:      10,
+  OCEAN:       0,
+  RIVER:       0,
   ARCTIC:      9,
   TUNDRA:      8,
   MOUNTAINS:   7,
@@ -215,62 +215,6 @@ export class TerrainTextureManager {
     ctx.restore();
   }
 
-  // ── Diagonal corner transitions (4-tile aware) ───────────────────────────
-  //
-  // At each corner where 4 tiles meet, we consider ALL 4 tiles to determine
-  // which texture should win the corner. This prevents conflicting transitions
-  // where different textures fight for the same corner space.
-  //
-  // The winning texture is the one with the highest priority among the 4 tiles.
-  // We draw a radial gradient from the corner vertex, fading toward the center.
-
-  drawCornerTransition(
-    ctx: CanvasRenderingContext2D,
-    neighborType: string,
-    tileX: number, tileY: number, tileSize: number,
-    corner: 'NW' | 'NE' | 'SW' | 'SE',
-    priorityDiff = 1,
-  ): void {
-    // Legacy method - kept for backward compatibility but should not be used
-    // Use drawCornerTransition4 instead for proper 4-tile corner handling
-    const img = this.getTexture(neighborType);
-    if (!img || !img.complete || img.naturalWidth === 0) return;
-
-    if (!this.transitionCanvas) {
-      this.transitionCanvas = document.createElement('canvas');
-    }
-    const tc = this.transitionCanvas;
-    if (tc.width !== tileSize || tc.height !== tileSize) {
-      tc.width  = tileSize;
-      tc.height = tileSize;
-    }
-    const tCtx = tc.getContext('2d')!;
-    tCtx.clearRect(0, 0, tileSize, tileSize);
-    tCtx.drawImage(img, 0, 0, tileSize, tileSize);
-
-    // Radial gradient centered at the corner vertex.
-    const cx = corner === 'NW' || corner === 'SW' ? 0        : tileSize;
-    const cy = corner === 'NW' || corner === 'NE' ? 0        : tileSize;
-    const radius = Math.min(0.42, 0.22 + priorityDiff * 0.025) * tileSize;
-    const peak   = 1.0;
-
-    tCtx.globalCompositeOperation = 'destination-in';
-    const g = tCtx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-    g.addColorStop(0,    `rgba(0,0,0,${peak.toFixed(2)})`);
-    g.addColorStop(0.45, `rgba(0,0,0,${(peak * 0.25).toFixed(2)})`);
-    g.addColorStop(1,    'rgba(0,0,0,0)');
-    tCtx.fillStyle = g;
-    tCtx.fillRect(0, 0, tileSize, tileSize);
-    tCtx.globalCompositeOperation = 'source-over';
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(tileX, tileY, tileSize, tileSize);
-    ctx.clip();
-    ctx.drawImage(tc, tileX, tileY);
-    ctx.restore();
-  }
-
   /**
    * Draw corner transition considering all 4 tiles that meet at this corner.
    * 
@@ -339,7 +283,7 @@ export class TerrainTextureManager {
     
     // Calculate priority difference for gradient strength
     const priorityDiff = winner.priority - this.getPriority(currentType);
-    const radius = Math.min(0.42, 0.22 + priorityDiff * 0.025) * tileSize;
+    const radius = Math.min(0.45, 0.28 + priorityDiff * 0.03) * tileSize;
     const peak   = 1.0;
 
     tCtx.globalCompositeOperation = 'destination-in';
