@@ -310,15 +310,10 @@ export class AIManager {
         // wandering. Multi-turn construction continues automatically each turn
         // (advanceUnitWork), so starting is enough.
         if (unit.type === 'settler' && !unit.workTarget) {
-          if (this.gameEngine.canJoinCity?.(unit.id)) {
-            const joined = this.gameEngine.foundCityWithSettler(unit.id);
-            if (joined) {
-              this.gameEngine.log('ai', `Settler joins city — ${civ.name} at (${unit.col},${unit.row})`, {
-                civilizationId, action: 'join_city', unitId: unit.id, unitType: unit.type,
-              });
-              break;
-            }
-          }
+          // Civ1: expansion FIRST — a settler founds a new city whenever a
+          // valid spot exists, so empires actually grow. Previously the join
+          // check ran first and every produced settler (spawned on the capital
+          // tile) merged back into the capital, leaving civs at 1 city forever.
           let settlement: { col: number; row: number; score: number } | null = null;
           try {
             settlement = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
@@ -329,6 +324,17 @@ export class AIManager {
           (unit as any)._aiSettlement = settlement;
 
           if (!settlement) {
+            // No founding spot worth walking to: join a friendly city rather
+            // than waste the settler, otherwise improve the current tile.
+            if (this.gameEngine.canJoinCity?.(unit.id)) {
+              const joined = this.gameEngine.foundCityWithSettler(unit.id);
+              if (joined) {
+                this.gameEngine.log('ai', `Settler joins city — ${civ.name} at (${unit.col},${unit.row})`, {
+                  civilizationId, action: 'join_city', unitId: unit.id, unitType: unit.type,
+                });
+                break;
+              }
+            }
             const improvement = this.chooseImprovementForSettler(unit);
             if (improvement) {
               const started = this.gameEngine.buildImprovement(unit.id, improvement);
@@ -411,6 +417,9 @@ export class AIManager {
             if (this.gameEngine.canUnitAffordMove(unit, moveCost)) {
               const r = this.gameEngine.moveUnit(unit.id, target.col, target.row);
               if (!r || !r.success) {
+                // A scout that cannot enter this tile should stop re-targeting
+                // it forever (stuck-target guard).
+                this.blacklistScoutTarget(unit, target.col, target.row);
                 console.log(`[AI] Move failed, skipping unit`);
                 this.gameEngine.log('ai', `Move failed — ${civ.name} ${unit.type}(${unit.id}) to (${target.col},${target.row})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'move_failed', targetCol: target.col, targetRow: target.row });
                 this.gameEngine.skipUnit(unit.id);
@@ -452,6 +461,8 @@ export class AIManager {
             }
             const r = this.gameEngine.moveUnit(unit.id, next.col, next.row);
             if (!r || !r.success) {
+              // A scout blocked on this step should not repeat it next turn.
+              this.blacklistScoutTarget(unit, next.col, next.row);
              console.log(`[AI] Path step failed, skipping unit`);
               this.gameEngine.log('ai', `Path step failed — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'path_move_failed' });
              this.gameEngine.skipUnit(unit.id);
@@ -459,6 +470,8 @@ export class AIManager {
             }
             this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${next.col},${next.row}) toward (${target.col},${target.row})`, { civilizationId, action: 'move', unitId: unit.id, unitType: unit.type, targetCol: target.col, targetRow: target.row });
           } else {
+            // Unreachable target — a scout should drop it and pick another.
+            this.blacklistScoutTarget(unit, target.col, target.row);
            console.log(`[AI] No path found to target, skipping unit`);
             this.gameEngine.log('ai', `No path — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_path' });
            this.gameEngine.skipUnit(unit.id);
@@ -570,12 +583,27 @@ export class AIManager {
       const distFn = (c1: number, r1: number, c2: number, r2: number) =>
         this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
       const dm = this.gameEngine.diplomacyManager;
-      const nearbyEnemies = scanAreaForEnemies(
+      // Scan everything in radius and RECORD it into global intelligence — the
+      // offensive planner can only plan against enemies it knows about, and
+      // scouts alone proved too unreliable (stuck scouts starved the whole
+      // war-planning pipeline, so no war was ever declared). Any unit that sees
+      // the enemy feeds the planner.
+      const scannedEnemies = scanAreaForEnemies(
         unit.col, unit.row, unit.civilizationId, 5,
         () => this.gameEngine.units,
         () => this.gameEngine.cities,
         distFn
-      ).filter(e => {
+      );
+      for (const e of scannedEnemies) {
+        if (typeof this.gameEngine.recordEnemyLocation === 'function') {
+          this.gameEngine.recordEnemyLocation(unit.civilizationId, {
+            col: e.col, row: e.row, distance: e.distance,
+            targetType: e.type, targetId: e.id, priority: e.type === 'city' ? 2 : 1,
+          });
+        }
+      }
+      // Respond only to civs we are at war with.
+      const nearbyEnemies = scannedEnemies.filter(e => {
         // Only target civs we are at war with
         const targetCivId = this.getOwnerCivId(e);
         return targetCivId !== undefined && (!dm || dm.isAtWar(unit.civilizationId, targetCivId));
@@ -622,6 +650,15 @@ export class AIManager {
       if (strategicTarget) {
         console.log(`[AI] Strategic target chosen for ${unit.type} ${unit.id} -> (${strategicTarget.col}, ${strategicTarget.row})`);
         return strategicTarget;
+      }
+
+      // ── Probe outward when idle: idle military units expand the frontier ──
+      // Without this the army sat in its capital forever and never made
+      // contact with the enemy, so no intel → no war → no planned play.
+      const probeTarget = this.findCombatProbeTarget(unit, storage, distFn);
+      if (probeTarget) {
+        console.log(`[AI] Probe target for ${unit.id}: (${probeTarget.col},${probeTarget.row})`);
+        return probeTarget;
       }
 
       // ── Patrol between cities when idle ──
@@ -1559,6 +1596,73 @@ export class AIManager {
   }
 
   /**
+   * Idle combat-unit probe: push the frontier toward the nearest unexplored,
+   * passable tile (within a bounded radius). Without this the army sits in its
+   * capital forever, never contacts the enemy, and the whole war-planning
+   * pipeline stays starved of intelligence. Returns null when nothing is left
+   * to explore nearby (falls back to city patrol).
+   */
+  private findCombatProbeTarget(
+    unit: Unit,
+    storage: any,
+    distFn: (c1: number, r1: number, c2: number, r2: number) => number,
+  ): { col: number; row: number } | null {
+    const map = this.gameEngine.map;
+    const grid = this.gameEngine.squareGrid;
+    if (!map || !grid) return null;
+
+    const searchRadius = 12;
+    const startCol = Math.max(0, unit.col - searchRadius);
+    const endCol = Math.min(map.width - 1, unit.col + searchRadius);
+    const startRow = Math.max(0, unit.row - searchRadius);
+    const endRow = Math.min(map.height - 1, unit.row + searchRadius);
+
+    let best: { col: number; row: number; score: number } | null = null;
+
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        if (col === unit.col && row === unit.row) continue;
+        // Never send a unit onto impassable terrain (ocean etc.).
+        if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
+
+        const isExplored = typeof this.gameEngine.isExploredByPlayer === 'function'
+          ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
+          : !!this.gameEngine.getTileAt?.(col, row)?.explored;
+        if (isExplored) continue;
+
+        const dist = distFn(unit.col, unit.row, col, row);
+        // Prefer the nearest unexplored frontier.
+        const score = 1000 - dist * 10;
+        if (!best || score > best.score) {
+          best = { col, row, score };
+        }
+      }
+    }
+
+    return best ? { col: best.col, row: best.row } : null;
+  }
+
+  /**
+   * Remember a tile a scout could not reach so the scout stops re-targeting
+   * the same unreachable square every turn (the old behavior produced 10+
+   * consecutive `move_failed` rounds and starved the civ of intelligence).
+   */
+  private blacklistScoutTarget(unit: Unit, col: number, row: number): void {
+    if (unit.type !== 'scout') return;
+    const key = `${col},${row}`;
+    const blocked = (unit as any)._blockedScoutTargets instanceof Set
+      ? (unit as any)._blockedScoutTargets
+      : new Set<string>();
+    blocked.add(key);
+    // Keep the blacklist bounded so it can never grow without limit.
+    if (blocked.size > 12) {
+      const toDrop = Array.from(blocked as Set<string>).slice(0, blocked.size - 12);
+      toDrop.forEach(k => blocked.delete(k));
+    }
+    (unit as any)._blockedScoutTargets = blocked;
+  }
+
+  /**
    * Find exploration target for scouts within their zone
    */
   private findScoutExplorationTarget(unit: any): any {
@@ -1593,6 +1697,10 @@ export class AIManager {
       for (let row = startRow; row < endRow; row++) {
         // Check if tile is in zone
         if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, col, row)) continue;
+
+        // Skip tiles that previously failed to move into (stuck-target guard).
+        const blockedKey = `${col},${row}`;
+        if ((unit as any)._blockedScoutTargets instanceof Set && (unit as any)._blockedScoutTargets.has(blockedKey)) continue;
 
         const tile = this.gameEngine.getTileAt(col, row);
         if (!tile) continue;

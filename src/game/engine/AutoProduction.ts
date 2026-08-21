@@ -83,6 +83,13 @@ export class AutoProduction {
         if (threatAssessment?.needsDefense && !this.isDefensiveProduction(city.currentProduction)) {
           console.log('[AutoProduction] City under threat, overriding existing production');
           this.gameEngine.removeCurrentProduction(city.id);
+        } else if (this.isHappinessCrisis(city) && !this.isHappinessBuilding(city.currentProduction)) {
+          // A city in or approaching disorder produces (almost) nothing at all
+          // (applyCityOutputs zeroes a disordered city's output), so the temple
+          // that would fix it must preempt EVERYTHING else — otherwise the civ
+          // is stuck forever producing 0 shields and can never recover.
+          console.log('[AutoProduction] Happiness crisis, overriding existing production');
+          this.gameEngine.removeCurrentProduction(city.id);
         } else if (
           city.currentProduction.type === 'building' &&
           (city.buildings ?? []).includes(city.currentProduction.itemType)
@@ -302,15 +309,23 @@ export class AutoProduction {
 
     // 4b. Happiness emergency: build a happiness building (temple/colosseum/
     //     cathedral) BEFORE general buildings so large cities stay content
-    //     with less luxury.
-    if (needsHappiness) {
+    //     with less luxury. Fires both when the city is actually in disorder
+    //     AND when luxury is already absorbing a large share of commerce to
+    //     mask unhappiness (e.g. 70% luxury / 0% science). The latter is the
+    //     AI-vs-AI death spiral: luxury masks the need, no temple is built,
+    //     science collapses, and the economy never recovers.
+    const luxuryRate = civ?.luxuryRate ?? 0;
+    if (needsHappiness || luxuryRate >= 40) {
+      const existingBuildings = new Set(city.buildings ?? []);
       const happyPlan = availableBuildingPlans.find(
         (p: BuildingPlan) => (BUILDING_PROPERTIES[p.buildingType]?.effects?.happiness ?? 0) > 0
-      );
+      ) ?? ['temple', 'colosseum', 'cathedral']
+        .filter((b) => !existingBuildings.has(b) && !plannedTypes.includes(b))
+        .map((b) => ({ buildingType: b, priority: 99, reason: 'happiness-crisis' }))[0];
       if (happyPlan) {
         const bProps = BUILDING_PROPS[happyPlan.buildingType] || BUILDING_PROPERTIES[happyPlan.buildingType];
         if (bProps) {
-          console.log(`[AutoProduction] Happiness emergency: building ${happyPlan.buildingType} (unhappiness ≥ happiness)`);
+          console.log(`[AutoProduction] Happiness emergency: building ${happyPlan.buildingType} (luxury ${luxuryRate}%, disorder ${needsHappiness})`);
           return {
             type: 'building',
             itemType: happyPlan.buildingType,
@@ -368,6 +383,16 @@ export class AutoProduction {
         name: scoutProps?.name || 'Scout',
         cost: scoutProps?.cost || 15
       };
+    }
+
+    // 5b2. Aggressive civs maintain a standing army even before a war plan
+    //      exists (AFTER the scout corps, which feeds the intelligence the
+    //      offensive plan depends on). Without a standing force the bulk
+    //      attack can never form and the civ stays purely defensive.
+    const AGGRESSIVE_ARMY_MIN = 3;
+    if (aggressivePosture && this.countOffensiveUnits(city.civilizationId) < AGGRESSIVE_ARMY_MIN) {
+      console.log('[AutoProduction] Aggressive posture: building standing army (attacker)');
+      return this.buildOffensiveProduction(city);
     }
 
     // 5b. Build the building even if not "high-priority"
@@ -549,6 +574,22 @@ export class AutoProduction {
       return false;
     }
     return (unitProps.defense || 0) >= (unitProps.attack || 0);
+  }
+
+  /** True when a city is in disorder or already spending 40%+ of its commerce
+   *  on luxury to mask unhappiness — the point where a temple is mandatory.
+   *  A disordered city produces 0 shields, so happiness must win everything. */
+  private isHappinessCrisis(city: City): boolean {
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    const luxuryRate = civ?.luxuryRate ?? 0;
+    return luxuryRate >= 40 || city.disorder === true;
+  }
+
+  private isHappinessBuilding(item: { type?: string; itemType?: string } | null | undefined): boolean {
+    if (!item || item.type !== 'building') {
+      return false;
+    }
+    return (BUILDING_PROPERTIES[item.itemType]?.effects?.happiness ?? 0) > 0;
   }
 
   private buildDefenderProduction(city: City, threatAssessment?: CityThreatAssessment | null): ProductionItem {
