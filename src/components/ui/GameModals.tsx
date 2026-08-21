@@ -125,6 +125,19 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     }
   };
 
+  /**
+   * Close the village-result message: clear the store state and, for the
+   * human player, remove the hut from the map now that the event is done
+   * (the engine keeps it visible until this point).
+   */
+  const handleVillageClose = () => {
+    const result = useGameStore.getState().villageResult;
+    actions.clearVillageResult();
+    if (result && gameEngine && typeof gameEngine.clearVillage === 'function') {
+      gameEngine.clearVillage(result.col, result.row);
+    }
+  };
+
   const handleNewGame = () => {
     console.log('[CLICK] New Game button');
     if (gameEngine) {
@@ -1744,7 +1757,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <RatesModal show={uiState.activeDialog === 'rates'} onHide={handleCloseDialog} gameEngine={gameEngine} />
       <GovernmentModal show={uiState.activeDialog === 'government'} onHide={handleCloseDialog} gameEngine={gameEngine} />
       <StatisticsModal show={uiState.activeDialog === 'statistics'} onHide={handleCloseDialog} />
-      <VillageModal show={uiState.activeDialog === 'village'} onHide={actions.clearVillageResult} />
+      <VillageModal show={uiState.activeDialog === 'village'} onHide={handleVillageClose} />
       {renderCityProduction()}
       {renderCityPurchase()}
     </>

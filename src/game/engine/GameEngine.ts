@@ -123,6 +123,10 @@ export default class GameEngine {
   // for the post-end summary notification.
   lastAutoEndSummary: string | null = null;
 
+  // Villages the human player has triggered whose result message is still on
+  // screen — the hut stays visible until the UI calls clearVillage().
+  private triggeredVillages = new Set<string>();
+
   // Getter for turnManager (alias for roundManager)
   get turnManager() {
     return this.roundManager;
@@ -181,6 +185,24 @@ export default class GameEngine {
    */
   public spawnBarbarianUnit(type: string, col: number, row: number): void {
     this.createUnit(BARBARIAN_CIV_ID, type, col, row);
+  }
+
+  /**
+   * Remove a village (goody hut) after its result message has been shown.
+   * The human player's huts stay on the map while the result modal is open
+   * and are cleared here when it is dismissed — AI-triggered huts are
+   * removed inline at trigger time (no message is shown for them).
+   */
+  public clearVillage(col: number, row: number): void {
+    const key = `${col},${row}`;
+    this.triggeredVillages.delete(key);
+    const tile = this.getTileAt(col, row);
+    if (tile && tile.village) {
+      tile.village = false;
+    }
+    if (this.onStateChange) {
+      this.onStateChange('VILLAGE_CLEARED', { col, row });
+    }
   }
 
   /**
@@ -1939,12 +1961,15 @@ export default class GameEngine {
    */
   private resolveVillage(unit: Unit, tile: MapTile | null): void {
     if (!tile?.village) return;
+    const key = `${tile.col},${tile.row}`;
+    if (this.triggeredVillages.has(key)) return; // already claimed, awaiting UI clear
     const props = UNIT_PROPS[String(unit.type)];
     const isAir = props?.type === 'air';
     const isBarbarian = unit.civilizationId === BARBARIAN_CIV_ID;
     const isMilitary =
       (unit.attack || 0) > 0.5 &&
       !['settler', 'worker', 'caravan', 'diplomat'].includes(String(unit.type));
+    const isHuman = this.civilizations?.[unit.civilizationId]?.isHuman === true;
 
     // Air/barbarian units destroy the village without claiming it.
     if (isAir || isBarbarian) {
@@ -1954,7 +1979,14 @@ export default class GameEngine {
     }
     if (!isMilitary) return; // civilians ignore huts
 
-    tile.village = false;
+    if (isHuman) {
+      // Keep the hut on the map until the player acknowledges the result
+      // message — it disappears when the UI calls clearVillage().
+      this.triggeredVillages.add(key);
+    } else {
+      // AI/other civs resolve silently — the hut vanishes immediately.
+      tile.village = false;
+    }
 
     for (let attempt = 0; attempt < 10; attempt++) {
       const outcome = VILLAGE_OUTCOMES[Math.floor(Math.random() * VILLAGE_OUTCOMES.length)];

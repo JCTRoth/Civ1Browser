@@ -147,8 +147,11 @@ describe('Civ1 village trigger & outcomes', () => {
     spy.mockRestore();
 
     expect(res.success).toBe(true);
-    expect(tile.village).toBe(false);
+    // Human player: the hut stays on the map until the message is dismissed.
+    expect(tile.village).toBe(true);
     expect(goldOf(e)).toBe(before + 50);
+    e.clearVillage(spot.col, spot.row);
+    expect(tile.village).toBe(false);
   });
 
   it('a civilian unit does not trigger a village', async () => {
@@ -206,6 +209,8 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
+    expect(tile.village).toBe(true); // stays until message dismissed
+    e.clearVillage(spot.col, spot.row);
     expect(tile.village).toBe(false);
     const city = (e as unknown as { cities: Array<{ col: number; row: number; population: number; buildings: string[] }> }).cities
       .find((c) => c.col === spot.col && c.row === spot.row);
@@ -228,6 +233,8 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
+    expect(tile.village).toBe(true); // stays until message dismissed
+    e.clearVillage(spot.col, spot.row);
     expect(tile.village).toBe(false);
     expect(civ.technologies.length).toBe(techsBefore.length + 1);
     const granted = civ.technologies.find((t) => !techsBefore.includes(t));
@@ -245,6 +252,8 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
+    expect(tile.village).toBe(true); // stays until message dismissed
+    e.clearVillage(spot.col, spot.row);
     expect(tile.village).toBe(false);
     const units = (e as unknown as { units: Array<{ id: string; type: string; col: number; row: number; civilizationId: number; movesRemaining: number; maxMoves: number }> }).units;
     const merc = units.find((u) => u.id !== warrior.id && u.col === spot.col && u.row === spot.row && u.civilizationId === 0);
@@ -267,6 +276,8 @@ describe('Civ1 village trigger & outcomes', () => {
     spy.mockRestore();
 
     expect(res.success).toBe(true);
+    expect(tile.village).toBe(true); // stays until message dismissed
+    e.clearVillage(spot.col, spot.row);
     expect(tile.village).toBe(false);
     const barbarians = (e as unknown as { units: Array<{ civilizationId: number; type: string }> }).units
       .filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
@@ -275,5 +286,44 @@ describe('Civ1 village trigger & outcomes', () => {
     for (const b of barbarians) {
       expect(['legion', 'cavalry']).toContain(b.type);
     }
+  });
+
+  it('keeps the hut visible until the result message is dismissed, then clears it', async () => {
+    const e = await setup();
+    const events: string[] = [];
+    (e as unknown as { onStateChange: (t: string) => void }).onStateChange = (t: string) => events.push(t);
+
+    const spot = villageSpot(e);
+    const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
+    tile.village = true;
+    const warrior = spawnUnit(e, 'warrior', spot.adj.col, spot.adj.row);
+
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.49); // → valuable_metals
+    e.moveUnit(warrior.id, spot.col, spot.row);
+    spy.mockRestore();
+
+    // The result message fires and the hut is still on the map.
+    expect(events).toContain('VILLAGE_RESULT');
+    expect(tile.village).toBe(true);
+
+    // Dismissing the message clears the hut.
+    e.clearVillage(spot.col, spot.row);
+    expect(tile.village).toBe(false);
+    expect(events).toContain('VILLAGE_CLEARED');
+  });
+
+  it('removes the hut immediately for an AI civ (no message shown)', async () => {
+    const e = await setup();
+    const spot = villageSpot(e);
+    const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
+    tile.village = true;
+    const warrior = spawnUnit(e, 'warrior', spot.adj.col, spot.adj.row, 1); // AI civ
+
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.49); // → valuable_metals
+    const res = e.moveUnit(warrior.id, spot.col, spot.row);
+    spy.mockRestore();
+
+    expect(res.success).toBe(true);
+    expect(tile.village).toBe(false); // AI huts vanish immediately
   });
 });
