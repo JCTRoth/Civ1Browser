@@ -6,6 +6,32 @@
 //  - log contains only analysis-relevant, de-duplicated events
 import type { CompactCity } from '../src/utils/CitySnapshots';
 
+/** Compact, JSON-safe unit state captured at periodic world snapshots. */
+export interface CompactUnit {
+  id: string;
+  type: string;
+  civilizationId: number;
+  col: number;
+  row: number;
+  movesRemaining?: number;
+  health?: number;
+  attack?: number;
+  defense?: number;
+  experience?: number;
+  veteran?: boolean;
+  fortified?: boolean;
+  sleeping?: boolean;
+  workTarget?: string | null;
+  workTurns?: number;
+  homeCityId?: string | null;
+}
+
+/** Complete unit/city listing emitted on a configured snapshot turn. */
+export interface ProgressionWorldSnapshot {
+  units: CompactUnit[];
+  cities: CompactCity[];
+}
+
 /** Full per-civ state for one round (used as the delta baseline). */
 export interface ProgressionCivSnapshot {
   id: number;
@@ -48,6 +74,10 @@ export interface ProgressionCivSnapshot {
   warWith: string[];
   /** Number of world wonders built. */
   wonders: number;
+  /** Current AI production/research strategy profile, when available. */
+  strategy?: string;
+  /** Unit counts by concrete unit type (e.g. { warrior: 2, scout: 1 }). */
+  unitComposition?: Record<string, number>;
   personality: Record<string, number>;
   priorities: Record<string, number>;
 }
@@ -87,6 +117,8 @@ export interface ProgressionCivDelta {
   researchProgress?: number;
   warWith?: string[];
   wonders?: number;
+  strategy?: string;
+  unitComposition?: Record<string, number>;
   personality?: Record<string, number>;
   priorities?: Record<string, number>;
 }
@@ -96,6 +128,7 @@ export interface ProgressionRound {
   year: number;
   yearLabel: string;
   civs: Record<string, ProgressionCivDelta>;
+  snapshot?: ProgressionWorldSnapshot;
 }
 
 export interface GameProgressionMeta {

@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
-import { filterLogEntries, computeCivDelta, hydrateCiv, gameProgression } from '../src/utils/GameProgression';
+import { filterLogEntries, computeCivDelta, hydrateCiv, gameProgression, PROGRESSION_SNAPSHOT_INTERVAL } from '../src/utils/GameProgression';
 import { gameLogger } from '../src/utils/GameLogger';
 import { serializeCityCompact } from '../src/utils/CitySnapshots';
 import type { ProgressionCivSnapshot, ProgressionCivDelta, ProgressionLogEntry } from '../types/progression';
@@ -280,12 +280,12 @@ describe('buildCompactCsv (strongly reduced export)', () => {
     // Comment line + header + at least one row per civ.
     expect(lines[0]).toMatch(/^# Civ1Browser progression \(compact\)/);
     expect(lines[1]).toBe(
-      'round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders',
+      'round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders,strategy,unitComposition,cityProduction,aiActions,moves,moveFailures,attacks,combatWins,combatLosses,unitsLost,citiesFounded,citiesCaptured,skips,stalls,noTarget,misbehavingUnits,aiNotes,snapshotUnits,snapshotCities',
     );
     expect(lines.length).toBeGreaterThanOrEqual(4); // 2 header lines + ≥ 2 rows
     expect(lines[2]).toMatch(/^1,/); // round 1 first
     for (const row of lines.slice(2)) {
-      expect(row.split(',')).toHaveLength(26);
+      expect(row.split(',')).toHaveLength(lines[1].split(',').length);
     }
   });
 
@@ -310,6 +310,21 @@ describe('buildCompactCsv (strongly reduced export)', () => {
     expect(humanRow!.split(',')[18]).toBe('pottery'); // research column
   });
 
+  it('emits complete unit and city listings at the configured snapshot interval', async () => {
+    (engine as any).currentTurn = PROGRESSION_SNAPSHOT_INTERVAL;
+    (engine as any).currentYear = -3600;
+    gameProgression.recordIfNewRound(engine);
+
+    const csv = await gameProgression.buildCompactCsv(engine);
+    const lines = csv.trim().split('\n');
+    const header = lines[1].split(',');
+    const row = lines.find((line) => line.startsWith(`${PROGRESSION_SNAPSHOT_INTERVAL},`));
+    expect(row).toBeDefined();
+    expect(header).toContain('snapshotUnits');
+    expect(header).toContain('snapshotCities');
+    expect(row).toContain('settler_0_0');
+  });
+
   it('is much smaller than the full JSON payload when the log is large', async () => {
     // Drive a few rounds so progression has several snapshots.
     advanceRounds(3);
@@ -326,7 +341,6 @@ describe('buildCompactCsv (strongly reduced export)', () => {
     const payload = await gameProgression.buildDownloadPayload(engine);
     const fullJson = JSON.stringify(payload);
 
-    // eslint-disable-next-line no-console
     console.log('[SIZE] full JSON:', fullJson.length, 'bytes | compact CSV:', csv.length, 'bytes | ratio:', (fullJson.length / Math.max(1, csv.length)).toFixed(1), 'x smaller');
     expect(csv.length).toBeLessThan(fullJson.length);
     // The compact CSV must be dramatically smaller (≥ 5×) than the full export.

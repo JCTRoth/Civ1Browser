@@ -147,14 +147,20 @@ LLM can analyse it to optimise the computer player:
 
 When the full JSON would be too large to analyse (≈ 2.5 MB for 200 moves), use
 **Info → Download Compact Progression (CSV)** (`civ1-progression-compact-<id>.csv`).
-It keeps only the per-round scoreboard — one CSV row per civ per round with the
-key metrics — and drops the event log, per-city detail and personality noise.
+It keeps one CSV row per civ per round with the key state and compact AI telemetry.
+The event log is aggregated into action/outcome counters so the export stays
+small while exposing decisions, unit composition, city queues and failures.
+Every `PROGRESSION_SNAPSHOT_INTERVAL` turns (20 by default), the progression
+JSON contains a complete world snapshot. The CSV adds `snapshotUnits` and
+`snapshotCities` JSON cells for that civ on snapshot turns; they are empty
+on other turns. Change `PROGRESSION_SNAPSHOT_INTERVAL` in
+`src/utils/GameProgression.ts` to change the interval.
 Measured on a 200-move sample it is **~54× smaller** (43 KB → 0.8 KB) and an LLM
 can read it directly:
 
 ```csv
 # Civ1Browser progression (compact) — session aivsai-… | map AI_VS_AI | difficulty PRINCE | civs 2 | rounds 989
-round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders
+round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders,strategy,unitComposition,cityProduction,aiActions,moves,moveFailures,attacks,combatWins,combatLosses,unitsLost,citiesFounded,citiesCaptured,skips,stalls,noTarget,misbehavingUnits,aiNotes,snapshotUnits,snapshotCities
 1,-4000,0,Germans,false,true,0,50,0,0,0,0,0,0,0,1,0.5,3,,0,despotism,50,50,0,,0
 1,-4000,1,Indians,false,true,0,50,0,0,0,0,0,0,0,1,0.5,3,,0,despotism,50,50,0,,0
 2,-3960,0,Germans,false,true,0,50,0,0,0,0,0,0,1,0,3,pottery,2,despotism,40,58,2,,0
@@ -164,11 +170,9 @@ round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production
 - Built by `gameProgression.buildCompactCsv()` / `downloadCompact()` in
   `GameProgression.ts`. The delta-encoded snapshots are re-hydrated
   (`hydrateCiv`) so each row shows the *full* carried-forward state.
-- **Columns** (26): `round, year, civId, civ, human, alive, score, gold,
-  goldPerTurn, science, trade, production, food, cities, population, units,
-  military, techs, research, researchProgress, government, tax, scirate, lux,
-  warWith, wonders`. War targets are joined with `|`; cells are quoted when
-  they contain commas/quotes.
+- **Columns**: the header is self-describing. The original scoreboard fields are
+  followed by `strategy`, `unitComposition` (`type:count`), `cityProduction`,
+  AI action/outcome counters, and `misbehavingUnits` (`unitType:reason:count`).
 - **Sources** (fixed to read the engine's real state): `gold` is the treasury
   (`civ.resources.gold`), `science`/`trade` are per-turn outputs
   (`civ.resources.*`), `goldPerTurn`/`production`/`food`/`population` are

@@ -166,18 +166,42 @@ class GameLogger {
    * and returns a plain serialisable record.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private sanitize(data: any): any {
+  private sanitize(data: any, depth = 0): any {
     if (data == null) return data;
     if (typeof data !== 'object') return data;
+    // Preserve the structured unit/combat fields needed by AI analysis. The
+    // previous key-only placeholders made grouping failures by unit type
+    // impossible in exported logs.
+    if (depth > 2) return '{' + Object.keys(data).join(',') + '}';
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(data)) {
       if (v == null) continue;
       if (['number', 'string', 'boolean'].includes(typeof v)) {
         out[k] = v;
       } else if (Array.isArray(v)) {
-        out[k] = `[array:${v.length}]`;
+        if (v.length <= 8 && v.every((item) => item == null || ['number', 'string', 'boolean'].includes(typeof item))) {
+          out[k] = v;
+        } else {
+          out[k] = '[array:' + v.length + ']';
+        }
       } else if (typeof v === 'object') {
-        out[k] = `{${Object.keys(v).join(',')}}`;
+        const keys = Object.keys(v);
+        const usefulKeys = ['id', 'type', 'itemType', 'name', 'civilizationId', 'col', 'row',
+          'targetCol', 'targetRow', 'fromCol', 'fromRow', 'toCol', 'toRow', 'health',
+          'movesRemaining', 'attack', 'defense', 'attackerWinChance', 'attackStrength',
+          'defenseStrength', 'reason', 'action', 'strategy', 'tech', 'improvement'];
+        const projected: Record<string, unknown> = {};
+        for (const key of usefulKeys) {
+          if (Object.prototype.hasOwnProperty.call(v, key)) {
+            const value = (v as Record<string, unknown>)[key];
+            if (value == null || ['number', 'string', 'boolean'].includes(typeof value)) {
+              projected[key] = value;
+            }
+          }
+        }
+        out[k] = Object.keys(projected).length > 0
+          ? projected
+          : '{' + keys.join(',') + '}';
       }
     }
     return out;

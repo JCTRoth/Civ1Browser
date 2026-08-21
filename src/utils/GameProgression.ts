@@ -33,8 +33,13 @@ import type {
   ProgressionCivSnapshot,
   ProgressionLogEntry,
   ProgressionRound,
+  CompactUnit,
+  ProgressionWorldSnapshot,
 } from '../../types/progression';
 import type { GameEngine } from '../../types/game';
+
+/** Change this one value to alter how often full world snapshots are emitted. */
+export const PROGRESSION_SNAPSHOT_INTERVAL = 20;
 
 /**
  * Events kept in the AI-optimised log. Everything else is engine-internal
@@ -131,6 +136,8 @@ export function computeCivDelta(
     population: full.population,
     military: full.military,
     wonders: full.wonders,
+    strategy: full.strategy,
+    unitComposition: full.unitComposition,
     cityData: full.cityData,
   };
   if (!prev) {
@@ -153,6 +160,8 @@ export function computeCivDelta(
     delta.warWith = full.warWith;
     delta.personality = full.personality;
     delta.priorities = full.priorities;
+    delta.strategy = full.strategy;
+    delta.unitComposition = full.unitComposition;
     return delta;
   }
   if (full.name !== prev.name) delta.name = full.name;
@@ -173,6 +182,8 @@ export function computeCivDelta(
   if (!valuesEqual(full.warWith, prev.warWith)) delta.warWith = full.warWith;
   if (!valuesEqual(full.personality, prev.personality)) delta.personality = full.personality;
   if (!valuesEqual(full.priorities, prev.priorities)) delta.priorities = full.priorities;
+  if (full.strategy !== prev.strategy) delta.strategy = full.strategy;
+  if (!valuesEqual(full.unitComposition, prev.unitComposition)) delta.unitComposition = full.unitComposition;
   return delta;
 }
 
@@ -211,6 +222,8 @@ export function hydrateCiv(
     researchProgress: delta.researchProgress ?? prev?.researchProgress ?? 0,
     warWith: delta.warWith ?? prev?.warWith ?? [],
     wonders: delta.wonders ?? prev?.wonders ?? 0,
+    strategy: delta.strategy ?? prev?.strategy ?? '',
+    unitComposition: delta.unitComposition ?? prev?.unitComposition ?? {},
     personality: delta.personality ?? prev?.personality ?? {},
     priorities: delta.priorities ?? prev?.priorities ?? {},
   };
@@ -220,6 +233,28 @@ export function hydrateCiv(
 function csvCell(value: unknown): string {
   const s = value === null || value === undefined ? '' : String(value);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function serializeUnitCompact(unit: any): CompactUnit {
+  return {
+    id: String(unit?.id ?? ''),
+    type: String(unit?.type ?? 'unknown'),
+    civilizationId: Number(unit?.civilizationId ?? unit?.civilization?.id ?? -1),
+    col: Number(unit?.col ?? 0),
+    row: Number(unit?.row ?? 0),
+    movesRemaining: unit?.movesRemaining,
+    health: unit?.health,
+    attack: unit?.attack ?? unit?.attackPoints,
+    defense: unit?.defense ?? unit?.defensePoints,
+    experience: unit?.experience,
+    veteran: unit?.isVeteran ?? unit?.veteran,
+    fortified: unit?.isFortified ?? unit?.fortified,
+    sleeping: unit?.isSleeping,
+    workTarget: unit?.workTarget ?? null,
+    workTurns: unit?.workTurns,
+    homeCityId: unit?.homeCityId ?? null,
+  };
 }
 
 class GameProgression {
@@ -323,13 +358,15 @@ class GameProgression {
    */
   async buildCompactCsv(engine: GameEngine | null): Promise<string> {
     this.recordIfNewRound(engine);
+    const logEntries = (await gameLogger.getAllEntries()) as unknown as ProgressionLogEntry[];
+    const diagnostics = buildRoundDiagnostics(logEntries);
     const meta = this.meta ?? this.defaultMeta();
     const lines: string[] = [];
     lines.push(
       `# Civ1Browser progression (compact) — session ${meta.sessionId} | map ${meta.mapType} | difficulty ${meta.difficulty} | civs ${meta.numberOfCivilizations} | rounds ${this.snapshots.length}`,
     );
     lines.push(
-      'round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders',
+      'round,year,civId,civ,human,alive,score,gold,goldPerTurn,science,trade,production,food,cities,population,units,military,techs,research,researchProgress,government,tax,scirate,lux,warWith,wonders,strategy,unitComposition,cityProduction,aiActions,moves,moveFailures,attacks,combatWins,combatLosses,unitsLost,citiesFounded,citiesCaptured,skips,stalls,noTarget,misbehavingUnits,aiNotes,snapshotUnits,snapshotCities',
     );
 
     // Carry each civ's state forward across rounds (the snapshots are
@@ -339,6 +376,7 @@ class GameProgression {
       for (const [civId, delta] of Object.entries(round.civs)) {
         const full = hydrateCiv(carried[civId], delta);
         carried[civId] = full;
+        const diag = diagnostics.get(String(round.round) + '|' + String(full.id)) ?? emptyRoundDiagnostics();
         lines.push(
           [
             round.round,
@@ -367,7 +405,26 @@ class GameProgression {
             full.luxuryRate,
             (full.warWith ?? []).join('|'),
             full.wonders,
-          ]
+            full.strategy ?? '',
+            formatCounts(full.unitComposition),
+            formatCityProduction(full.cityData),
+            diag.aiActions,
+            diag.moves,
+            diag.moveFailures,
+            diag.attacks,
+            diag.combatWins,
+            diag.combatLosses,
+            diag.unitsLost,
+            diag.citiesFounded,
+            diag.citiesCaptured,
+            diag.skips,
+            diag.stalls,
+            diag.noTarget,
+           formatCounts(diag.misbehavingUnits),
+           diag.aiNotes.join('|'),
+            snapshotJson(round.snapshot, full.id, 'units'),
+            snapshotJson(round.snapshot, full.id, 'cities'),
+         ]
             .map(csvCell)
             .join(','),
         );
@@ -395,7 +452,6 @@ class GameProgression {
     };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private buildRound(engine: GameEngine | null, round: number): ProgressionRound {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const engineAny = engine as any;
@@ -406,12 +462,21 @@ class GameProgression {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const units: any[] = engine?.getAllUnits?.() ?? [];
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const civList: any[] = engineAny?.civilizations ?? [];
+   const civList: any[] = engineAny?.civilizations ?? [];
+    const snapshot: ProgressionWorldSnapshot | undefined =
+      round > 0 && round % PROGRESSION_SNAPSHOT_INTERVAL === 0
+        ? { units: units.map(serializeUnitCompact), cities: cities.map((city) => serializeCityCompact(city)) }
+        : undefined;
 
     for (const civ of civList) {
       const civId = String(civ?.id ?? '?');
       const civCities = cities.filter((c) => String(c?.civilizationId) === civId);
       const civUnitList = units.filter((u) => String(u?.civilizationId) === civId);
+      const unitComposition: Record<string, number> = {};
+      for (const unit of civUnitList) {
+        const type = String(unit?.type ?? 'unknown');
+        unitComposition[type] = (unitComposition[type] ?? 0) + 1;
+      }
       const techList: string[] = [...(civ?.technologies ?? [])].map(String);
 
       // `currentResearch` is the tech OBJECT on engine civs — reduce it to its
@@ -466,6 +531,12 @@ class GameProgression {
           (sum, c) => sum + (Array.isArray(c?.wonders) ? c.wonders.length : 0),
           0,
         ),
+        strategy: String(
+          civ?.productionProfile ??
+          engineAny?.getPlayerStorage?.(civ?.id)?.turnData?.aiState?.strategyProfile ??
+          '',
+        ),
+        unitComposition,
         personality: { ...(civ?.personality ?? {}) },
         priorities: { ...(civ?.priorities ?? {}) },
       };
@@ -477,10 +548,122 @@ class GameProgression {
     return {
       round,
       year,
-      yearLabel: GameUtils.formatYear(year),
-      civs,
-    };
+     yearLabel: GameUtils.formatYear(year),
+     civs,
+      ...(snapshot ? { snapshot } : {}),
+   };
   }
 }
 
 export const gameProgression = new GameProgression();
+
+interface RoundDiagnostics {
+  aiActions: number; moves: number; moveFailures: number; attacks: number;
+  combatWins: number; combatLosses: number; unitsLost: number;
+  citiesFounded: number; citiesCaptured: number; skips: number; stalls: number;
+  noTarget: number; misbehavingUnits: Record<string, number>; aiNotes: string[];
+}
+
+function emptyRoundDiagnostics(): RoundDiagnostics {
+  return { aiActions: 0, moves: 0, moveFailures: 0, attacks: 0, combatWins: 0,
+    combatLosses: 0, unitsLost: 0, citiesFounded: 0, citiesCaptured: 0,
+    skips: 0, stalls: 0, noTarget: 0, misbehavingUnits: {}, aiNotes: [] };
+}
+
+function formatCounts(counts: Record<string, number> | undefined): string {
+  return Object.entries(counts ?? {}).filter(([, count]) => count > 0)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([type, count]) => `${type}:${count}`).join('|');
+}
+
+function formatCityProduction(cities: ProgressionCivSnapshot['cityData']): string {
+  return (cities ?? []).map((city) => {
+    const queue = city.buildQueue?.length ? `>${city.buildQueue.join('>')}` : '';
+    return `${city.name}:${city.currentProduction ?? 'none'}${queue}`;
+  }).join('|');
+}
+
+function snapshotJson(snapshot: ProgressionWorldSnapshot | undefined, civId: number, kind: 'units' | 'cities'): string {
+  if (!snapshot) return '';
+  const values = snapshot[kind].filter((value) => value.civilizationId === civId);
+  return JSON.stringify(values);
+}
+function logData(entry: ProgressionLogEntry): Record<string, unknown> {
+  const data = entry.detail?.data;
+  return data && typeof data === 'object' ? data as Record<string, unknown> : {};
+}
+
+function eventCivId(entry: ProgressionLogEntry, data: Record<string, unknown>): string {
+  const direct = [data.civilizationId, data.civId, data.aggressorId, data.capturedBy]
+    .find((value) => typeof value === 'number' || typeof value === 'string');
+  if (direct !== undefined) return String(direct);
+  for (const key of ['unit', 'attacker', 'defender', 'city']) {
+    const object = data[key];
+    if (object && typeof object === 'object') {
+      const id = (object as Record<string, unknown>).civilizationId;
+      if (typeof id === 'number' || typeof id === 'string') return String(id);
+    }
+  }
+  return String(entry.player ?? 0);
+}
+
+function eventUnitType(data: Record<string, unknown>): string {
+  for (const key of ['unit', 'attacker', 'defender']) {
+    const object = data[key];
+    if (object && typeof object === 'object') {
+      const type = (object as Record<string, unknown>).type;
+      if (typeof type === 'string' && type) return type;
+    }
+  }
+  return typeof data.unitType === 'string' ? data.unitType : '';
+}
+
+function addMisbehavior(diag: RoundDiagnostics, unitType: string, reason: string): void {
+  const key = unitType ? `${unitType}:${reason}` : reason;
+  diag.misbehavingUnits[key] = (diag.misbehavingUnits[key] ?? 0) + 1;
+}
+/** Aggregate structured engine and AI events into one compact row per civ/round. */
+function buildRoundDiagnostics(entries: ProgressionLogEntry[]): Map<string, RoundDiagnostics> {
+  const result = new Map<string, RoundDiagnostics>();
+  for (const entry of entries) {
+    const data = logData(entry);
+    const civId = eventCivId(entry, data);
+    const key = `${entry.round}|${civId}`;
+    const diag = result.get(key) ?? emptyRoundDiagnostics();
+    result.set(key, diag);
+    const message = entry.message ?? '';
+    const category = typeof data.category === 'string' ? data.category : '';
+    const unitType = eventUnitType(data);
+    if (entry.event === 'GAME_LOG' && category === 'ai') {
+      diag.aiActions++;
+      const action = typeof data.action === 'string' ? data.action : '';
+      const reason = typeof data.reason === 'string' ? data.reason : '';
+      if (action === 'attack' || message.startsWith('Attack —')) diag.attacks++;
+      if (action === 'move_failed' || message.includes('Move failed') || message.includes('Path step failed')) {
+        diag.moveFailures++; addMisbehavior(diag, unitType, reason || 'move_failed');
+      }
+      if (action === 'no_target' || message.includes('No target')) {
+        diag.noTarget++; diag.stalls++; addMisbehavior(diag, unitType, reason || 'no_target');
+      }
+      if (['stuck', 'no_path', 'no_affordable_step', 'insufficient_moves', 'max_movement_attempts'].includes(reason)) {
+        diag.stalls++; addMisbehavior(diag, unitType, reason);
+      }
+      if (message.includes('Research —') || action === 'research') diag.aiNotes.push('research:' + String(data.tech ?? ''));
+      if (message.includes('Strategy change') || action === 'strategy') diag.aiNotes.push('strategy:' + String(data.to ?? data.strategy ?? ''));
+    }
+    if (entry.event === 'UNIT_MOVED') diag.moves++;
+    if (entry.event === 'UNIT_SKIPPED') diag.skips++;
+    if (entry.event === 'COMBAT_VICTORY') diag.combatWins++;
+    if (entry.event === 'COMBAT_DEFEAT') diag.combatLosses++;
+    if (entry.event === 'UNIT_DEFEATED') { diag.unitsLost++; if (unitType) addMisbehavior(diag, unitType, 'lost'); }
+    if (entry.event === 'CITY_FOUNDED') diag.citiesFounded++;
+    if (entry.event === 'CITY_CAPTURED') diag.citiesCaptured++;
+    if (entry.event === 'CITY_PRODUCTION_CHANGED') {
+      const item = data.item;
+      const itemType = item && typeof item === 'object' ? (item as Record<string, unknown>).itemType : data.itemType;
+      if (typeof itemType === 'string' && itemType) diag.aiNotes.push('production:' + itemType);
+    }
+  }
+  for (const diag of result.values()) diag.aiNotes = [...new Set(diag.aiNotes)].slice(0, 20);
+  return result;
+}
