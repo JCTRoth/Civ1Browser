@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { MapRenderer } from '@/game/rendering/MapRenderer';
@@ -118,30 +118,65 @@ const MiniMap: React.FC<MiniMapProps> = ({ gameEngine = null }) => {
     };
   }, []);
 
-  // Handle minimap clicks to move camera
-  const handleMinimapClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    console.log('MiniMap: Minimap clicked');
+  // Convert minimap CSS coordinates to world coordinates
+  const minimapToWorld = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-
+    if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const tileSize = TILE_SIZE;
+    const mapPixelWidth = mapData.width * tileSize;
+    const mapPixelHeight = mapData.height * tileSize;
+    return {
+      worldX: (x / rect.width) * mapPixelWidth,
+      worldY: (y / rect.height) * mapPixelHeight,
+    };
+  }, [mapData.width, mapData.height]);
 
-  // Convert minimap coordinates (CSS pixels) to world coordinates using square tile sizes
-  const tileSize = TILE_SIZE;
-  const mapPixelWidth = mapData.width * tileSize;
-  const mapPixelHeight = mapData.height * tileSize;
+  // Drag state
+  const draggingRef = useRef(false);
 
-  const worldX = (x / rect.width) * mapPixelWidth;
-  const worldY = (y / rect.height) * mapPixelHeight;
-
-    // Center camera on clicked position
+  // Center camera on a world position
+  const centerCameraOn = useCallback((worldX: number, worldY: number) => {
     actions.updateCamera({
       x: worldX - (window.innerWidth / camera.zoom) / 2,
-      y: worldY - (window.innerHeight / camera.zoom) / 2
+      y: worldY - (window.innerHeight / camera.zoom) / 2,
     });
+  }, [actions, camera.zoom]);
+
+  // Handle minimap click (quick click without drag)
+  const handleMinimapClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const coords = minimapToWorld(event.clientX, event.clientY);
+    if (coords) centerCameraOn(coords.worldX, coords.worldY);
   };
+
+  // Mouse down – start drag
+  const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0) return; // left button only
+    draggingRef.current = true;
+    event.preventDefault();
+    const coords = minimapToWorld(event.clientX, event.clientY);
+    if (coords) centerCameraOn(coords.worldX, coords.worldY);
+  };
+
+  // Mouse move – continue drag
+  useEffect(() => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!draggingRef.current) return;
+      const coords = minimapToWorld(event.clientX, event.clientY);
+      if (coords) centerCameraOn(coords.worldX, coords.worldY);
+    };
+    const handleMouseUp = () => {
+      draggingRef.current = false;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [minimapToWorld, centerCameraOn]);
 
   return (
     <div className="minimap-container" ref={containerRef}>
@@ -149,6 +184,7 @@ const MiniMap: React.FC<MiniMapProps> = ({ gameEngine = null }) => {
         ref={canvasRef}
         className="border border-secondary minimap-canvas"
         onClick={handleMinimapClick}
+        onMouseDown={handleMouseDown}
       />
     </div>
   );
