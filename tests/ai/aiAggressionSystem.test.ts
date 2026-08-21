@@ -247,6 +247,21 @@ describe('AIAggression.planBulkAttack', () => {
 
     expect(plan).toBeNull();
   });
+
+  it('still plans a bulk assault with older (but not ancient) intelligence', () => {
+    const { engine } = createMockEngine();
+    engine.cities = [{ id: 'friendly', civilizationId: 1, col: 0, row: 0, population: 1 }];
+
+    // lastSeen at round 0, planning at round 40 → intel 40 rounds old. Two
+    // fronts that met once and separated must not lose the only known enemy
+    // city after 20 rounds — that was the "aggression never fires" stalemate.
+    const plan = planBulkAttack(
+      engine, 1, [enemyCityAt(4, 4, 0)], 12, 5, 40, true,
+    );
+
+    expect(plan).not.toBeNull();
+    expect(plan!.target).toEqual({ col: 4, row: 4 });
+  });
 });
 
 // ---------------------------------------------------------------------------

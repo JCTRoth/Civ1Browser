@@ -143,6 +143,26 @@ describe('AI planned play — probing', () => {
     expect(guardTarget).not.toBeNull();
     expect(guardTarget).not.toEqual({ col: 0, row: 0 });
   });
+
+  it('idle combat units push toward stale enemy intelligence (forward picket)', () => {
+    const { engine, storage } = createMockEngine();
+    engine.cities = [{ id: 'friendly', civilizationId: 1, col: 0, row: 0 }];
+    engine.units = [combatUnit('picket', 1, 5, 5)];
+    // The whole map is already explored → no probe target. The only lead is a
+    // STALE enemy city sighting (last seen many rounds ago). The unit must
+    // still march toward it to re-establish contact — that contact is what
+    // feeds the whole war-planning pipeline (without it the 205-round log
+    // shows 0-3 attacks: both fronts parked apart, no intel, no aggression).
+    storage.enemyLocations.set(2, [{
+      col: 9, row: 5, type: 'city', id: 'enemy-city', discoveredRound: 1, lastSeenRound: 1,
+    }]);
+
+    const aiManager = new AIManager(engine);
+    const target = (aiManager as any).chooseAITarget(engine.units[0]);
+
+    expect(target).not.toBeNull();
+    expect(target).toEqual({ col: 9, row: 5 });
+  });
 });
 
 describe('AI planned play — scouts', () => {

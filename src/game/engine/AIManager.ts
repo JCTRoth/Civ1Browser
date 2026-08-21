@@ -682,6 +682,20 @@ export class AIManager {
         return remember(probeTarget);
       }
 
+      // ── Forward picket: idle units push toward the frontier ──
+      // After the walk-up-and-down fix removed the patrol, an idle unit whose
+      // local area was fully explored had nothing left to do and froze at
+      // home. With both sides parked apart, no contact was made: no intel →
+      // no war plan → no aggression (the 205-round log shows 0-3 attacks).
+      // A forward picket marches toward the nearest KNOWN enemy (even stale
+      // intel — re-contacting refreshes it) or, with no intel at all, toward
+      // the nearest unexplored tile, keeping the front line moving.
+      const picketTarget = this.findForwardPicketTarget(unit, distFn);
+      if (picketTarget) {
+        console.log(`[AI] Forward picket for ${unit.id}: (${picketTarget.col},${picketTarget.row})`);
+        return remember(picketTarget);
+      }
+
       // ── Patrol between cities when idle ──
       const patrolTarget = findPatrolWaypoint(
         unit, unit.col, unit.row,
@@ -1707,6 +1721,67 @@ export class AIManager {
   }
 
   /**
+   * Forward picket for an idle combat unit: push toward the frontier so the
+   * civ keeps contact with the enemy. Sources, best first:
+   *   1. nearest known enemy location (ANY age — stale intel is still a
+   *      direction to march; arriving refreshes the sighting and triggers
+   *      combat, feeding the war-planning pipeline);
+   *   2. nearest unexplored, passable tile within a far radius.
+   * Returns null only when the unit genuinely has nowhere better to be.
+   */
+  private findForwardPicketTarget(
+    unit: { col: number; row: number; civilizationId: number },
+    distFn: (c1: number, r1: number, c2: number, r2: number) => number,
+  ): { col: number; row: number } | null {
+    const storage = this.gameEngine.getPlayerStorage?.(unit.civilizationId);
+
+    // 1. Nearest known enemy, regardless of staleness.
+    if (storage?.enemyLocations) {
+      let best: { col: number; row: number; dist: number } | null = null;
+      for (const enemyList of storage.enemyLocations.values()) {
+        for (const loc of enemyList) {
+          if (!loc || typeof loc.col !== 'number' || typeof loc.row !== 'number') continue;
+          const dist = distFn(unit.col, unit.row, loc.col, loc.row);
+          if (dist === 0) continue;
+          if (!best || dist < best.dist) {
+            best = { col: loc.col, row: loc.row, dist };
+          }
+        }
+      }
+      if (best) return { col: best.col, row: best.row };
+    }
+
+    const map = this.gameEngine.map;
+    const grid = this.gameEngine.squareGrid;
+    if (!map || !grid) return null;
+
+    // 2. Nearest unexplored tile within a far radius (the probe covers 12;
+    //    the picket reaches 24 so a unit whose local area is explored still
+    //    pushes toward genuinely unknown territory).
+    let bestUnexplored: { col: number; row: number; dist: number } | null = null;
+    const radius = 24;
+    const startCol = Math.max(0, unit.col - radius);
+    const endCol = Math.min(map.width - 1, unit.col + radius);
+    const startRow = Math.max(0, unit.row - radius);
+    const endRow = Math.min(map.height - 1, unit.row + radius);
+    for (let row = startRow; row <= endRow; row++) {
+      for (let col = startCol; col <= endCol; col++) {
+        const dist = grid.squareDistance(unit.col, unit.row, col, row);
+        if (dist === 0 || dist > radius) continue;
+        const explored = typeof this.gameEngine.isExploredByPlayer === 'function'
+          ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
+          : !!this.gameEngine.getTileAt(col, row)?.explored;
+        if (explored) continue;
+        if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
+        if (!bestUnexplored || dist < bestUnexplored.dist) {
+          bestUnexplored = { col, row, dist };
+        }
+      }
+    }
+    return bestUnexplored ? { col: bestUnexplored.col, row: bestUnexplored.row } : null;
+  }
+
+  /**
    * Remember a tile a scout could not reach so the scout stops re-targeting
    * the same unreachable square every turn (the old behavior produced 10+
    * consecutive `move_failed` rounds and starved the civ of intelligence).
@@ -1747,58 +1822,72 @@ export class AIManager {
     // Ties are broken RANDOMLY: the previous code kept the first (smallest
     // row) — a systematic bias that made every scout drift toward the TOP map
     // edge, where it then got stuck trying to reach impassable row-0 tiles.
-    let nearestCandidates: Array<{ col: number; row: number }> = [];
-    let minDistance = Infinity;
+    // A tight radius first, then a wide one — a scout parked in a fully
+    // explored patch must keep pushing into far territory instead of freezing
+    // (the log shows a scout stuck at one tile for 100+ rounds).
+    const searchRadii = [10, 25];
+    for (const searchRadius of searchRadii) {
+      let nearestCandidates: Array<{ col: number; row: number }> = [];
+      let minDistance = Infinity;
 
-    // Search within zone boundaries (limit search to avoid performance issues)
-    const searchRadius = 10; // Search up to 10 tiles away
-    const startCol = Math.max(zone.minCol, unit.col - searchRadius);
-    const endCol = Math.min(zone.maxCol, unit.col + searchRadius);
-    const startRow = Math.max(zone.minRow, unit.row - searchRadius);
-    const endRow = Math.min(zone.maxRow, unit.row + searchRadius);
+      // Search within zone boundaries (limit search to avoid performance issues)
+      const startCol = Math.max(zone.minCol, unit.col - searchRadius);
+      const endCol = Math.min(zone.maxCol, unit.col + searchRadius);
+      const startRow = Math.max(zone.minRow, unit.row - searchRadius);
+      const endRow = Math.min(zone.maxRow, unit.row + searchRadius);
 
-    for (let col = startCol; col < endCol; col++) {
-      for (let row = startRow; row < endRow; row++) {
-        // Check if tile is in zone
-        if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, col, row)) continue;
+      for (let col = startCol; col < endCol; col++) {
+        for (let row = startRow; row < endRow; row++) {
+          // Check if tile is in zone
+          if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, col, row)) continue;
 
-        // Skip tiles that previously failed to move into (stuck-target guard).
-        const blockedKey = `${col},${row}`;
-        if ((unit as any)._blockedScoutTargets instanceof Set && (unit as any)._blockedScoutTargets.has(blockedKey)) continue;
+          // Skip tiles that previously failed to move into (stuck-target guard).
+          const blockedKey = `${col},${row}`;
+          if ((unit as any)._blockedScoutTargets instanceof Set && (unit as any)._blockedScoutTargets.has(blockedKey)) continue;
 
-        const tile = this.gameEngine.getTileAt(col, row);
-        if (!tile) continue;
+          const tile = this.gameEngine.getTileAt(col, row);
+          if (!tile) continue;
 
-        // Prefer per-player explored state so each scout targets ITS OWN
-        // unexplored areas. (AI reveals are stored per-player; the global
-        // `tile.explored` is never set for AI moves, so we must not fall back
-        // to it — that made every tile look unexplored and the scout oscillate
-        // between two tiles at the map edge.)
-        const isExplored = typeof this.gameEngine.isExploredByPlayer === 'function'
-          ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
-          : !!tile.explored;
-        if (isExplored) continue;
+          // Prefer per-player explored state so each scout targets ITS OWN
+          // unexplored areas. (AI reveals are stored per-player; the global
+          // `tile.explored` is never set for AI moves, so we must not fall back
+          // to it — that made every tile look unexplored and the scout oscillate
+          // between two tiles at the map edge.)
+          const isExplored = typeof this.gameEngine.isExploredByPlayer === 'function'
+            ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
+            : !!tile.explored;
+          if (isExplored) continue;
 
-        // Skip impassable targets (e.g. ocean) — sending scouts after them only
-        // wastes turns on failed moves (the old "move failed to row 0" spam).
-        if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
+          // Skip impassable targets (e.g. ocean) — sending scouts after them only
+          // wastes turns on failed moves (the old "move failed to row 0" spam).
+          if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
 
-        const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
-        if (distance < minDistance) {
-          minDistance = distance;
-          nearestCandidates = [{ col, row }];
-        } else if (distance === minDistance) {
-          nearestCandidates.push({ col, row });
+          const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
+          if (distance < minDistance) {
+            minDistance = distance;
+            nearestCandidates = [{ col, row }];
+          } else if (distance === minDistance) {
+            nearestCandidates.push({ col, row });
+          }
         }
+      }
+
+      if (nearestCandidates.length > 0) {
+        // Random tie-break so exploration fans out in all directions instead of
+        // always heading for the lowest row.
+        const pick = nearestCandidates[Math.floor(Math.random() * nearestCandidates.length)];
+        console.log(`[AI-SCOUT] Found unexplored tile at (${pick.col},${pick.row}) in zone, distance: ${minDistance}`);
+        return pick;
       }
     }
 
-    if (nearestCandidates.length > 0) {
-      // Random tie-break so exploration fans out in all directions instead of
-      // always heading for the lowest row.
-      const pick = nearestCandidates[Math.floor(Math.random() * nearestCandidates.length)];
-      console.log(`[AI-SCOUT] Found unexplored tile at (${pick.col},${pick.row}) in zone, distance: ${minDistance}`);
-      return pick;
+    // The zone is fully explored as far as we can see, but the blocked-target
+    // list may itself be what cripples the scout (a long chain of failed
+    // moves). Reset it once it has grown large so exploration can retry.
+    if ((unit as any)._blockedScoutTargets instanceof Set && (unit as any)._blockedScoutTargets.size >= 12) {
+      const wasBlocked = (unit as any)._blockedScoutTargets.size;
+      (unit as any)._blockedScoutTargets = new Set<string>();
+      console.log(`[AI-SCOUT] Scout ${unit.id} reset ${wasBlocked} blocked targets to unstick`);
     }
 
     // If no unexplored tiles found in zone, move toward zone center to explore systematically
@@ -1809,8 +1898,13 @@ export class AIManager {
     if (unit.col !== zoneCenterCol || unit.row !== zoneCenterRow) {
       // Find path toward zone center, preferring unexplored directions
       const neighbors = this.gameEngine.squareGrid.getNeighbors(unit.col, unit.row);
+      const currentDistanceToCenter = Math.max(Math.abs(unit.col - zoneCenterCol), Math.abs(unit.row - zoneCenterRow));
       let bestNeighbor: { col: number; row: number } | null = null;
-      let bestDistanceToCenter = Math.max(Math.abs(unit.col - zoneCenterCol), Math.abs(unit.row - zoneCenterRow));
+      let bestDistanceToCenter = currentDistanceToCenter;
+      // Closest passable in-zone neighbor in ANY direction — the escape hatch
+      // that lets a scout work its way around a terrain block instead of
+      // parking on the spot forever.
+      let anyPassableNeighbor: { col: number; row: number; dist: number } | null = null;
 
       for (const neighbor of neighbors) {
         if (!this.gameEngine.isInScoutZone(unit.civilizationId, scoutIndex, neighbor.col, neighbor.row)) continue;
@@ -1825,11 +1919,22 @@ export class AIManager {
           bestDistanceToCenter = distanceToCenter;
           bestNeighbor = neighbor;
         }
+        if (!anyPassableNeighbor || distanceToCenter < anyPassableNeighbor.dist) {
+          anyPassableNeighbor = { col: neighbor.col, row: neighbor.row, dist: distanceToCenter };
+        }
       }
 
       if (bestNeighbor) {
         console.log(`[AI-SCOUT] Moving toward zone center at (${zoneCenterCol},${zoneCenterRow}) via (${bestNeighbor.col},${bestNeighbor.row})`);
         return bestNeighbor;
+      }
+
+      // No direction reduces the distance to the zone center (boxed in by
+      // terrain) — step to the closest passable tile anyway so the scout
+      // navigates around the obstacle instead of freezing.
+      if (anyPassableNeighbor) {
+        console.log(`[AI-SCOUT] Boxed in, stepping to (${anyPassableNeighbor.col},${anyPassableNeighbor.row}) around terrain`);
+        return { col: anyPassableNeighbor.col, row: anyPassableNeighbor.row };
       }
     }
 
@@ -2031,7 +2136,9 @@ export class AIManager {
     for (const enemyList of storage.enemyLocations.values()) {
       for (const loc of enemyList) {
         const age = roundNumber - (loc.lastSeenRound ?? loc.discoveredRound ?? roundNumber);
-        if (age > 20) continue;
+        // Same 40-round window as planBulkAttack: intel that is not ancient
+        // still feeds the war plan even if the two fronts are apart.
+        if (age > 40) continue;
         targets.push({
           col: loc.col,
           row: loc.row,

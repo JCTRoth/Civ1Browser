@@ -20,7 +20,7 @@ export const AGGRESSION_TRIGGER_THRESHOLD = 50;
 /** Width of the stochastic band around the threshold. */
 export const AGGRESSION_TRIGGER_BAND = 15;
 /** Bulk attacks require this much available strength relative to target defense. */
-export const BULK_ATTACK_STRENGTH_RATIO = 1.0;
+export const BULK_ATTACK_STRENGTH_RATIO = 0.85;
 /** Default defensive strength assumed for an unknown/unbuilt enemy city. */
 export const UNKNOWN_CITY_DEFENSE = 8;
 /** Default defensive strength assumed for an enemy unit. */
@@ -255,7 +255,12 @@ export function planBulkAttack(
 
   for (const target of targets) {
     const age = roundNumber - (target.lastSeenRound ?? target.discoveredRound ?? roundNumber);
-    if (age > 20) continue;
+    // Intel stays actionable longer than a pure "current sighting". Two civs
+    // that meet once then separate (units parked apart) would otherwise lose
+    // the only known enemy city after 20 rounds and never plan an assault —
+    // the "aggression never fires" stalemate. 40 rounds keeps a known target
+    // usable until the front line actually re-contacts it.
+    if (age > 40) continue;
 
     // Skip enemy cities we have already captured (stale intelligence).
     if (target.type === 'city') {
