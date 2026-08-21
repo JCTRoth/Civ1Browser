@@ -513,6 +513,170 @@ export class MapRenderer {
   }
 
   /**
+   * Renders only the expensive terrain base layer (textures + transitions + features).
+   * Does NOT include fog overlay — call renderFogOverlay separately for that.
+   * This is meant to be cached and only rebuilt when terrain *types* change.
+   */
+  renderTerrainBase(params: TerrainLayerParams): void {
+    const { offscreenCanvas, map, terrainGrid } = params;
+    if (!offscreenCanvas || !terrainGrid) return;
+
+    const ctx = offscreenCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const resolutionScale = 2;
+    const scaledTile  = this.tileSize * resolutionScale;
+    const mapWidth    = map.width  * scaledTile;
+    const mapHeight   = map.height * scaledTile;
+
+    if (offscreenCanvas.width !== mapWidth || offscreenCanvas.height !== mapHeight) {
+      offscreenCanvas.width  = mapWidth;
+      offscreenCanvas.height = mapHeight;
+    }
+
+    ctx.clearRect(0, 0, mapWidth, mapHeight);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    const tm = this.textureManager;
+
+    // ── Pass 1: base ground textures ─────────────────────────────────────
+    for (let row = 0; row < map.height; row++) {
+      for (let col = 0; col < map.width; col++) {
+        const tile = terrainGrid[row]?.[col];
+        if (!tile) continue;
+        const x = col * scaledTile;
+        const y = row * scaledTile;
+
+        if (!tile.explored) {
+          ctx.fillStyle = '#111118';
+          ctx.fillRect(x, y, scaledTile, scaledTile);
+          continue;
+        }
+
+        const terrainInfo = this.resolveTerrain(tile.type);
+        if (tm) {
+          tm.drawTile(ctx, tile.type, x, y, scaledTile, terrainInfo.color, true);
+        } else {
+          ctx.fillStyle = terrainInfo.color;
+          ctx.fillRect(x, y, scaledTile, scaledTile);
+        }
+      }
+    }
+
+    // ── Pass 2: texture-based edge transitions (Wesnoth-style) ──────────
+    if (tm && tm.isReady) {
+      for (let row = 0; row < map.height; row++) {
+        for (let col = 0; col < map.width; col++) {
+          const tile = terrainGrid[row]?.[col];
+          if (!tile?.explored) continue;
+          const x = col * scaledTile;
+          const y = row * scaledTile;
+          const tPriority = tm.getPriority(tile.type);
+
+          const edges: Array<{ dcol: number; drow: number; dir: 'N'|'E'|'S'|'W' }> = [
+            { dcol: 0, drow: -1, dir: 'N' },
+            { dcol: 1, drow:  0, dir: 'E' },
+            { dcol: 0, drow:  1, dir: 'S' },
+            { dcol:-1, drow:  0, dir: 'W' },
+          ];
+          for (const { dcol, drow, dir } of edges) {
+            const n = terrainGrid[row + drow]?.[col + dcol];
+            if (!n?.explored || n.type === tile.type) continue;
+            const nPriority = tm.getPriority(n.type);
+            if (nPriority <= tPriority) continue;
+            const diff = nPriority - tPriority;
+            tm.drawTextureTransition(ctx, n.type, x, y, scaledTile, dir, diff);
+          }
+
+          // Draw corner transitions considering all 4 tiles at each corner
+          const cornerConfigs: Array<{
+            corner: 'NW' | 'NE' | 'SW' | 'SE';
+            northRow: number; northCol: number;
+            westRow: number; westCol: number;
+            diagRow: number; diagCol: number;
+          }> = [
+            { corner: 'NW', northRow: row-1, northCol: col, westRow: row, westCol: col-1, diagRow: row-1, diagCol: col-1 },
+            { corner: 'NE', northRow: row-1, northCol: col, westRow: row, westCol: col+1, diagRow: row-1, diagCol: col+1 },
+            { corner: 'SW', northRow: row+1, northCol: col, westRow: row, westCol: col-1, diagRow: row+1, diagCol: col-1 },
+            { corner: 'SE', northRow: row+1, northCol: col, westRow: row, westCol: col+1, diagRow: row+1, diagCol: col+1 },
+          ];
+
+          for (const { corner, northRow, northCol, westRow, westCol, diagRow, diagCol } of cornerConfigs) {
+            const northTile = terrainGrid[northRow]?.[northCol];
+            const westTile = terrainGrid[westRow]?.[westCol];
+            const diagTile = terrainGrid[diagRow]?.[diagCol];
+
+            // Only draw if at least one neighbor is explored
+            if (!northTile?.explored && !westTile?.explored && !diagTile?.explored) continue;
+
+            tm.drawCornerTransition4(
+              ctx, x, y, scaledTile, corner,
+              tile.type,
+              northTile?.explored ? northTile.type : null,
+              westTile?.explored ? westTile.type : null,
+              diagTile?.explored ? diagTile.type : null,
+            );
+          }
+        }
+      }
+    }
+
+    // ── Pass 3a: terrain symbols (rivers, resources) — no fog ───────────
+    for (let row = 0; row < map.height; row++) {
+      for (let col = 0; col < map.width; col++) {
+        const tile = terrainGrid[row]?.[col];
+        if (!tile?.explored) continue;
+        const x = col * scaledTile;
+        const y = row * scaledTile;
+
+        const tileNoImprove = { ...tile, improvement: null, hasRoad: false };
+        this.drawTerrainSymbol(ctx, x + scaledTile / 2, y + scaledTile / 2, tileNoImprove, { drawBase: false, drawRivers: true });
+      }
+    }
+
+    // ── Pass 4: feature sprites (painter's algorithm — row 0 first) ──────
+    if (tm && tm.isReady) {
+      for (let row = 0; row < map.height; row++) {
+        for (let col = 0; col < map.width; col++) {
+          const tile = terrainGrid[row]?.[col];
+          if (!tile?.explored || !tile.visible) continue;
+          const x = col * scaledTile;
+          const y = row * scaledTile;
+          tm.drawFeature(ctx, tile.type, x, y, scaledTile);
+        }
+      }
+    }
+  }
+
+  /**
+   * Renders only the fog-of-war overlay on top of an already-drawn terrain base.
+   * This is very cheap (one fillRect per non-visible tile) and can be called
+   * on every visibility change without re-doing the expensive texture transitions.
+   */
+  renderFogOverlay(
+    ctx: CanvasRenderingContext2D,
+    map: MapState,
+    terrainGrid: TerrainRenderGrid,
+  ): void {
+    const resolutionScale = 2;
+    const scaledTile = this.tileSize * resolutionScale;
+
+    for (let row = 0; row < map.height; row++) {
+      for (let col = 0; col < map.width; col++) {
+        const tile = terrainGrid[row]?.[col];
+        if (!tile?.explored) continue;
+        if (tile.visible) continue;  // visible tiles get no fog
+
+        const x = col * scaledTile;
+        const y = row * scaledTile;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        ctx.fillRect(x, y, scaledTile, scaledTile);
+      }
+    }
+  }
+
+  /**
    * Renders a complete game frame including terrain and all dynamic content.
    * This is the main rendering method called each frame to update the game view.
    *

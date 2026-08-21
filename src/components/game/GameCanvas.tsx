@@ -30,6 +30,8 @@ interface ContextMenuState {
 const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, gameEngine = null }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const terrainBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const terrainTypesHashRef = useRef<string>('');
   const mapRendererRef = useRef<MapRenderer>(new MapRenderer());
   const textureManagerRef = useRef<TerrainTextureManager | null>(null);
   const gameState = useGameStore(useShallow(state => state.gameState));
@@ -129,20 +131,61 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     return false;
   }, [camera, cities.length, gameState.activePlayer, gameState.currentTurn, gameState.selectedCity, gameState.selectedUnit, reachableTiles.size, selectedHex, units.length]);
 
+  /** Build a cheap hash of terrain types + exploration (not visibility). */
+  const hashTerrainTypes = useCallback((grid: TerrainRenderGrid): string => {
+    let h = 0;
+    for (let r = 0; r < grid.length; r++) {
+      const row = grid[r];
+      if (!row) continue;
+      for (let c = 0; c < row.length; c++) {
+        const t = row[c];
+        if (!t) continue;
+        // Simple hash: type char codes + explored flag
+        const s = t.type + (t.explored ? '1' : '0');
+        for (let i = 0; i < s.length; i++) {
+          h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+        }
+      }
+    }
+    return String(h);
+  }, []);
+
   const renderTerrainToOffscreen = useCallback((terrainGrid: TerrainRenderGrid | null) => {
     if (!terrainGrid || !mapData) return;
     const offscreenCanvas = terrainCanvasRef.current;
-    if (!offscreenCanvas) return;
-    mapRendererRef.current.renderTerrainLayer({
-      offscreenCanvas,
-      map: mapData,
-      terrainGrid
-    });
-  }, [mapData]);
+    const baseCanvas = terrainBaseCanvasRef.current;
+    if (!offscreenCanvas || !baseCanvas) return;
+
+    const mr = mapRendererRef.current;
+    const newHash = hashTerrainTypes(terrainGrid);
+    const typesChanged = newHash !== terrainTypesHashRef.current;
+
+    if (typesChanged) {
+      // Expensive path: terrain types or exploration changed — rebuild base
+      terrainTypesHashRef.current = newHash;
+      mr.renderTerrainBase({ offscreenCanvas: baseCanvas, map: mapData, terrainGrid });
+    }
+
+    // Always composite: base canvas + fog overlay (cheap)
+    const mapWidth  = mapData.width  * (TILE_SIZE * 2);
+    const mapHeight = mapData.height * (TILE_SIZE * 2);
+    if (offscreenCanvas.width !== mapWidth || offscreenCanvas.height !== mapHeight) {
+      offscreenCanvas.width  = mapWidth;
+      offscreenCanvas.height = mapHeight;
+    }
+    const ctx = offscreenCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, mapWidth, mapHeight);
+    ctx.drawImage(baseCanvas, 0, 0);
+    mr.renderFogOverlay(ctx, mapData, terrainGrid);
+  }, [mapData, hashTerrainTypes]);
 
   useEffect(() => {
     if (!terrainCanvasRef.current && typeof document !== 'undefined') {
       terrainCanvasRef.current = document.createElement('canvas');
+    }
+    if (!terrainBaseCanvasRef.current && typeof document !== 'undefined') {
+      terrainBaseCanvasRef.current = document.createElement('canvas');
     }
     if (!animationCanvasRef.current && typeof document !== 'undefined') {
       animationCanvasRef.current = document.createElement('canvas');
@@ -150,7 +193,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     // Initialize texture manager once and attach to renderer
     if (!textureManagerRef.current) {
       const tm = new TerrainTextureManager(() => {
-        // Textures finished loading — rebuild offscreen terrain and re-render
+        // Textures finished loading — force base canvas rebuild and re-render
+        terrainTypesHashRef.current = '';  // invalidate cached base
         terrainRebuildNeededRef.current = true;
         needsRender.current = true;
         staticRenderedRef.current = false;
