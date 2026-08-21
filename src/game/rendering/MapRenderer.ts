@@ -22,7 +22,7 @@ import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
 import { TERRAIN_FONT_FAMILY } from '@/utils/terrainFont';
 import type { MapState, CameraState, Unit, City, GameState, Civilization, CombatAnimation } from '../../../types/game';
-import { TerrainTextureManager, TERRAIN_PRIORITY, TERRAIN_BLEND_COLOR } from './TerrainTextureManager';
+import { TerrainTextureManager } from './TerrainTextureManager';
 
 /** Civ1 special-resource glyphs rendered on the map (keyed by lowercase name). */
 const RESOURCE_GLYPHS: Record<string, string> = {
@@ -445,19 +445,34 @@ export class MapRenderer {
             tm.drawTextureTransition(ctx, n.type, x, y, scaledTile, dir, diff);
           }
 
-          const corners: Array<{ dcol: number; drow: number; corner: 'NW'|'NE'|'SW'|'SE' }> = [
-            { dcol:-1, drow:-1, corner: 'NW' },
-            { dcol: 1, drow:-1, corner: 'NE' },
-            { dcol:-1, drow: 1, corner: 'SW' },
-            { dcol: 1, drow: 1, corner: 'SE' },
+          // Draw corner transitions considering all 4 tiles at each corner
+          const cornerConfigs: Array<{
+            corner: 'NW' | 'NE' | 'SW' | 'SE';
+            northRow: number; northCol: number;
+            westRow: number; westCol: number;
+            diagRow: number; diagCol: number;
+          }> = [
+            { corner: 'NW', northRow: row-1, northCol: col, westRow: row, westCol: col-1, diagRow: row-1, diagCol: col-1 },
+            { corner: 'NE', northRow: row-1, northCol: col, westRow: row, westCol: col+1, diagRow: row-1, diagCol: col+1 },
+            { corner: 'SW', northRow: row+1, northCol: col, westRow: row, westCol: col-1, diagRow: row+1, diagCol: col-1 },
+            { corner: 'SE', northRow: row+1, northCol: col, westRow: row, westCol: col+1, diagRow: row+1, diagCol: col+1 },
           ];
-          for (const { dcol, drow, corner } of corners) {
-            const n = terrainGrid[row + drow]?.[col + dcol];
-            if (!n?.explored || n.type === tile.type) continue;
-            const nPriority = tm.getPriority(n.type);
-            if (nPriority <= tPriority) continue;
-            const diff = nPriority - tPriority;
-            tm.drawCornerTransition(ctx, n.type, x, y, scaledTile, corner, diff);
+
+          for (const { corner, northRow, northCol, westRow, westCol, diagRow, diagCol } of cornerConfigs) {
+            const northTile = terrainGrid[northRow]?.[northCol];
+            const westTile = terrainGrid[westRow]?.[westCol];
+            const diagTile = terrainGrid[diagRow]?.[diagCol];
+
+            // Only draw if at least one neighbor is explored
+            if (!northTile?.explored && !westTile?.explored && !diagTile?.explored) continue;
+
+            tm.drawCornerTransition4(
+              ctx, x, y, scaledTile, corner,
+              tile.type,
+              northTile?.explored ? northTile.type : null,
+              westTile?.explored ? westTile.type : null,
+              diagTile?.explored ? diagTile.type : null,
+            );
           }
         }
       }
@@ -841,19 +856,34 @@ export class MapRenderer {
             tm.drawTextureTransition(ctx, n.type, tileX, tileY, scaledTileSize, dir, diff);
           }
 
-          const corners: Array<{ dcol: number; drow: number; corner: 'NW'|'NE'|'SW'|'SE' }> = [
-            { dcol:-1, drow:-1, corner: 'NW' },
-            { dcol: 1, drow:-1, corner: 'NE' },
-            { dcol:-1, drow: 1, corner: 'SW' },
-            { dcol: 1, drow: 1, corner: 'SE' },
+          // Draw corner transitions considering all 4 tiles at each corner
+          const cornerConfigs: Array<{
+            corner: 'NW' | 'NE' | 'SW' | 'SE';
+            northRow: number; northCol: number;
+            westRow: number; westCol: number;
+            diagRow: number; diagCol: number;
+          }> = [
+            { corner: 'NW', northRow: row-1, northCol: col, westRow: row, westCol: col-1, diagRow: row-1, diagCol: col-1 },
+            { corner: 'NE', northRow: row-1, northCol: col, westRow: row, westCol: col+1, diagRow: row-1, diagCol: col+1 },
+            { corner: 'SW', northRow: row+1, northCol: col, westRow: row, westCol: col-1, diagRow: row+1, diagCol: col-1 },
+            { corner: 'SE', northRow: row+1, northCol: col, westRow: row, westCol: col+1, diagRow: row+1, diagCol: col+1 },
           ];
-          for (const { dcol, drow, corner } of corners) {
-            const n = terrainGrid[row + drow]?.[col + dcol];
-            if (!n?.explored || n.type === tile.type) continue;
-            const nPriority = tm.getPriority(n.type);
-            if (nPriority <= tPriority) continue;
-            const diff = nPriority - tPriority;
-            tm.drawCornerTransition(ctx, n.type, tileX, tileY, scaledTileSize, corner, diff);
+
+          for (const { corner, northRow, northCol, westRow, westCol, diagRow, diagCol } of cornerConfigs) {
+            const northTile = terrainGrid[northRow]?.[northCol];
+            const westTile = terrainGrid[westRow]?.[westCol];
+            const diagTile = terrainGrid[diagRow]?.[diagCol];
+
+            // Only draw if at least one neighbor is explored
+            if (!northTile?.explored && !westTile?.explored && !diagTile?.explored) continue;
+
+            tm.drawCornerTransition4(
+              ctx, tileX, tileY, scaledTileSize, corner,
+              tile.type,
+              northTile?.explored ? northTile.type : null,
+              westTile?.explored ? westTile.type : null,
+              diagTile?.explored ? diagTile.type : null,
+            );
           }
         }
 
