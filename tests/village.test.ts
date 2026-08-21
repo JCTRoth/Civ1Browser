@@ -49,6 +49,8 @@ describe('Civ1 village placement', () => {
     for (const tile of villages) {
       const type = String(tile.type ?? tile.terrain);
       expect([TERRAIN_TYPES.OCEAN, TERRAIN_TYPES.MOUNTAINS]).not.toContain(type);
+      // Civ1: huts never override special resource tiles (oasis, gold, …).
+      expect(tile.resource).toBeFalsy();
       for (const s of settlers) {
         const dist = Math.max(Math.abs(tile.col - s.col), Math.abs(tile.row - s.row));
         expect(dist).toBeGreaterThan(2);
@@ -134,7 +136,7 @@ describe('Civ1 village trigger & outcomes', () => {
     return (e as unknown as { civilizations: Array<{ resources: { gold: number } }> }).civilizations[0].resources.gold;
   }
 
-  it('a military unit claims a village and gets the Valuable Metals outcome (50 gold)', async () => {
+  it('a military unit claims a village and gets the Valuable Metals outcome', async () => {
     const e = await setup();
     const spot = villageSpot(e);
     const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
@@ -149,24 +151,31 @@ describe('Civ1 village trigger & outcomes', () => {
     expect(res.success).toBe(true);
     // Human player: the hut stays on the map until the message is dismissed.
     expect(tile.village).toBe(true);
-    expect(goldOf(e)).toBe(before + 50);
+    // Civ1 gold payout is a lump sum of 25, 50, or 100.
+    expect([25, 50, 100]).toContain(goldOf(e) - before);
     e.clearVillage(spot.col, spot.row);
     expect(tile.village).toBe(false);
   });
 
-  it('a civilian unit does not trigger a village', async () => {
+  it('a settler (any land unit) triggers a village', async () => {
     const e = await setup();
     const spot = villageSpot(e);
     const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
     tile.village = true;
     const settler = spawnUnit(e, 'settler', spot.adj.col, spot.adj.row, 0, 0, 0);
 
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.49); // → valuable_metals
+    const before = goldOf(e);
     e.moveUnit(settler.id, spot.col, spot.row);
+    spy.mockRestore();
 
-    expect(tile.village).toBe(true); // untouched
+    expect(goldOf(e)).toBeGreaterThan(before); // the hut was claimed
+    expect(tile.village).toBe(true); // human: stays until dismissed
+    e.clearVillage(spot.col, spot.row);
+    expect(tile.village).toBe(false);
   });
 
-  it('an air unit destroys a village with no effect', async () => {
+  it('an air unit flies over a village without triggering it', async () => {
     const e = await setup();
     const spot = villageSpot(e);
     const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
@@ -174,28 +183,31 @@ describe('Civ1 village trigger & outcomes', () => {
     const bomber = spawnUnit(e, 'bomber', spot.adj.col, spot.adj.row, 0, 12, 1);
 
     const before = goldOf(e);
-    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.05);
     const res = e.moveUnit(bomber.id, spot.col, spot.row);
-    spy.mockRestore();
 
     expect(res.success).toBe(true);
-    expect(tile.village).toBe(false);
+    expect(tile.village).toBe(true); // untouched — air units are not land units
     expect(goldOf(e)).toBe(before); // no outcome
   });
 
-  it('a barbarian unit destroys a village with no effect', async () => {
+  it('a barbarian unit triggers a village like any land unit', async () => {
     const e = await setup();
     const spot = villageSpot(e);
     const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
     tile.village = true;
     const barb = spawnUnit(e, 'legion', spot.adj.col, spot.adj.row, BARBARIAN_CIV_ID, 3, 1);
 
-    const before = goldOf(e);
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.9); // → barbarians
     const res = e.moveUnit(barb.id, spot.col, spot.row);
+    spy.mockRestore();
 
     expect(res.success).toBe(true);
+    // Barbarians are not human → the hut vanishes immediately (no modal).
     expect(tile.village).toBe(false);
-    expect(goldOf(e)).toBe(before);
+    const horde = (e as unknown as { units: Array<{ civilizationId: number }> }).units
+      .filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
+    expect(horde.length).toBeGreaterThanOrEqual(2); // trigger + at least one spawned
+    expect(horde.length).toBeLessThanOrEqual(4);
   });
 
   it('Advanced Tribe founds a size-1 city with a random free building', async () => {
@@ -264,7 +276,7 @@ describe('Civ1 village trigger & outcomes', () => {
     expect(merc?.movesRemaining).toBeGreaterThan(0);
   });
 
-  it('Horde of Barbarians spawns 2–4 hostile legion/cavalry that act immediately', async () => {
+  it('Barbarian Ambush spawns 1–3 hostile warrior/legion that act immediately', async () => {
     const e = await setup();
     const spot = villageSpot(e);
     const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
@@ -281,10 +293,10 @@ describe('Civ1 village trigger & outcomes', () => {
     expect(tile.village).toBe(false);
     const barbarians = (e as unknown as { units: Array<{ civilizationId: number; type: string }> }).units
       .filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
-    expect(barbarians.length).toBeGreaterThanOrEqual(2);
-    expect(barbarians.length).toBeLessThanOrEqual(4);
+    expect(barbarians.length).toBeGreaterThanOrEqual(1);
+    expect(barbarians.length).toBeLessThanOrEqual(3);
     for (const b of barbarians) {
-      expect(['legion', 'cavalry']).toContain(b.type);
+      expect(['warrior', 'legion']).toContain(b.type);
     }
   });
 
@@ -325,5 +337,52 @@ describe('Civ1 village trigger & outcomes', () => {
 
     expect(res.success).toBe(true);
     expect(tile.village).toBe(false); // AI huts vanish immediately
+  });
+
+  it('a settler that rolls a new unit is awarded a Settler with a NONE home city (Civ1 hack)', async () => {
+    const e = await setup();
+    const spot = villageSpot(e);
+    const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
+    tile.village = true;
+    const settler = spawnUnit(e, 'settler', spot.adj.col, spot.adj.row, 0, 0, 0);
+
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.65); // → friendly_mercenaries
+    e.moveUnit(settler.id, spot.col, spot.row);
+    spy.mockRestore();
+
+    const units = (e as unknown as {
+      units: Array<{ id: string; type: string; col: number; row: number; isNoneUnit?: boolean; homeCityId?: string | null }>;
+    }).units;
+    const gift = units.find((u) => u.id !== settler.id && u.type === 'settler' && u.col === spot.col && u.row === spot.row);
+    expect(gift).toBeDefined();
+    // The "NONE" home city: no food/shield support burden.
+    expect(gift?.isNoneUnit).toBe(true);
+    expect(gift?.homeCityId ?? null).toBeNull();
+  });
+
+  it('founding a city on a village tile consumes the village and rolls first (tile overwrite)', async () => {
+    const e = await setup();
+    const spot = villageSpot(e);
+    const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean; col: number; row: number };
+    tile.village = true;
+    // Settler already standing on the village tile (spawned there — no entry trigger).
+    const settler = spawnUnit(e, 'settler', spot.col, spot.row, 0, 0, 0);
+
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.49); // → valuable_metals
+    const before = goldOf(e);
+    const ok = e.foundCityWithSettler(settler.id);
+    spy.mockRestore();
+
+    expect(ok).toBe(true);
+    // The roll was evaluated BEFORE the city logic: gold was granted…
+    expect([25, 50, 100]).toContain(goldOf(e) - before);
+    // …and the city was still founded on the tile.
+    const city = (e as unknown as { cities: Array<{ col: number; row: number }> }).cities
+      .find((c) => c.col === spot.col && c.row === spot.row);
+    expect(city).toBeDefined();
+    // The hut is consumed once the (human) result message is dismissed.
+    expect(tile.village).toBe(true);
+    e.clearVillage(spot.col, spot.row);
+    expect(tile.village).toBe(false);
   });
 });

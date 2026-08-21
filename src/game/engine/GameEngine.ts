@@ -9,7 +9,7 @@ import {
   VILLAGE_OUTCOME,
   VILLAGE_OUTCOMES,
   VILLAGE_FREE_BUILDINGS,
-  VILLAGE_GOLD_AMOUNT,
+  VILLAGE_GOLD_AMOUNTS,
   VILLAGE_BARBARIAN_TYPES,
   VILLAGE_BARBARIAN_MIN,
   VILLAGE_BARBARIAN_MAX,
@@ -1914,8 +1914,9 @@ export default class GameEngine {
 
   /**
    * Scatter Civ1 villages (goody huts) across the map after civilizations have
-   * been created. Villages never spawn on water, mountains, or within 2 tiles
-   * of a starting settler; at most one village per tile.
+   * been created. Villages never spawn on water, mountains, special-resource
+   * tiles (oasis, gold, …), or within 2 tiles of a starting settler; at most
+   * one village per tile.
    */
   private placeVillages(): void {
     if (!this.map || !this.map.tiles) return;
@@ -1943,6 +1944,7 @@ export default class GameEngine {
       if (!tile || tile.village) continue;
       const type = String(tile.type ?? tile.terrain);
       if (type === Constants.TERRAIN.OCEAN || type === Constants.TERRAIN.MOUNTAINS) continue;
+      if (tile.resource) continue; // Civ1: never override special resource tiles (oasis, gold, …)
       if (protectedTiles.has(`${tile.col},${tile.row}`)) continue;
       tile.village = true;
       placed++;
@@ -1951,13 +1953,16 @@ export default class GameEngine {
   }
 
   /**
-   * Resolve a village (goody hut) when a unit enters its tile.
-   *  - Air units and barbarians destroy the village with no effect.
-   *  - Civilian units leave it untouched.
-   *  - Military units claim it and roll an equal-weight outcome (20% each):
+   * Resolve a village (goody hut) when a LAND unit enters its tile.
+   *  - Any land unit triggers and consumes the hut: military, settler,
+   *    worker, caravan, diplomat, even barbarians (Civ1 "any land unit").
+   *  - Air units fly over untouched (they are not land units).
+   *  - The outcome is rolled from the Civ1 pool (equal weight):
    *    Advanced Tribe, Scroll of Ancient Wisdom, Valuable Metals, Friendly
-   *    Mercenaries, or Horde of Barbarians. Invalid rolls (city adjacency for
+   *    Mercenaries, or Barbarian Ambush. Invalid rolls (city adjacency for
    *    Advanced Tribe, no researchable tech for Scroll) are re-rolled.
+   *  - Civ1 "NONE" hack: when a SETTLER triggers the hut and rolls a new
+   *    unit, the reward is a Settler with a NONE home city.
    */
   private resolveVillage(unit: Unit, tile: MapTile | null): void {
     if (!tile?.village) return;
@@ -1965,19 +1970,10 @@ export default class GameEngine {
     if (this.triggeredVillages.has(key)) return; // already claimed, awaiting UI clear
     const props = UNIT_PROPS[String(unit.type)];
     const isAir = props?.type === 'air';
-    const isBarbarian = unit.civilizationId === BARBARIAN_CIV_ID;
-    const isMilitary =
-      (unit.attack || 0) > 0.5 &&
-      !['settler', 'worker', 'caravan', 'diplomat'].includes(String(unit.type));
     const isHuman = this.civilizations?.[unit.civilizationId]?.isHuman === true;
 
-    // Air/barbarian units destroy the village without claiming it.
-    if (isAir || isBarbarian) {
-      tile.village = false;
-      this.emitVillageResult(unit, { outcome: 'destroyed', destroyed: true });
-      return;
-    }
-    if (!isMilitary) return; // civilians ignore huts
+    // Civ1: only land units trigger a village — air units pass over untouched.
+    if (isAir) return;
 
     if (isHuman) {
       // Keep the hut on the map until the player acknowledges the result
@@ -2007,12 +2003,19 @@ export default class GameEngine {
           return;
         }
         case VILLAGE_OUTCOME.VALUABLE_METALS: {
-          this.addGoldToCiv(unit.civilizationId, VILLAGE_GOLD_AMOUNT);
-          this.emitVillageResult(unit, { outcome, goldAmount: VILLAGE_GOLD_AMOUNT });
+          const goldAmount = this.rollVillageGold();
+          this.addGoldToCiv(unit.civilizationId, goldAmount);
+          this.emitVillageResult(unit, { outcome, goldAmount });
           return;
         }
         case VILLAGE_OUTCOME.FRIENDLY_MERCENARIES: {
-          const unitType = this.pickStrongestBuildableUnit(unit.civilizationId);
+          // Civ1 "NONE" hack: a settler that triggers a hut and rolls a new
+          // unit is rewarded with a Settler that has a NONE home city (and
+          // costs 0 food/shield maintenance).
+          const isSettlerTrigger = String(unit.type) === 'settler';
+          const unitType = isSettlerTrigger
+            ? 'settler'
+            : this.pickStrongestBuildableUnit(unit.civilizationId);
           const unitName = UNIT_PROPS[unitType]?.name ?? unitType;
           this.createUnit(unit.civilizationId, unitType, unit.col, unit.row);
           this.emitVillageResult(unit, { outcome, unitType, unitName });
@@ -2029,8 +2032,14 @@ export default class GameEngine {
     }
 
     // Re-roll budget exhausted — grant gold as a safe fallback.
-    this.addGoldToCiv(unit.civilizationId, VILLAGE_GOLD_AMOUNT);
-    this.emitVillageResult(unit, { outcome: 'valuable_metals', goldAmount: VILLAGE_GOLD_AMOUNT });
+    const goldAmount = this.rollVillageGold();
+    this.addGoldToCiv(unit.civilizationId, goldAmount);
+    this.emitVillageResult(unit, { outcome: 'valuable_metals', goldAmount });
+  }
+
+  /** Roll a Civ1 Valuable Metals payout: 25, 50, or 100 gold. */
+  private rollVillageGold(): number {
+    return VILLAGE_GOLD_AMOUNTS[Math.floor(Math.random() * VILLAGE_GOLD_AMOUNTS.length)] ?? 50;
   }
 
   /** Whether the tile at (col,row) is on or adjacent to an existing city. */
@@ -2146,10 +2155,11 @@ export default class GameEngine {
   }
 
   /**
-   * Spawn a horde of 2–4 barbarians (Legion or Cavalry, equal chance) on random
-   * adjacent land tiles, hostile to everyone. Each barbarian that spawns
-   * adjacent to the triggering unit attacks it immediately (same turn).
-   * Returns the number of barbarians spawned.
+   * Spawn a Civ1 Barbarian Ambush: 1–3 barbarians (Warrior or Legion, equal
+   * chance) on random adjacent land tiles, hostile to everyone. Each barbarian
+   * that spawns adjacent to the triggering unit attacks it immediately (same
+   * turn) — unless the trigger is itself a barbarian (the horde does not turn
+   * on its own). Returns the number of barbarians spawned.
    */
   private spawnBarbarians(triggerUnit: Unit): number {
     const neighbors = this.squareGrid
@@ -2180,7 +2190,9 @@ export default class GameEngine {
     }
 
     // Barbarians act immediately: attack the triggering unit while it is still
-    // on the village tile (they spawn adjacent to it).
+    // on the village tile (they spawn adjacent to it). A barbarian trigger is
+    // exempt — the horde never turns on its own kind.
+    if (triggerUnit.civilizationId === BARBARIAN_CIV_ID) return count;
     const target = this.units.find((u) => u.id === triggerUnit.id);
     if (target) {
       const barbarians = this.units.filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
@@ -2615,6 +2627,19 @@ export default class GameEngine {
     // Check if location is valid for city
     const tile = this.getTileAt(settler.col, settler.row);
     if (!tile || tile.type === Constants.TERRAIN.OCEAN) return false;
+
+    // Civ1 tile overwrite: founding a city on a tile that still holds an
+    // unvisited village consumes the village and evaluates the random roll
+    // BEFORE the city is initialized — you can still hit a barbarian ambush
+    // or get free gold/tech at the moment of founding. (A settler that walked
+    // onto the hut already triggered it on entry, so this guard only fires in
+    // edge cases such as a settler placed on a village tile.)
+    if (tile.village) {
+      this.resolveVillage(settler, tile);
+      // The roll can spawn a barbarian ambush that kills the settler — if it
+      // fell, abort founding (the settler is gone).
+      if (!this.units.some((u) => u.id === settlerId)) return false;
+    }
 
     // Civ1 uses the same build command to join an existing friendly city.
     const cityAtLocation = this.getCityAt(settler.col, settler.row);

@@ -1128,10 +1128,19 @@ export class MapRenderer {
 
         const tileIndex = this.getTileIndex(row, col, map.width);
         const tile = terrainGrid?.[row]?.[col];
-        
+
+        // Civ1: villages (goody huts) are visible through the fog of war so
+        // the player can map out exploration routes before scouting a tile.
+        const authoritativeTile: any = map.tiles?.[tileIndex];
+
         // Check if tile is explored (either from terrain grid or map data)
         const isExplored = tile?.explored ?? map.revealed?.[tileIndex] ?? false;
-        if (!isExplored) continue;
+        if (!isExplored) {
+          if (authoritativeTile?.village) {
+            this.drawVillageMarker(ctx, x, y, true); // ghost hut visible in fog
+          }
+          continue;
+        }
 
         // Draw selection highlight
         if (selectedHex && selectedHex.col === col && selectedHex.row === row) {
@@ -1143,8 +1152,7 @@ export class MapRenderer {
 
         // === IMPROVEMENTS RENDERING (same pattern as units/cities) ===
         // Always read improvements from authoritative map.tiles, never from cached terrain grid
-        const authoritativeTile: any = map.tiles?.[tileIndex];
-        if (authoritativeTile && isExplored && tile) {
+        if (authoritativeTile && tile) {
           const improvementTile: TerrainTileRenderInfo = {
             type: tile.type,
             resource: authoritativeTile.resource ?? tile.resource ?? null,
@@ -1627,6 +1635,31 @@ export class MapRenderer {
    * @param terrain - Terrain tile information
    * @param options - Drawing options for base symbols and rivers
    */
+  /**
+   * Draw a Civ1 village (goody hut) marker (🛖) at a tile. `dimmed` renders a
+   * ghost hut — used for huts seen through the fog of war.
+   */
+  private drawVillageMarker(
+    ctx: CanvasRenderingContext2D,
+    centerX: number,
+    centerY: number,
+    dimmed: boolean,
+  ): void {
+    try {
+      const symbolScale = this.tileSize / 32;
+      const villageSize = Math.round(20 * symbolScale);
+      ctx.save();
+      if (dimmed) ctx.globalAlpha = 0.45;
+      ctx.font = `${villageSize}px "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🛖', centerX, centerY - 4 * symbolScale);
+      ctx.restore();
+    } catch (err) {
+      console.warn('[MapRenderer] drawVillageMarker fillText failed', err);
+    }
+  }
+
   private drawTerrainSymbol(
     ctx: CanvasRenderingContext2D,
     centerX: number,
@@ -1670,17 +1703,9 @@ export class MapRenderer {
 
     // Civ1 village (goody hut) marker. Drawn only in the dynamic pass
     // (drawBase === false) so it always reflects the authoritative map state
-    // and disappears the moment a unit claims/destroys the hut.
+    // and disappears the moment a unit claims the hut.
     if (terrain.village && !drawBase) {
-      try {
-        const villageSize = Math.round(20 * symbolScale);
-        ctx.font = `${villageSize}px "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('🛖', centerX, centerY - 4 * symbolScale);
-      } catch (err) {
-        console.warn('[MapRenderer] drawTerrainSymbol village fillText failed', err);
-      }
+      this.drawVillageMarker(ctx, centerX, centerY, false);
     }
 
     ctx.textAlign = 'center';

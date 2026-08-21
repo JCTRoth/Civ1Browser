@@ -109,7 +109,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
 
   // Dialogs that defer auto-end while open; closing one re-checks auto-end
   // (city management + diplomacy, where the player may still be deciding).
-  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report'];
+  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report', 'village'];
 
   const handleCloseDialog = () => {
     const closing = useGameStore.getState().uiState.activeDialog;
@@ -128,10 +128,15 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   /**
    * Close the village-result message: clear the store state and, for the
    * human player, remove the hut from the map now that the event is done
-   * (the engine keeps it visible until this point).
+   * (the engine keeps it visible until this point). Auto-end is re-checked
+   * like any other blocking decision screen, so the deferred end-turn prompt
+   * fires once the message is dismissed.
    */
   const handleVillageClose = () => {
     const result = useGameStore.getState().villageResult;
+    // Hide first so handleCloseDialog still sees the 'village' dialog and
+    // re-checks auto-end (deferred while the message was open).
+    handleCloseDialog();
     actions.clearVillageResult();
     if (result && gameEngine && typeof gameEngine.clearVillage === 'function') {
       gameEngine.clearVillage(result.col, result.row);

@@ -391,20 +391,16 @@ export class EngineEventRouter {
 
     // Do not auto-end the turn while the player is in a screen where they
     // might still make a decision: city management (details / production /
-    // purchase / citizens), diplomacy (a leader may be awaiting a response) or
-    // while paused — or while a combat animation is still playing. The check is
-    // re-run when one of those screens closes (see GameModals.handleCloseDialog)
-    // or the combat animation ends (see onCombat). Other dialogs (WORLD menu,
-    // tech tree, help, hex details) do not block auto-end.
-    const activeDialog = state.uiState?.activeDialog;
-    const decisionScreenOpen = activeDialog !== null &&
-      activeDialog !== 'game-menu' &&
-      activeDialog !== 'help' &&
-      activeDialog !== 'tech' &&
-      activeDialog !== 'hex-details';
+    // purchase / citizens), diplomacy (a leader may be awaiting a response),
+    // a village result message, or while paused — or while a combat animation
+    // is still playing. The check is re-run when one of those screens closes
+    // (see GameModals.handleCloseDialog) or the combat animation ends (see
+    // onCombat). Other dialogs (WORLD menu, tech tree, help, hex details) do
+    // not block auto-end.
+    const decisionScreenOpen = this.isDecisionScreenOpen(state.uiState?.activeDialog ?? null);
     const combatActive = (state.combatAnimations ?? []).length > 0;
     if (decisionScreenOpen || combatActive) {
-      console.log(`[EngineEventRouter] Auto end turn deferred (dialog: ${activeDialog ?? 'none'}, combat: ${combatActive})`);
+      console.log(`[EngineEventRouter] Auto end turn deferred (dialog: ${state.uiState?.activeDialog ?? 'none'}, combat: ${combatActive})`);
       return;
     }
 
@@ -414,6 +410,19 @@ export class EngineEventRouter {
     // "All Your Units Have Moved!" modal; with skipEndTurnConfirmation enabled
     // the App ends the turn immediately (truly automatic).
     this.onTurnEndConfirmationNeeded();
+  }
+
+  /**
+   * Whether a decision screen is open that should defer the auto-end prompt:
+   * city management, diplomacy, a village result message, … (everything
+   * except the non-blocking WORLD menu, tech tree, help and hex details).
+   */
+  private isDecisionScreenOpen(activeDialog: string | null): boolean {
+    return activeDialog !== null &&
+      activeDialog !== 'game-menu' &&
+      activeDialog !== 'help' &&
+      activeDialog !== 'tech' &&
+      activeDialog !== 'hex-details';
   }
 
   private onTurnEndConfirmationNeeded() {
@@ -591,7 +600,12 @@ export class EngineEventRouter {
     const tm = (this.gameEngine as any).roundManager;
     const phase = tm?.getPhase?.() ?? null;
     const inUnitMovement = phase === 'UNIT_MOVEMENT';
-    const shouldPrompt = civ?.isHuman && !settings.autoEndTurn && queueEmptied && !this.endTurnPromptShown.has(civilizationId) && inUnitMovement;
+    // Defer while a decision screen is open (city management, diplomacy, a
+    // village result message, …) so the prompt never covers it. When the screen
+    // closes, handleCloseDialog re-checks auto-end (autoEndTurn on) or the next
+    // queue change re-triggers this prompt.
+    const decisionScreenOpen = this.isDecisionScreenOpen(useGameStore.getState().uiState?.activeDialog ?? null);
+    const shouldPrompt = civ?.isHuman && !settings.autoEndTurn && queueEmptied && !decisionScreenOpen && !this.endTurnPromptShown.has(civilizationId) && inUnitMovement;
 
     if (shouldPrompt && typeof window !== 'undefined') {
       this.endTurnPromptShown.add(civilizationId);
