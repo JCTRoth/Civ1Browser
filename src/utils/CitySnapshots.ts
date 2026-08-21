@@ -14,6 +14,11 @@ export interface CitySnapshot {
   col: number;
   row: number;
   population: number;
+  hitPoints?: number;
+  maxHitPoints?: number;
+  disorder?: boolean;
+  capturedTurns?: number;
+  trade?: number;
   production: number;
   food: number;
   gold: number;
@@ -45,6 +50,11 @@ export function serializeCity(city: any): CitySnapshot {
     col: city?.col ?? 0,
     row: city?.row ?? 0,
     population: city?.population ?? 0,
+    hitPoints: city?.hitPoints,
+    maxHitPoints: city?.maxHitPoints,
+    disorder: city?.disorder,
+    capturedTurns: city?.capturedTurns,
+    trade: city?.trade,
     production: city?.production ?? 0,
     food: city?.food ?? 0,
     gold: city?.gold ?? 0,
@@ -136,6 +146,7 @@ export function serializeCityCompact(city: any): CompactCity {
 /** Engine event names whose payload carries a city object. */
 export const CITY_EVENTS: ReadonlySet<string> = new Set<string>([
   'CITY_FOUNDED',
+  'CITY_JOINED',
   'CITY_CAPTURED',
   'CITY_DESTROYED',
   'CITY_ATTACKED',

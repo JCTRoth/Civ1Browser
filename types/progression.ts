@@ -15,8 +15,13 @@ export interface CompactUnit {
   row: number;
   movesRemaining?: number;
   health?: number;
+  hitPoints?: number;
+  maxHitPoints?: number;
   attack?: number;
   defense?: number;
+  maintenance?: number;
+  foodSupport?: number;
+  shieldSupport?: number;
   experience?: number;
   veteran?: boolean;
   fortified?: boolean;
@@ -24,6 +29,7 @@ export interface CompactUnit {
   workTarget?: string | null;
   workTurns?: number;
   homeCityId?: string | null;
+  noneUnit?: boolean;
 }
 
 /** Complete unit/city listing emitted on a configured snapshot turn. */

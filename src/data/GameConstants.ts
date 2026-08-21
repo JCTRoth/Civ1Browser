@@ -17,6 +17,8 @@ export interface UnitProperties {
     attack: number;
     defense: number;
     movement: number;
+    /** Civ1 hit points. The engine's `health` field remains a percentage for combat compatibility. */
+    hitPoints?: number;
     sightRange?: number;
     cost: number;
     maintenance?: number;

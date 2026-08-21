@@ -4,9 +4,9 @@
  *  - Multi-turn construction (a settler works N turns before the improvement
  *    appears; work is advanced once per turn and abandoned when it moves).
  *  - Irrigation fresh-water adjacency rule.
- *  - Railroads require an existing road; roads on rivers require engineering.
- *  - Terrain transformations on completion (irrigate grassland -> forest,
- *    mine jungle/swamp -> forest, clear forest -> plains).
+ *  - Railroads require an existing road; roads are land-only.
+ *  - Terrain transformations on completion (irrigate forest/swamp/jungle,
+ *    mine grassland/plains).
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
@@ -86,6 +86,17 @@ describe('Civ1 tile improvement construction', () => {
     }
   }
 
+  function clearFreshWaterAdjacent(e: GameEngine, col: number, row: number): void {
+    const directions = [[0, -1], [1, 0], [0, 1], [-1, 0]] as const;
+    for (const [dc, dr] of directions) {
+      const tile = e.getTileAt(col + dc, row + dr) as unknown as { type: string; terrain?: string; improvement?: string | null } | undefined;
+      if (!tile) continue;
+      if (tile.terrain === TERRAIN_TYPES.RIVER) tile.terrain = TERRAIN_TYPES.GRASSLAND;
+      if (tile.type === TERRAIN_TYPES.RIVER) tile.type = TERRAIN_TYPES.GRASSLAND;
+      if (tile.improvement === IMPROVEMENT_TYPES.IRRIGATION) tile.improvement = null;
+    }
+  }
+
   function grantTech(e: GameEngine, civId: number, techId: string) {
     const civ = (e as unknown as { civilizations: Array<{ id: number; technologies: string[] }> }).civilizations.find((c) => c.id === civId);
     if (civ && !civ.technologies.includes(techId)) civ.technologies.push(techId);
@@ -97,11 +108,12 @@ describe('Civ1 tile improvement construction', () => {
     const t = (type: string, terrain: string) => IMPROVEMENT_PROPERTIES[type].turnsByTerrain?.[terrain];
 
     // Irrigation
-    expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'arctic')).toBe(4);
     expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'grassland')).toBe(5);
-    expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'hills')).toBe(10);
     expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'jungle')).toBe(15);
     expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'swamp')).toBe(15);
+    expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'forest')).toBe(15);
+    expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'hills')).toBeUndefined();
+    expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'arctic')).toBeUndefined();
     expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'mountains')).toBeUndefined();
     expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'ocean')).toBeUndefined();
     expect(t(IMPROVEMENT_TYPES.IRRIGATION, 'tundra')).toBeUndefined();
@@ -183,10 +195,17 @@ describe('Civ1 tile improvement construction', () => {
 
     // A working settler normally has no moves, so grant some to simulate a
     // scenario where it could still move (the engine must cancel the work).
-    const neighbor = e.getTileAt(col + 1, row) as unknown as { type: string } | undefined;
-    if (!neighbor || neighbor.type === TERRAIN_TYPES.OCEAN) return; // no adjacent land — skip
+    const target = e.squareGrid!.getNeighbors(col, row).find((candidate) => {
+      const neighbor = e.getTileAt(candidate.col, candidate.row) as unknown as { type: string; terrain?: string } | undefined;
+      return neighbor
+        && neighbor.type !== TERRAIN_TYPES.OCEAN
+        && neighbor.terrain !== TERRAIN_TYPES.OCEAN
+        && !e.getUnitAt(candidate.col, candidate.row)
+        && !e.getCityAt(candidate.col, candidate.row);
+    });
+    if (!target) return; // no adjacent land — skip
     settler.movesRemaining = 1;
-    e.moveUnit(settler.id, col + 1, row);
+    expect(e.moveUnit(settler.id, target.col, target.row).success).toBe(true);
 
     expect(settler.workTarget).toBeNull();
     expect(settler.workTurns).toBe(0);
@@ -197,7 +216,8 @@ describe('Civ1 tile improvement construction', () => {
 
   it('irrigation is blocked without fresh-water adjacency', async () => {
     const e = await setupEngine();
-    const { settler } = placeSettler(e, TERRAIN_TYPES.GRASSLAND);
+    const { col, row, settler } = placeSettler(e, TERRAIN_TYPES.GRASSLAND);
+    clearFreshWaterAdjacent(e, col, row);
     expect(e.canBuildImprovement(settler.id, 'irrigation')).toBe(false);
     expect(e.buildImprovement(settler.id, 'irrigation')).toBe(false);
   });
@@ -205,6 +225,7 @@ describe('Civ1 tile improvement construction', () => {
   it('irrigation is possible next to a river (orthogonal only)', async () => {
     const e = await setupEngine();
     const { col, row, settler } = placeSettler(e, TERRAIN_TYPES.GRASSLAND);
+    clearFreshWaterAdjacent(e, col, row);
     expect(e.canBuildImprovement(settler.id, 'irrigation')).toBe(false);
 
     ensureRiverAdjacent(e, col, row);
@@ -213,6 +234,7 @@ describe('Civ1 tile improvement construction', () => {
     // A DIAGONAL river must NOT count (only orthogonal adjacency).
     const e2 = await setupEngine();
     const { col: c2, row: r2, settler: s2 } = placeSettler(e2, TERRAIN_TYPES.GRASSLAND);
+    clearFreshWaterAdjacent(e2, c2, r2);
     const diag = e2.getTileAt(c2 + 1, r2 + 1) as unknown as { type: string; terrain?: string } | undefined;
     if (diag) {
       diag.type = TERRAIN_TYPES.RIVER;
@@ -231,7 +253,7 @@ describe('Civ1 tile improvement construction', () => {
     expect(e.canBuildImprovement(settler.id, 'irrigation')).toBe(true);
   });
 
-  it('irrigating grassland transforms it into forest on completion', async () => {
+  it('irrigating grassland leaves the terrain in place and adds irrigation', async () => {
     const e = await setupEngine();
     const { col, row, tile, settler } = placeSettler(e, TERRAIN_TYPES.GRASSLAND);
     ensureRiverAdjacent(e, col, row);
@@ -239,8 +261,8 @@ describe('Civ1 tile improvement construction', () => {
     e.buildImprovement(settler.id, 'irrigation'); // 5 turns on grassland
     for (let i = 1; i < 5; i++) e.advanceUnitWork(settler.id);
 
-    expect(tile.type).toBe(TERRAIN_TYPES.FOREST);
-    expect(tile.resource).toBe('Game');
+    expect(tile.type).toBe(TERRAIN_TYPES.GRASSLAND);
+    expect(tile.improvement).toBe(IMPROVEMENT_TYPES.IRRIGATION);
   });
 
   // ─── Prerequisites ─────────────────────────────────────────────────

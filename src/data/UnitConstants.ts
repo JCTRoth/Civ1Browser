@@ -421,8 +421,9 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
     [UNIT_TYPES.SETTLER]: {
         name: 'Settler',
         attack: 0,
-        defense: 0,
+        defense: 1,
         movement: 1,
+        hitPoints: 2,
         sightRange: 3,
         cost: 40,
         maintenance: 1,

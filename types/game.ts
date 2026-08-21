@@ -123,6 +123,9 @@ export interface Unit {
   row: number;
   movesRemaining: number;
   health: number;
+  /** Civ1 hit points; `health` is retained as the engine's combat percentage. */
+  hitPoints?: number;
+  maxHitPoints?: number;
   icon: string;
   status?: string;
   name?: string;
@@ -137,6 +140,10 @@ export interface Unit {
   isSkipped?: boolean;
   isSleeping?: boolean;
   homeCityId?: string | null;
+  /** Units without a home city (e.g. hut/start units or a last-city settler). */
+  isNoneUnit?: boolean;
+  foodSupport?: number;
+  shieldSupport?: number;
   plannedPath?: { col: number; row: number }[];
   areTurnsDone?: boolean; // Set to true when unit has no moves left or is fortified/sleeping
   /** Civ1 multi-turn improvement construction: improvement being worked on. */
@@ -152,6 +159,7 @@ export interface City {
   col: number;
   row: number;
   population: number;
+  hitPoints?: number;
   production: number;
   food: number;
   gold: number;

@@ -152,7 +152,7 @@ The event log is aggregated into action/outcome counters so the export stays
 small while exposing decisions, unit composition, city queues and failures.
 Every `PROGRESSION_SNAPSHOT_INTERVAL` turns (20 by default), the progression
 JSON contains a complete world snapshot. The CSV adds `snapshotUnits` and
-`snapshotCities` JSON cells for that civ on snapshot turns; they are empty
+`snapshotCities` JSON cells containing the complete world on snapshot turns; they are empty
 on other turns. Change `PROGRESSION_SNAPSHOT_INTERVAL` in
 `src/utils/GameProgression.ts` to change the interval.
 Measured on a 200-move sample it is **~54× smaller** (43 KB → 0.8 KB) and an LLM

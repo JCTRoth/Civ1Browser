@@ -1045,7 +1045,7 @@ export default class GameEngine {
    * Create a single unit
    */
   private createUnit(civId: number, type: string, col: number, row: number) {
-    const unitProps = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
+    const unitProps: any = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
     const unitId = `${type}_${civId}_${this.units.filter(u => u.civilizationId === civId).length}`;
     
     const unit = {
@@ -1056,13 +1056,20 @@ export default class GameEngine {
       col: col,
       row: row,
       health: 100,
+      hitPoints: unitProps.hitPoints ?? 2,
+      maxHitPoints: unitProps.hitPoints ?? 2,
       movesRemaining: unitProps.movement || 1,
       maxMoves: unitProps.movement || 1,
       isVeteran: false,
       attack: unitProps.attack || 0,
       defense: unitProps.defense || 1,
+      maintenance: 0,
       icon: unitProps.icon || '⚔️',
-      orders: null
+      orders: null,
+      homeCityId: null,
+      isNoneUnit: true,
+      foodSupport: 0,
+      shieldSupport: 0,
     };
     
     this.units.push(unit);
@@ -1512,6 +1519,18 @@ export default class GameEngine {
     return [...this.cities];
   }
 
+  /** Civ1 zone of control: enemy military units make adjacent destination
+   * squares unsafe for civilian settlers. */
+  private settlerDestinationInEnemyZoC(unit: Unit, col: number, row: number): boolean {
+    if (unit.type !== 'settler') return false;
+    return this.units.some((enemy) => {
+      if (enemy.civilizationId === unit.civilizationId || (enemy as any).isDefeated) return false;
+      const enemyAttack = enemy.attack ?? UNIT_PROPS[enemy.type]?.attack ?? 0;
+      if (enemyAttack <= 0) return false;
+      return this.squareGrid?.squareDistance(col, row, enemy.col, enemy.row) === 1;
+    });
+  }
+
   /**
    * Check if a unit can move to a specific position
    */
@@ -1538,6 +1557,10 @@ export default class GameEngine {
       console.log(`[canUnitMoveTo] Target tile does not exist at (${targetCol}, ${targetRow}).`);
       return false;
     }
+    const targetTerrain = targetTile.type ?? targetTile.terrain;
+    if (unit.type === 'settler' && targetTerrain === Constants.TERRAIN.OCEAN) {
+      return false;
+    }
     if (TERRAIN_PROPS[targetTile.type]?.passable === false) {
       console.log(`[canUnitMoveTo] Target tile at (${targetCol}, ${targetRow}) is not passable.`);
       return false;
@@ -1546,8 +1569,17 @@ export default class GameEngine {
     // Check if there's another unit at target (combat or stacking rules)
     const targetUnit = this.getUnitAt(targetCol, targetRow);
     if (targetUnit && targetUnit.civilizationId !== unit.civilizationId) {
+      if (unit.type === 'settler') {
+        // Attack 0 settlers cannot enter an enemy unit's square; this is the
+        // fatal ZoC/combat outcome represented as a blocked civilian move.
+        return false;
+      }
       console.log(`[canUnitMoveTo] Target occupied by enemy unit. Allowing attack.`);
       return true;
+    }
+
+    if (this.settlerDestinationInEnemyZoC(unit, targetCol, targetRow)) {
+      return false;
     }
     if (targetUnit && targetUnit.civilizationId === unit.civilizationId) {
       console.log(`[canUnitMoveTo] Target occupied by allied unit. Movement not allowed.`);
@@ -1585,6 +1617,9 @@ export default class GameEngine {
     // Check if target tile is passable
     const targetTile = this.getTileAt(targetCol, targetRow);
     if (!targetTile) return { success: false, reason: 'invalid_target' };
+    if (unit.type === 'settler' && (targetTile.type ?? targetTile.terrain) === Constants.TERRAIN.OCEAN) {
+      return { success: false, reason: 'settler_cannot_enter_ocean' };
+    }
     if (TERRAIN_PROPS[targetTile.type]?.passable === false) return { success: false, reason: 'terrain_impassable' };
 
     // Check if there's another unit at target (combat or stacking rules)
@@ -2446,6 +2481,25 @@ export default class GameEngine {
     const tile = this.getTileAt(settler.col, settler.row);
     if (!tile || tile.type === Constants.TERRAIN.OCEAN) return false;
 
+    // Civ1 uses the same build command to join an existing friendly city.
+    const cityAtLocation = this.getCityAt(settler.col, settler.row);
+    if (cityAtLocation) {
+      if (cityAtLocation.civilizationId !== settler.civilizationId || cityAtLocation.population >= 10) {
+        return false;
+      }
+      cityAtLocation.population += 1;
+      cityAtLocation.foodNeeded = Math.max(20, cityAtLocation.population * 20);
+      if (typeof cityAtLocation.hitPoints === 'number') {
+        cityAtLocation.hitPoints = Math.min(cityAtLocation.population, cityAtLocation.hitPoints + 1);
+      }
+      settler.movesRemaining = 0;
+      this.units = this.units.filter(u => u.id !== settlerId);
+      this.unitTurnQueue?.removeUnit(settlerId);
+      this.onStateChange?.('CITY_JOINED', { city: cityAtLocation, settler });
+      this.checkAndEndTurnIfNoMoves();
+      return true;
+    }
+
     // Check if too close to another city
     for (const city of this.cities) {
       if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
@@ -2543,6 +2597,14 @@ export default class GameEngine {
     }
 
     return true;
+  }
+
+  /** Whether the settler can use Build to add one citizen to its friendly city. */
+  canJoinCity(settlerId: string): boolean {
+    const settler = this.units.find((u) => u.id === settlerId);
+    if (!settler || settler.type !== 'settler') return false;
+    const city = this.getCityAt(settler.col, settler.row);
+    return !!city && city.civilizationId === settler.civilizationId && city.population < 10;
   }
 
   /**
@@ -3289,7 +3351,7 @@ export default class GameEngine {
   canBuildImprovement(unitId: string, improvementType: string): boolean {
     const type = GameEngine.canonicalImprovementType(improvementType);
     const unit = this.units.find((u) => u.id === unitId);
-    if (!unit) return false;
+    if (!unit || unit.type !== 'settler') return false;
 
     const tile = this.getTileAt(unit.col, unit.row);
     if (!tile) return false;
@@ -3474,6 +3536,7 @@ export default class GameEngine {
       console.warn(`[GameEngine] cleanPollution: Unit ${unitId} not found`);
       return false;
     }
+    if (unit.type !== 'settler') return false;
 
     const canPerform = UnitActionManager.canPerformAction(unit, 'clean_pollution', 2);
     if (!canPerform) {

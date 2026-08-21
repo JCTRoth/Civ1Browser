@@ -2,10 +2,9 @@
  * Civ1 terrain rule tests (from civ-wiki.de "Terrain (Civ1)"):
  *  - TERRAIN_PROPERTIES yields/defense/movement match the wiki table.
  *  - TERRAIN_RESOURCES maps exactly one special resource per terrain.
- *  - Settler terrain conversion: irrigation (jungle/swamp -> grassland),
- *    mining (jungle/swamp -> forest, clear forest -> plains) with resource
- *    reassignment.
- *  - Roads on rivers require the bridge-building (engineering) tech.
+ *  - Settler terrain conversion: irrigation (forest -> plains,
+ *    jungle/swamp -> grassland) and mining (grassland/plains -> forest).
+ *  - Roads on rivers are available as ordinary land improvements.
  *  - Combat: terrain defense, fortification and fortress stacking.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -190,25 +189,16 @@ describe('Civ1 settler terrain conversion', () => {
     expect(after.resource).toBeNull();
   });
 
-  it('mining converts jungle to forest (with Game resource)', async () => {
+  it('mining is blocked on jungle', async () => {
     const e = await setupEngine();
-    const { col, row, settler } = placeSettler(e, TERRAIN_TYPES.JUNGLE);
-    expect(e.canBuildImprovement(settler.id, 'mine')).toBe(true);
-    finishWork(e, settler, 'mine', TERRAIN_TYPES.JUNGLE);
-    const after = e.getTileAt(col, row) as unknown as { type: string; resource: string | null };
-    expect(after.type).toBe(TERRAIN_TYPES.FOREST);
-    expect(after.resource).toBe('Game');
+    const { settler } = placeSettler(e, TERRAIN_TYPES.JUNGLE);
+    expect(e.canBuildImprovement(settler.id, 'mine')).toBe(false);
   });
 
-  it('clearing forest turns it into plains (with Horses resource)', async () => {
+  it('mining is blocked on forest', async () => {
     const e = await setupEngine();
-    const { col, row, tile, settler } = placeSettler(e, TERRAIN_TYPES.FOREST);
-    tile.resource = 'Game';
-    expect(e.canBuildImprovement(settler.id, 'mine')).toBe(true);
-    finishWork(e, settler, 'mine', TERRAIN_TYPES.FOREST);
-    const after = e.getTileAt(col, row) as unknown as { type: string; resource: string | null };
-    expect(after.type).toBe(TERRAIN_TYPES.PLAINS);
-    expect(after.resource).toBe('Horses');
+    const { settler } = placeSettler(e, TERRAIN_TYPES.FOREST);
+    expect(e.canBuildImprovement(settler.id, 'mine')).toBe(false);
   });
 
   it('mines on mountains stay as an improvement (no conversion)', async () => {
@@ -219,16 +209,9 @@ describe('Civ1 settler terrain conversion', () => {
     expect(tile.type).toBe(TERRAIN_TYPES.MOUNTAINS);
   });
 
-  it('road on river requires the bridge (engineering) tech', async () => {
+  it('road on river is allowed without an extra technology', async () => {
     const e = await setupEngine();
     const { tile, settler } = placeSettler(e, TERRAIN_TYPES.RIVER);
-    // No engineering researched → road on river is not possible.
-    expect(e.canBuildImprovement(settler.id, 'road')).toBe(false);
-    expect(e.buildImprovement(settler.id, 'road')).toBe(false);
-
-    // Grant engineering → road becomes possible.
-    const civ = (e as unknown as { civilizations: Array<{ id: number; technologies: string[] }> }).civilizations.find((c) => c.id === 0);
-    civ?.technologies.push('engineering');
     expect(e.canBuildImprovement(settler.id, 'road')).toBe(true);
     finishWork(e, settler, 'road', TERRAIN_TYPES.RIVER);
     expect(tile.improvement).toBe('road');

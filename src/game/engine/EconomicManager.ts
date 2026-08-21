@@ -538,7 +538,12 @@ export class EconomicManager {
     // Free unit support: each city supports one unit free; extra units cost
     // 1 gold/turn each. Keeps a small standing army sustainable while still
     // punishing over-expansion (a low-commerce economy can't afford a huge one).
-    const totalMaintenance = units.reduce((total: number, u: Unit) => total + (u.maintenance ?? UNIT_MAINTENANCE), 0);
+    const totalMaintenance = units.reduce((total: number, u: Unit) => {
+      // NONE units (starting/hut units and settlers released by a destroyed
+      // size-1 city) have no home city and no support/upkeep burden.
+      if (u.isNoneUnit || u.homeCityId === null) return total;
+      return total + (u.maintenance ?? UNIT_MAINTENANCE);
+    }, 0);
     const freeBudget = cityCount * UNIT_MAINTENANCE;
     return Math.max(0, totalMaintenance - freeBudget);
   }

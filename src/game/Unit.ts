@@ -146,6 +146,9 @@ class Unit {
     public attackPoints: number;
     public attackVeteranPoints: number;
     public defensePoints: number;
+    /** Civ1 hit points (the engine record uses the same metadata). */
+    public hitPoints: number;
+    public maxHitPoints: number;
     public maxMovement: number;
     public cost: number;
     public maintenanceCost: number;
@@ -189,6 +192,8 @@ class Unit {
         this.name = unitProps.name;
         this.attackPoints = unitProps.attack;
         this.defensePoints = unitProps.defense;
+        this.hitPoints = unitProps.hitPoints ?? 2;
+        this.maxHitPoints = this.hitPoints;
         this.maxMovement = unitProps.movement;
         this.cost = unitProps.cost;
         this.maintenanceCost = unitProps.maintenance || 0;

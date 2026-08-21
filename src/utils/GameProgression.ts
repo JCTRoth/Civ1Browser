@@ -245,8 +245,13 @@ function serializeUnitCompact(unit: any): CompactUnit {
     row: Number(unit?.row ?? 0),
     movesRemaining: unit?.movesRemaining,
     health: unit?.health,
+    hitPoints: unit?.hitPoints,
+    maxHitPoints: unit?.maxHitPoints,
     attack: unit?.attack ?? unit?.attackPoints,
     defense: unit?.defense ?? unit?.defensePoints,
+    maintenance: unit?.maintenance,
+    foodSupport: unit?.foodSupport,
+    shieldSupport: unit?.shieldSupport,
     experience: unit?.experience,
     veteran: unit?.isVeteran ?? unit?.veteran,
     fortified: unit?.isFortified ?? unit?.fortified,
@@ -254,6 +259,7 @@ function serializeUnitCompact(unit: any): CompactUnit {
     workTarget: unit?.workTarget ?? null,
     workTurns: unit?.workTurns,
     homeCityId: unit?.homeCityId ?? null,
+    noneUnit: unit?.isNoneUnit ?? !unit?.homeCityId,
   };
 }
 
@@ -422,8 +428,8 @@ class GameProgression {
             diag.noTarget,
            formatCounts(diag.misbehavingUnits),
            diag.aiNotes.join('|'),
-            snapshotJson(round.snapshot, full.id, 'units'),
-            snapshotJson(round.snapshot, full.id, 'cities'),
+            snapshotJson(round.snapshot, 'units'),
+            snapshotJson(round.snapshot, 'cities'),
          ]
             .map(csvCell)
             .join(','),
@@ -583,10 +589,11 @@ function formatCityProduction(cities: ProgressionCivSnapshot['cityData']): strin
   }).join('|');
 }
 
-function snapshotJson(snapshot: ProgressionWorldSnapshot | undefined, civId: number, kind: 'units' | 'cities'): string {
+function snapshotJson(snapshot: ProgressionWorldSnapshot | undefined, kind: 'units' | 'cities'): string {
   if (!snapshot) return '';
-  const values = snapshot[kind].filter((value) => value.civilizationId === civId);
-  return JSON.stringify(values);
+  // CSV rows are civ-oriented, but a diagnostic snapshot must preserve the
+  // complete world state so cross-civ interactions and blockers are visible.
+  return JSON.stringify(snapshot[kind]);
 }
 function logData(entry: ProgressionLogEntry): Record<string, unknown> {
   const data = entry.detail?.data;

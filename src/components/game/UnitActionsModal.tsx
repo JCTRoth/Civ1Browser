@@ -30,7 +30,8 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
   const foundCityAvailable = (): boolean => {
     const unit = contextMenu.unit;
     if (!unit || !gameEngine) return false;
-    return gameEngine.canFoundCity?.(unit.id) ?? false;
+    return (gameEngine.canFoundCity?.(unit.id) ?? false)
+      || (gameEngine.canJoinCity?.(unit.id) ?? false);
   };
 
   return (
@@ -106,7 +107,7 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
                       className="context-menu-item"
                       onClick={() => handleAction('found_city')}
                     >
-                      <span aria-hidden="true">🏛️</span>Found City
+                      <span aria-hidden="true">🏛️</span>Found / Join City
                     </button>
                   )}
 

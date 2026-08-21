@@ -282,6 +282,15 @@ export class AIManager {
         // wandering. Multi-turn construction continues automatically each turn
         // (advanceUnitWork), so starting is enough.
         if (unit.type === 'settler' && !unit.workTarget) {
+          if (this.gameEngine.canJoinCity?.(unit.id)) {
+            const joined = this.gameEngine.foundCityWithSettler(unit.id);
+            if (joined) {
+              this.gameEngine.log('ai', `Settler joins city — ${civ.name} at (${unit.col},${unit.row})`, {
+                civilizationId, action: 'join_city', unitId: unit.id, unitType: unit.type,
+              });
+              break;
+            }
+          }
           let settlement: { col: number; row: number; score: number } | null = null;
           try {
             settlement = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
@@ -1087,7 +1096,7 @@ export class AIManager {
       const neighborTerrain = neighborTile?.terrain || neighborTile?.type;
       return neighborTerrain === 'river';
     });
-    if (hasFreshWater && ['grassland', 'plains', 'desert', 'jungle', 'swamp'].includes(terrain) &&
+    if (hasFreshWater && ['grassland', 'plains', 'desert', 'forest', 'jungle', 'swamp'].includes(terrain) &&
         this.gameEngine.canBuildImprovement(unit.id, 'irrigation')) {
       return 'irrigation';
     }

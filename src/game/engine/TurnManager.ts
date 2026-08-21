@@ -669,26 +669,8 @@ export class TurnManager {
   }
 
   private createPurchasedUnit(city: any, item: any): void {
-    const UNIT_PROPS = (this.gameEngine.constructor as any).UNIT_PROPS || (globalThis as any).UNIT_PROPS;
     const unitType = item.itemType;
-    const unitProps = UNIT_PROPS?.[unitType] || { movement: 1 };
-    
-    const unit = {
-      id: 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      type: unitType,
-      civilizationId: city.civilizationId,
-      col: city.col,
-      row: city.row,
-      health: 100,
-      movement: unitProps.movement,
-      movesRemaining: unitProps.movement,
-      homeCityId: city.id
-    };
-
-    this.gameEngine.units.push(unit);
-    console.log(`[TurnManager] Created purchased unit ${unit.type} at city ${city.name}`);
-    
-    this.emit('UNIT_PURCHASED', { cityId: city.id, unit });
+    this.createProducedUnit(city, unitType, 'UNIT_PURCHASED');
   }
 
   private processCityProduction(city: any): void {
@@ -704,13 +686,41 @@ export class TurnManager {
 
     // Add production
     if (city.currentProduction) {
-      city.productionStored += city.yields.production;
+      const grossShields = city.yields?.production ?? 0;
+      const shieldSupport = this.calculateCityShieldSupport(city);
+      city.productionStored += Math.max(0, grossShields - shieldSupport);
       city.productionProgress = city.productionStored;
 
       if (city.productionStored >= city.currentProduction.cost) {
         this.completeProduction(city);
       }
     }
+  }
+
+  /**
+   * Civ1-style shield support. A city supports up to its population, capped
+   * by the government's per-city allowance; units beyond that allowance
+   * consume one shield each. NONE units never enter the calculation.
+   */
+  private calculateCityShieldSupport(city: any): number {
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    const government = String(civ?.government ?? 'despotism').toLowerCase();
+    const allowanceByGovernment: Record<string, number> = {
+      anarchy: 0,
+      despotism: 3,
+      monarchy: 3,
+      communism: 3,
+      republic: 1,
+      democracy: 0,
+    };
+    const freeUnits = Math.min(
+      Math.max(0, Number(city.population ?? 0)),
+      allowanceByGovernment[government] ?? allowanceByGovernment.despotism,
+    );
+    const supportedUnits = (this.gameEngine.units ?? []).filter(
+      (unit: any) => unit.homeCityId === city.id && !unit.isNoneUnit,
+    ).length;
+    return Math.max(0, supportedUnits - freeUnits);
   }
 
   private completeProduction(city: any): void {
@@ -720,7 +730,8 @@ export class TurnManager {
     city.productionProgress = 0;
 
     if (city.currentProduction.type === 'unit') {
-      this.createProducedUnit(city, city.currentProduction.itemType);
+      const cityDestroyed = this.createProducedUnit(city, city.currentProduction.itemType);
+      if (cityDestroyed) return;
     } else if (city.currentProduction.type === 'building') {
       this.addBuildingToCity(city, city.currentProduction.itemType, false);
     }
@@ -734,9 +745,20 @@ export class TurnManager {
     }
   }
 
-  private createProducedUnit(city: any, unitType: string): void {
+  private createProducedUnit(city: any, unitType: string, eventType = 'UNIT_PRODUCED'): boolean {
     const unitProps = (this.gameEngine.constructor as any).UNIT_PROPS?.[unitType]
       ?? { movement: 1, attack: 0, defense: 1 };
+    const isSettler = unitType === 'settler';
+    const isChieftain = String(this.gameEngine.gameSettings?.difficulty ?? '').toUpperCase() === 'CHIEFTAIN';
+    const population = Number(city.population ?? 1);
+    const destroysCity = isSettler && population <= 1 && !isChieftain;
+
+    if (isSettler && population > 1) {
+      // Civ1 consumes exactly one citizen when the settler completes.
+      city.population = population - 1;
+      city.foodNeeded = Math.max(20, city.population * 20);
+      if (typeof city.hitPoints === 'number') city.hitPoints = Math.min(city.hitPoints, city.population);
+    }
 
     // Mirror GameEngine.createUnit so produced units have full combat stats
     // (attack/defense/maxMoves). Previously these were missing, which made
@@ -749,26 +771,59 @@ export class TurnManager {
       col: city.col,
       row: city.row,
       health: 100,
+      hitPoints: unitProps.hitPoints ?? 2,
+      maxHitPoints: unitProps.hitPoints ?? 2,
       movement: unitProps.movement,
       movesRemaining: unitProps.movement,
       maxMoves: unitProps.movement,
       isVeteran: false,
       attack: unitProps.attack || 0,
       defense: unitProps.defense || 1,
+      maintenance: destroysCity ? 0 : (unitProps.maintenance ?? 0),
       icon: unitProps.icon || '⚔️',
       orders: null,
-      homeCityId: city.id
+      homeCityId: destroysCity ? null : city.id,
+      isNoneUnit: destroysCity,
+      foodSupport: destroysCity ? 0 : (isSettler ? 1 : 0),
+      shieldSupport: destroysCity ? 0 : (isSettler ? 1 : 0),
     };
 
     this.gameEngine.units.push(unit);
     console.log(`[TurnManager] Created unit ${unit.type} at city ${city.name}`);
+
+    if (destroysCity) {
+      this.destroyCityForSettler(city, unit);
+      return true;
+    }
     
     // Phase 3.2: If a scout was created, reassign zones
     if (unitType === 'scout') {
       this.gameEngine.onScoutCreated(unit);
     }
     
-    this.emit('UNIT_PRODUCED', { cityId: city.id, unit });
+    this.emit(eventType, { cityId: city.id, unit });
+    return false;
+  }
+
+  /** Apply the Civ1 size-1 settler exception and turn the new unit into NONE. */
+  private destroyCityForSettler(city: any, settler: any): void {
+    const cityId = city.id;
+    const cityUnits = this.gameEngine.units.filter((u: any) => u.homeCityId === cityId);
+    for (const unit of cityUnits) {
+      unit.homeCityId = null;
+      unit.isNoneUnit = true;
+      unit.foodSupport = 0;
+      unit.shieldSupport = 0;
+    }
+
+    this.gameEngine.cities = this.gameEngine.cities.filter((c: any) => c.id !== cityId);
+    this.gameEngine.governmentManager?.ensureCapital?.(city.civilizationId);
+    this.gameEngine.onStateChange?.('CITY_DESTROYED', {
+      city,
+      reason: 'size_one_settler_completion',
+      settler,
+    });
+    console.log(`[TurnManager] Settler completion destroyed size-1 city ${city.name}; settler is now NONE`);
   }
 
   private addBuildingToCity(city: any, buildingType: string, isPurchased: boolean): void {
@@ -795,7 +850,13 @@ export class TurnManager {
   }
 
   private processCityGrowth(city: any): void {
-    city.foodStored += city.yields.food;
+    const settlerFoodSupport = (this.gameEngine.units ?? []).filter(
+      (unit: any) => unit.type === 'settler'
+        && unit.homeCityId === city.id
+        && !unit.isNoneUnit,
+    ).length;
+    // Settlers consume one food from their home city's food box each turn.
+    city.foodStored = Math.max(0, (city.foodStored ?? 0) + (city.yields?.food ?? 0) - settlerFoodSupport);
     
     if (city.foodStored >= city.foodNeeded) {
       city.population++;
