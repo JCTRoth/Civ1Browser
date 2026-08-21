@@ -191,4 +191,81 @@ describe('Civ1 Minimum 1 Move rule', () => {
     expect(warrior.movesRemaining).toBe(1);
     expect(warrior.hasMovedThisTurn).toBe(false);
   });
+
+  it('Civ1 road: a fresh Settler pays 1/3 to enter a road tile, then cannot enter Jungle (cost 2)', async () => {
+    const e = await setup();
+    const settler: TestUnit = {
+      id: 'settler_road',
+      type: 'settler',
+      civilizationId: 0,
+      col: 5,
+      row: 5,
+      movesRemaining: 1.0,
+      maxMoves: 1.0,
+      hasMovedThisTurn: false,
+      health: 100,
+    };
+    (e as any).units = [settler];
+    (e as any).cities = [];
+
+    const neighbors = e.squareGrid!.getNeighbors(5, 5);
+    // Neighbor 1 becomes a roaded grassland tile (Civ1 road cost = 1/3).
+    const road = neighbors[0];
+    const roadTile = e.getTileAt(road.col, road.row) as any;
+    roadTile.type = 'grassland';
+    roadTile.terrain = 'grassland';
+    roadTile.improvement = 'road';
+
+    // Neighbor 2 becomes an unimproved jungle tile (cost 2).
+    const jungle = neighbors[1];
+    const jungleTile = e.getTileAt(jungle.col, jungle.row) as any;
+    jungleTile.type = 'jungle';
+    jungleTile.terrain = 'jungle';
+    jungleTile.improvement = null;
+
+    // Enter the road tile — the settler spends exactly 1/3 of a point.
+    expect(e.canUnitMoveTo(settler.id, road.col, road.row)).toBe(true);
+    const r1 = e.moveUnit(settler.id, road.col, road.row);
+    expect(r1.success).toBe(true);
+    expect(settler.movesRemaining).toBeCloseTo(1 - 1 / 3, 5);
+    expect(settler.hasMovedThisTurn).toBe(true);
+
+    // Now the jungle (cost 2) is out of reach: the settler has already acted.
+    expect(e.canUnitMoveTo(settler.id, jungle.col, jungle.row)).toBe(false);
+    const r2 = e.moveUnit(settler.id, jungle.col, jungle.row);
+    expect(r2.success).toBe(false);
+    expect(settler.col).toBe(road.col);
+    expect(settler.row).toBe(road.row);
+  });
+
+  it('Civ1 railroad: entering a railroad tile costs only the tiny epsilon (effectively free)', async () => {
+    const e = await setup();
+    const cavalry: TestUnit = {
+      id: 'cavalry_railroad',
+      type: 'cavalry',
+      civilizationId: 0,
+      col: 5,
+      row: 5,
+      movesRemaining: 2.0,
+      maxMoves: 2.0,
+      hasMovedThisTurn: false,
+      health: 100,
+    };
+    (e as any).units = [cavalry];
+    (e as any).cities = [];
+
+    const neighbors = e.squareGrid!.getNeighbors(5, 5);
+    const target = neighbors[0];
+    const tile = e.getTileAt(target.col, target.row) as any;
+    tile.type = 'grassland';
+    tile.terrain = 'grassland';
+    tile.improvement = 'railroad';
+
+    const result = e.moveUnit(cavalry.id, target.col, target.row);
+    expect(result.success).toBe(true);
+    // 2.0 - epsilon → the cavalry keeps almost all of its movement.
+    expect(cavalry.movesRemaining).toBeCloseTo(2 - 0.05, 5);
+    expect(cavalry.col).toBe(target.col);
+    expect(cavalry.row).toBe(target.row);
+  });
 });

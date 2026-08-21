@@ -1575,6 +1575,25 @@ export default class GameEngine {
   }
 
   /**
+   * Civ1 movement cost to ENTER a tile. Base terrain cost (1/2/3), discounted
+   * to 1/3 when the tile carries a road, and to ~0 (tiny epsilon) when it
+   * carries a railroad — railroads make movement effectively free. Mirrors
+   * Pathfinding.getTileCost so the path the AI plans is charged the same way
+   * a manual move is.
+   */
+  private getMoveCost(tile: MapTile | null): number {
+    if (!tile) return 1;
+    const t = tile as MapTile & { road?: boolean; railroad?: boolean; hasRoad?: boolean };
+    if (t.railroad || t.improvement === IMPROVEMENT_TYPES.RAILROAD) {
+      return IMPROVEMENT_PROPERTIES[IMPROVEMENT_TYPES.RAILROAD]?.movementCost ?? 0;
+    }
+    if (t.road || t.hasRoad || t.improvement === IMPROVEMENT_TYPES.ROAD) {
+      return IMPROVEMENT_PROPERTIES[IMPROVEMENT_TYPES.ROAD]?.movementCost ?? 1 / 3;
+    }
+    return Math.max(1, TERRAIN_PROPS[this.getTerrainKey(tile)]?.movement || 1);
+  }
+
+  /**
    * Civ1 "Minimum 1 Move" rule: a unit that has performed no action yet this
    * turn (moves_current == moves_max) may always enter ONE adjacent tile, even
    * when that tile's movement cost exceeds its remaining movement points.
@@ -1661,9 +1680,9 @@ export default class GameEngine {
       return false;
     }
 
-    // Calculate move cost
+    // Calculate move cost (terrain, discounted by road/railroad — Civ1)
     const distance = this.squareGrid.chebyshevDistance(unit.col, unit.row, targetCol, targetRow);
-    const moveCost = Math.max(1, TERRAIN_PROPS[this.getTerrainKey(targetTile)]?.movement || 1);
+    const moveCost = this.getMoveCost(targetTile);
 
     // Civ1: a fresh unit may always enter one adjacent tile (Minimum 1 Move),
     // even when the cost exceeds its remaining movement points.
@@ -1809,8 +1828,8 @@ export default class GameEngine {
       return { success: false, reason: 'attack_failed' };
     }
 
-    // Move the unit
-    const moveCost = Math.max(1, TERRAIN_PROPS[this.getTerrainKey(targetTile)]?.movement || 1);
+    // Move the unit — Civ1 terrain cost, discounted by road (1/3) / railroad (~free).
+    const moveCost = this.getMoveCost(targetTile);
 
     // Civ1 "Minimum 1 Move": a fresh unit may always make its first move even
     // into heavy terrain (cost > moves); that move consumes all its points.
