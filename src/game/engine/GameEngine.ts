@@ -23,6 +23,7 @@ import { EnemySearcher, EnemyLocation, SearchResult } from './EnemySearcher';
 import { ScoutMemory } from './ScoutMemory';
 import { GoToManager } from './GoToManager';
 import { AIManager } from './AIManager';
+import { BarbarianManager } from './BarbarianManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
 import { canBuildUnit, getCivProductionProfile, getCivPersonality } from './AITypes';
@@ -114,6 +115,7 @@ export default class GameEngine {
   isPaused: boolean; // When true, turn processing and AI actions are halted
   scoutMemory: ScoutMemory; // Phase 3.1: Scout persistence across turns
   aiManager: AIManager;
+  barbarianManager: BarbarianManager; // Dedicated aggressive AI for the phantom barbarian civ
   unitTurnQueue: UnitTurnQueue; // Unit turn queue for managing unit order
   diplomacyManager: DiplomacyManager; // Civ I–style diplomacy system
 
@@ -163,6 +165,7 @@ export default class GameEngine {
     this.playerStorage = new Map();
     this.scoutMemory = new ScoutMemory(); // Phase 3.1: Initialize scout memory
     this.aiManager = new AIManager(this);
+    this.barbarianManager = new BarbarianManager(this);
     this.unitTurnQueue = new UnitTurnQueue(this); // Initialize unit turn queue
     this.diplomacyManager = new DiplomacyManager(this);
     this.devMode = false;
@@ -170,6 +173,14 @@ export default class GameEngine {
     this.isGameOver = false;
     this.isPaused = false;
     this.victoryManager.syncStoreActions(this.storeActions);
+  }
+
+  /**
+   * Spawn a barbarian unit (phantom civ −1) at a tile. Public so the
+   * BarbarianManager can seed captured cities with new raiders.
+   */
+  public spawnBarbarianUnit(type: string, col: number, row: number): void {
+    this.createUnit(BARBARIAN_CIV_ID, type, col, row);
   }
 
   /**
@@ -2403,6 +2414,12 @@ export default class GameEngine {
       city.population -= 1;
       city.civilizationId = attacker.civilizationId;
       city.buildings = city.buildings ?? [];
+
+      // A barbarian-captured city starts its troop pump from scratch: the
+      // first unit it builds is a scout (to find the next target).
+      if (attacker.civilizationId === BARBARIAN_CIV_ID) {
+        (city as any).barbarianScoutBuilt = false;
+      }
 
       // --- Civ1 capture aftermath ---
       // 1. Improvements are destroyed: city walls NEVER survive a capture, and

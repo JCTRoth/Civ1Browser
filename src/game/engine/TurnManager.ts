@@ -509,6 +509,11 @@ export class TurnManager {
       // Phase 3.1: Update scout memory with new round and prune old discoveries
       this.gameEngine.scoutMemory.setCurrentRound(this.roundNumber);
 
+      // Barbarians act once per round — their own dedicated AI (hunt cities,
+      // and captured cities pump out raiders). Runs before any civ moves so
+      // the horde's actions are visible within the round.
+      this.gameEngine.barbarianManager?.processBarbarians();
+
       console.log(`[TurnManager] ═══════════════════════════════════════════════`);
       console.log(`[TurnManager] NEW ROUND ${this.roundNumber} | Year: ${this.formatYear(this.gameEngine.currentYear)}`);
       console.log(`[TurnManager] ═══════════════════════════════════════════════`);
