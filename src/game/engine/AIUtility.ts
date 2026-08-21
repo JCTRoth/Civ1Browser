@@ -258,6 +258,14 @@ export class AIUtility {
     isExplored?: (col: number, row: number) => boolean
   ): SquareCoordinate | null {
     const neighbors = getNeighbors(unitCol, unitRow);
+    // Civ1 exploration randomness: shuffle the scan order so the direction a
+    // unit first steps into unexplored territory is not fixed by grid ordering
+    // (the old code always tried the same neighbor first, so every unit drifted
+    // the same way). The first unexplored, passable neighbor now varies.
+    for (let i = neighbors.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [neighbors[i], neighbors[j]] = [neighbors[j], neighbors[i]];
+    }
     for (const tilePos of neighbors) {
       const tile = getTileAt(tilePos.col, tilePos.row);
       if (!tile) continue;
@@ -268,6 +276,56 @@ export class AIUtility {
       return tilePos;
     }
     return null;
+  }
+
+  /**
+   * Random exploration target within a local frontier band.
+   *
+   * Sorts the candidates by distance and picks a weighted-random tile from the
+   * nearest `bandSize` (so exploration stays local instead of teleport-targeting
+   * a far corner), with closer and bearing-aligned tiles weighted higher and a
+   * random jitter on every pick. Pure "nearest" made every unit stream to the
+   * same frontier; this fans units out in varied directions.
+   *
+   * @param unit      The exploring unit (for relative bearing alignment).
+   * @param candidates Unexplored, passable target tiles with their distance.
+   * @param bearing   The unit's random exploration heading (dx/dy in {-1,0,1});
+   *                  tiles lying along it are preferred but never forced.
+   * @param bandSize  How many of the nearest candidates compete (default 8).
+   */
+  static pickRandomExplorationTarget<T extends { col: number; row: number; dist: number }>(
+    unit: { col: number; row: number },
+    candidates: T[],
+    bearing: { dx: number; dy: number } | null,
+    bandSize = 8,
+  ): T | null {
+    if (!candidates || candidates.length === 0) return null;
+    candidates.sort((a, b) => a.dist - b.dist);
+    const band = candidates.slice(0, Math.min(bandSize, candidates.length));
+    if (band.length === 1) return band[0];
+
+    const weights = band.map((c) => {
+      // Bearing alignment: 1 when the tile lies along the unit's heading,
+      // 0.5 when perpendicular, 0 when directly behind.
+      let align = 0.5;
+      if (bearing) {
+        const toX = Math.sign(c.col - unit.col);
+        const toY = Math.sign(c.row - unit.row);
+        align = (bearing.dx * toX + bearing.dy * toY + 2) / 4;
+      }
+      const distWeight = 1 / (1 + c.dist);
+      // Random jitter keeps every pick uncertain even among equal-distance tiles.
+      return distWeight * (0.3 + 0.7 * align) + Math.random();
+    });
+
+    let total = 0;
+    for (const w of weights) total += w;
+    let r = Math.random() * total;
+    for (let i = 0; i < band.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return band[i];
+    }
+    return band[band.length - 1];
   }
 
   /**

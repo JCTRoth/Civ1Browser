@@ -1643,11 +1643,11 @@ export class AIManager {
   }
 
   /**
-   * Idle combat-unit probe: push the frontier toward the nearest unexplored,
-   * passable tile (within a bounded radius). Without this the army sits in its
-   * capital forever, never contacts the enemy, and the whole war-planning
-   * pipeline stays starved of intelligence. Returns null when nothing is left
-   * to explore nearby (falls back to city patrol).
+   * Idle combat-unit probe: push the frontier toward a weighted-random
+   * unexplored, passable tile (within a bounded radius). Without this the army
+   * sits in its capital forever, never contacts the enemy, and the whole
+   * war-planning pipeline stays starved of intelligence. Returns null when
+   * nothing is left to explore nearby (falls back to city patrol).
    */
   private findCombatProbeTarget(
     unit: Unit,
@@ -1659,9 +1659,9 @@ export class AIManager {
     if (!map || !grid) return null;
 
     // Commit to a locked probe target so the unit walks a stable line instead
-    // of re-picking the nearest unexplored tile every turn — recomputing made
-    // units zig-zag (and even double back) as the tiles they passed became
-    // explored and the "nearest" frontier jumped sideways.
+    // of re-picking an exploration tile every turn — recomputing made units
+    // zig-zag (and even double back) as the tiles they passed became explored
+    // and the nearest frontier jumped sideways.
     const locked = (unit as any)._probeTarget as { col: number; row: number } | undefined;
     if (locked) {
       if (locked.col === unit.col && locked.row === unit.row) {
@@ -1683,7 +1683,7 @@ export class AIManager {
     const startRow = Math.max(0, unit.row - searchRadius);
     const endRow = Math.min(map.height - 1, unit.row + searchRadius);
 
-    let best: { col: number; row: number; score: number } | null = null;
+    const candidates: Array<{ col: number; row: number; dist: number }> = [];
 
     for (let row = startRow; row <= endRow; row++) {
       for (let col = startCol; col <= endCol; col++) {
@@ -1696,20 +1696,50 @@ export class AIManager {
           : !!this.gameEngine.getTileAt?.(col, row)?.explored;
         if (isExplored) continue;
 
-        const dist = distFn(unit.col, unit.row, col, row);
-        // Prefer the nearest unexplored frontier.
-        const score = 1000 - dist * 10;
-        if (!best || score > best.score) {
-          best = { col, row, score };
-        }
+        // Never target a tile occupied by our own city or unit.
+        const occUnit = this.gameEngine.getUnitAt?.(col, row);
+        if (occUnit && occUnit.civilizationId === unit.civilizationId) continue;
+        const occCity = this.gameEngine.getCityAt?.(col, row);
+        if (occCity && occCity.civilizationId === unit.civilizationId) continue;
+
+        candidates.push({ col, row, dist: distFn(unit.col, unit.row, col, row) });
       }
     }
 
-    if (best) {
-      (unit as any)._probeTarget = { col: best.col, row: best.row };
-      return { col: best.col, row: best.row };
+    if (candidates.length > 0) {
+      // Weighted-random pick from the nearest frontier band, biased by the
+      // unit's random exploration bearing — different units push out in
+      // different, random directions instead of all streaming to one edge.
+      const bearing = this.getExplorationBearing(unit);
+      const pick = AIUtility.pickRandomExplorationTarget(unit, candidates, bearing);
+      if (pick) {
+        (unit as any)._probeTarget = { col: pick.col, row: pick.row };
+        (unit as any)._exploreTarget = { col: pick.col, row: pick.row };
+        return { col: pick.col, row: pick.row };
+      }
     }
     return null;
+  }
+
+  /** Roll a random 8-direction exploration bearing (never the zero vector). */
+  private rollExplorationBearing(): { dx: number; dy: number } {
+    const dirs = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+    const d = dirs[Math.floor(Math.random() * dirs.length)];
+    return { dx: d[0], dy: d[1] };
+  }
+
+  /**
+   * The unit's exploration bearing: a random START direction, re-rolled
+   * whenever the unit reaches its previous exploration target so every new
+   * leg of the exploration heads out in a fresh random direction.
+   */
+  private getExplorationBearing(unit: { col: number; row: number }): { dx: number; dy: number } {
+    const u = unit as any;
+    const prev = u._exploreTarget as { col: number; row: number } | undefined;
+    if (!u._exploreBearing || (prev && u.col === prev.col && u.row === prev.row)) {
+      u._exploreBearing = this.rollExplorationBearing();
+    }
+    return u._exploreBearing as { dx: number; dy: number };
   }
 
   /** A locked probe tile is usable when still passable and unoccupied by us. */
@@ -1767,10 +1797,10 @@ export class AIManager {
     const grid = this.gameEngine.squareGrid;
     if (!map || !grid) return null;
 
-    // 2. Nearest unexplored tile within a far radius (the probe covers 12;
-    //    the picket reaches 24 so a unit whose local area is explored still
+    // 2. Weighted-random unexplored tile within a far radius (the probe covers
+    //    12; the picket reaches 24 so a unit whose local area is explored still
     //    pushes toward genuinely unknown territory).
-    let bestUnexplored: { col: number; row: number; dist: number } | null = null;
+    const candidates: Array<{ col: number; row: number; dist: number }> = [];
     const radius = 24;
     const startCol = Math.max(0, unit.col - radius);
     const endCol = Math.min(map.width - 1, unit.col + radius);
@@ -1785,12 +1815,23 @@ export class AIManager {
           : !!this.gameEngine.getTileAt(col, row)?.explored;
         if (explored) continue;
         if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
-        if (!bestUnexplored || dist < bestUnexplored.dist) {
-          bestUnexplored = { col, row, dist };
-        }
+        // Never target a tile occupied by our own city or unit.
+        const occUnit = this.gameEngine.getUnitAt?.(col, row);
+        if (occUnit && occUnit.civilizationId === unit.civilizationId) continue;
+        const occCity = this.gameEngine.getCityAt?.(col, row);
+        if (occCity && occCity.civilizationId === unit.civilizationId) continue;
+        candidates.push({ col, row, dist });
       }
     }
-    return bestUnexplored ? { col: bestUnexplored.col, row: bestUnexplored.row } : null;
+    if (candidates.length > 0) {
+      const bearing = this.getExplorationBearing(unit);
+      const pick = AIUtility.pickRandomExplorationTarget(unit, candidates, bearing);
+      if (pick) {
+        (unit as any)._exploreTarget = { col: pick.col, row: pick.row };
+        return { col: pick.col, row: pick.row };
+      }
+    }
+    return null;
   }
 
   /**
@@ -1830,17 +1871,18 @@ export class AIManager {
 
     const zone = storage.scoutZones[scoutIndex];
 
-    // Find the nearest unexplored, passable tiles within the scout's zone.
-    // Ties are broken RANDOMLY: the previous code kept the first (smallest
-    // row) — a systematic bias that made every scout drift toward the TOP map
-    // edge, where it then got stuck trying to reach impassable row-0 tiles.
-    // A tight radius first, then a wide one — a scout parked in a fully
-    // explored patch must keep pushing into far territory instead of freezing
-    // (the log shows a scout stuck at one tile for 100+ rounds).
+    // Find the nearest unexplored, passable tiles within the scout's zone and
+    // pick a weighted-random one from the nearest frontier band, biased by the
+    // scout's random exploration bearing. Ties (and near-ties) resolve
+    // RANDOMLY: the original code kept the first (smallest row) — a systematic
+    // bias that made every scout drift toward the TOP map edge, where it then
+    // got stuck trying to reach impassable row-0 tiles. A tight radius first,
+    // then a wide one — a scout parked in a fully explored patch must keep
+    // pushing into far territory instead of freezing (the log shows a scout
+    // stuck at one tile for 100+ rounds).
     const searchRadii = [10, 25];
     for (const searchRadius of searchRadii) {
-      let nearestCandidates: Array<{ col: number; row: number }> = [];
-      let minDistance = Infinity;
+      const candidates: Array<{ col: number; row: number; dist: number }> = [];
 
       // Search within zone boundaries (limit search to avoid performance issues)
       const startCol = Math.max(zone.minCol, unit.col - searchRadius);
@@ -1874,22 +1916,27 @@ export class AIManager {
           // wastes turns on failed moves (the old "move failed to row 0" spam).
           if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(col, row)) continue;
 
-          const distance = Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row));
-          if (distance < minDistance) {
-            minDistance = distance;
-            nearestCandidates = [{ col, row }];
-          } else if (distance === minDistance) {
-            nearestCandidates.push({ col, row });
-          }
+          // Never target a tile occupied by our own city or unit.
+          const occUnit = this.gameEngine.getUnitAt?.(col, row);
+          if (occUnit && occUnit.civilizationId === unit.civilizationId) continue;
+          const occCity = this.gameEngine.getCityAt?.(col, row);
+          if (occCity && occCity.civilizationId === unit.civilizationId) continue;
+
+          candidates.push({ col, row, dist: Math.max(Math.abs(col - unit.col), Math.abs(row - unit.row)) });
         }
       }
 
-      if (nearestCandidates.length > 0) {
-        // Random tie-break so exploration fans out in all directions instead of
-        // always heading for the lowest row.
-        const pick = nearestCandidates[Math.floor(Math.random() * nearestCandidates.length)];
-        console.log(`[AI-SCOUT] Found unexplored tile at (${pick.col},${pick.row}) in zone, distance: ${minDistance}`);
-        return pick;
+      if (candidates.length > 0) {
+        // Weighted-random pick from the nearest frontier band, biased by the
+        // scout's random exploration bearing — scouts fan out in different,
+        // random directions instead of all drifting the same way.
+        const bearing = this.getExplorationBearing(unit);
+        const pick = AIUtility.pickRandomExplorationTarget(unit, candidates, bearing);
+        if (pick) {
+          (unit as any)._exploreTarget = { col: pick.col, row: pick.row };
+          console.log(`[AI-SCOUT] Found unexplored tile at (${pick.col},${pick.row}) in zone (of ${candidates.length})`);
+          return pick;
+        }
       }
     }
 
