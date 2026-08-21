@@ -498,8 +498,6 @@ export interface GameEngine {
   squareGrid: any;
   /** Get the map tile at a grid position (null when out of bounds). */
   getTileAt(col: number, row: number): any;
-  /** Remove a village (goody hut) after its result message has been shown. */
-  clearVillage(col: number, row: number): void;
   /** Turn/phase manager. */
   roundManager: any;
   /** Current in-game year (negative = BC). */

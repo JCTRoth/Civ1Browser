@@ -125,9 +125,6 @@ export class EngineEventRouter {
       case 'VILLAGE_RESULT':
         this.onVillageResult(eventData);
         break;
-      case 'VILLAGE_CLEARED':
-        this.onVillageCleared(eventData);
-        break;
       default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
@@ -162,14 +159,6 @@ export class EngineEventRouter {
       barbarianCount: eventData.barbarianCount,
       destroyed: eventData.destroyed,
     });
-  }
-
-  /**
-   * The human player dismissed the village-result message — the hut is now
-   * removed from the map, so refresh the tile layer.
-   */
-  private onVillageCleared(_eventData: any): void {
-    this.actions.updateMap?.(this.gameEngine.map);
   }
 
   private onTurnStart(_eventData: any) {

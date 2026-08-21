@@ -149,12 +149,10 @@ describe('Civ1 village trigger & outcomes', () => {
     spy.mockRestore();
 
     expect(res.success).toBe(true);
-    // Human player: the hut stays on the map until the message is dismissed.
-    expect(tile.village).toBe(true);
+    // The hut disappears the instant the village is triggered.
+    expect(tile.village).toBe(false);
     // Civ1 gold payout is a lump sum of 25, 50, or 100.
     expect([25, 50, 100]).toContain(goldOf(e) - before);
-    e.clearVillage(spot.col, spot.row);
-    expect(tile.village).toBe(false);
   });
 
   it('a settler (any land unit) triggers a village', async () => {
@@ -170,9 +168,7 @@ describe('Civ1 village trigger & outcomes', () => {
     spy.mockRestore();
 
     expect(goldOf(e)).toBeGreaterThan(before); // the hut was claimed
-    expect(tile.village).toBe(true); // human: stays until dismissed
-    e.clearVillage(spot.col, spot.row);
-    expect(tile.village).toBe(false);
+    expect(tile.village).toBe(false); // hut disappears at trigger
   });
 
   it('an air unit flies over a village without triggering it', async () => {
@@ -221,9 +217,7 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
-    expect(tile.village).toBe(true); // stays until message dismissed
-    e.clearVillage(spot.col, spot.row);
-    expect(tile.village).toBe(false);
+    expect(tile.village).toBe(false); // hut disappears at trigger
     const city = (e as unknown as { cities: Array<{ col: number; row: number; population: number; buildings: string[] }> }).cities
       .find((c) => c.col === spot.col && c.row === spot.row);
     expect(city).toBeDefined();
@@ -245,9 +239,7 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
-    expect(tile.village).toBe(true); // stays until message dismissed
-    e.clearVillage(spot.col, spot.row);
-    expect(tile.village).toBe(false);
+    expect(tile.village).toBe(false); // hut disappears at trigger
     expect(civ.technologies.length).toBe(techsBefore.length + 1);
     const granted = civ.technologies.find((t) => !techsBefore.includes(t));
     expect(granted).toBeDefined();
@@ -264,9 +256,7 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
-    expect(tile.village).toBe(true); // stays until message dismissed
-    e.clearVillage(spot.col, spot.row);
-    expect(tile.village).toBe(false);
+    expect(tile.village).toBe(false); // hut disappears at trigger
     const units = (e as unknown as { units: Array<{ id: string; type: string; col: number; row: number; civilizationId: number; movesRemaining: number; maxMoves: number }> }).units;
     const merc = units.find((u) => u.id !== warrior.id && u.col === spot.col && u.row === spot.row && u.civilizationId === 0);
     expect(merc).toBeDefined();
@@ -288,9 +278,7 @@ describe('Civ1 village trigger & outcomes', () => {
     spy.mockRestore();
 
     expect(res.success).toBe(true);
-    expect(tile.village).toBe(true); // stays until message dismissed
-    e.clearVillage(spot.col, spot.row);
-    expect(tile.village).toBe(false);
+    expect(tile.village).toBe(false); // hut disappears at trigger
     const barbarians = (e as unknown as { units: Array<{ civilizationId: number; type: string }> }).units
       .filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
     expect(barbarians.length).toBeGreaterThanOrEqual(1);
@@ -300,7 +288,7 @@ describe('Civ1 village trigger & outcomes', () => {
     }
   });
 
-  it('keeps the hut visible until the result message is dismissed, then clears it', async () => {
+  it('the hut disappears the moment the village is triggered (message still fires)', async () => {
     const e = await setup();
     const events: string[] = [];
     (e as unknown as { onStateChange: (t: string) => void }).onStateChange = (t: string) => events.push(t);
@@ -314,14 +302,9 @@ describe('Civ1 village trigger & outcomes', () => {
     e.moveUnit(warrior.id, spot.col, spot.row);
     spy.mockRestore();
 
-    // The result message fires and the hut is still on the map.
+    // The result message fires AND the hut is already gone from the map.
     expect(events).toContain('VILLAGE_RESULT');
-    expect(tile.village).toBe(true);
-
-    // Dismissing the message clears the hut.
-    e.clearVillage(spot.col, spot.row);
     expect(tile.village).toBe(false);
-    expect(events).toContain('VILLAGE_CLEARED');
   });
 
   it('removes the hut immediately for an AI civ (no message shown)', async () => {
@@ -380,9 +363,7 @@ describe('Civ1 village trigger & outcomes', () => {
     const city = (e as unknown as { cities: Array<{ col: number; row: number }> }).cities
       .find((c) => c.col === spot.col && c.row === spot.row);
     expect(city).toBeDefined();
-    // The hut is consumed once the (human) result message is dismissed.
-    expect(tile.village).toBe(true);
-    e.clearVillage(spot.col, spot.row);
+    // The roll consumed the hut — it is gone from the map immediately.
     expect(tile.village).toBe(false);
   });
 });

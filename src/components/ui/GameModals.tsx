@@ -126,21 +126,16 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   };
 
   /**
-   * Close the village-result message: clear the store state and, for the
-   * human player, remove the hut from the map now that the event is done
-   * (the engine keeps it visible until this point). Auto-end is re-checked
+   * Close the village-result message: clear the store state (the hut itself
+   * already disappeared the moment it was triggered). Auto-end is re-checked
    * like any other blocking decision screen, so the deferred end-turn prompt
    * fires once the message is dismissed.
    */
   const handleVillageClose = () => {
-    const result = useGameStore.getState().villageResult;
     // Hide first so handleCloseDialog still sees the 'village' dialog and
     // re-checks auto-end (deferred while the message was open).
     handleCloseDialog();
     actions.clearVillageResult();
-    if (result && gameEngine && typeof gameEngine.clearVillage === 'function') {
-      gameEngine.clearVillage(result.col, result.row);
-    }
   };
 
   const handleNewGame = () => {
