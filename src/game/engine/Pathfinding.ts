@@ -208,6 +208,9 @@ export class Pathfinding {
 
   /**
    * Get all reachable tiles within movement range
+   * `unit` (optional) supplies Civ1 movement state: a fresh unit (no action
+   * taken, full movement intact) may always enter its FIRST adjacent tile,
+   * even when that tile's cost exceeds its remaining points.
    * @returns Map of "col,row" -> cost
    */
   static getReachableTiles(
@@ -217,11 +220,17 @@ export class Pathfinding {
     getTileAt: (col: number, row: number) => any,
     unitType: string,
     mapWidth: number,
-    mapHeight: number
+    mapHeight: number,
+    unit?: { hasMovedThisTurn?: boolean; maxMoves?: number }
   ): Map<string, number> {
     const reachable = new Map<string, number>();
     const openSet: PathNode[] = [];
     const visited = new Set<string>();
+
+    // Civ1 "Minimum 1 Move": the exception applies only while the unit is
+    // fresh (no action this turn and moves_current == moves_max).
+    const movesMax = unit && typeof unit.maxMoves === 'number' ? unit.maxMoves : maxMovement;
+    const isFreshUnit = unit ? (unit.hasMovedThisTurn !== true && maxMovement >= movesMax) : false;
 
     const startNode: PathNode = {
       col: startCol,
@@ -276,11 +285,19 @@ export class Pathfinding {
 
         const g = current.g + cost;
 
-        // Only add if within movement range
-        if (g <= maxMovement) {
+        // Civ1 Minimum-1-Move: the FIRST step of a fresh unit is always
+        // allowed, even when it costs more than the unit's remaining points.
+        // Such a move spends everything, so the tile is recorded but never
+        // expanded further (openSet stays ungated for it).
+        const isFreshFirstStep = isFreshUnit && current.col === startCol && current.row === startRow;
+
+        if (g <= maxMovement || isFreshFirstStep) {
+          const recordCost = g <= maxMovement ? g : maxMovement;
           const existingCost = reachable.get(neighborKey);
-          if (existingCost === undefined || g < existingCost) {
-            reachable.set(neighborKey, g);
+          if (existingCost === undefined || recordCost < existingCost) {
+            reachable.set(neighborKey, recordCost);
+          }
+          if (g <= maxMovement) {
             openSet.push({
               col,
               row,

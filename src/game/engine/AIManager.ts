@@ -366,7 +366,9 @@ export class AIManager {
             // Check move cost before attempting attack
             const tt = this.gameEngine.getTileAt(target.col, target.row);
             const attackCost = Math.max(1, TERRAIN_PROPS[tt?.type ?? '']?.movement ?? 1);
-            if ((unit.movesRemaining || 0) >= attackCost) {
+            // Civ1 Minimum-1-Move: a fresh unit may always make its first move,
+            // even into heavy terrain (cost > remaining points).
+            if (this.gameEngine.canUnitAffordMove(unit, attackCost)) {
               this.gameEngine.combatUnit(unit, targetUnit);
             } else {
              console.log(`[AI] Not enough moves for attack (${unit.movesRemaining} < ${attackCost}), skipping`);
@@ -378,7 +380,7 @@ export class AIManager {
             // Move into the tile
             const tt = this.gameEngine.getTileAt(target.col, target.row);
             const moveCost = Math.max(1, TERRAIN_PROPS[tt?.type ?? '']?.movement ?? 1);
-            if ((unit.movesRemaining || 0) >= moveCost) {
+            if (this.gameEngine.canUnitAffordMove(unit, moveCost)) {
               const r = this.gameEngine.moveUnit(unit.id, target.col, target.row);
               if (!r || !r.success) {
                 console.log(`[AI] Move failed, skipping unit`);
@@ -406,7 +408,7 @@ export class AIManager {
             console.log(`[AI] Path found, next step to (${next.col},${next.row}), path length: ${path.length}`);
             const tt = this.gameEngine.getTileAt(next.col, next.row);
             const moveCost = Math.max(1, TERRAIN_PROPS[tt?.type ?? '']?.movement ?? 1);
-            if ((unit.movesRemaining || 0) < moveCost) {
+            if (!this.gameEngine.canUnitAffordMove(unit, moveCost)) {
               // A* routed the first step through a tile this unit cannot afford
               // (Civ1: a unit must pay the full movement cost of the tile it
               // enters). Fall back to the best affordable neighbor instead of

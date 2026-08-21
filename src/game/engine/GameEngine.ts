@@ -1060,6 +1060,9 @@ export default class GameEngine {
       maxHitPoints: unitProps.hitPoints ?? 2,
       movesRemaining: unitProps.movement || 1,
       maxMoves: unitProps.movement || 1,
+      // Civ1: a newly created unit has not acted this turn, so the
+      // Minimum-1-Move exception applies to its first move.
+      hasMovedThisTurn: false,
       isVeteran: false,
       attack: unitProps.attack || 0,
       defense: unitProps.defense || 1,
@@ -1561,6 +1564,26 @@ export default class GameEngine {
   }
 
   /**
+   * Civ1 "Minimum 1 Move" rule: a unit that has performed no action yet this
+   * turn (moves_current == moves_max) may always enter ONE adjacent tile, even
+   * when that tile's movement cost exceeds its remaining movement points.
+   * Such a move consumes all remaining movement points. Once the unit has
+   * moved (or taken any action), the exception no longer applies and the
+   * standard `moves_current >= cost` check governs.
+   */
+  canUnitAffordMove(unit: any, moveCost: number): boolean {
+    const movesCurrent = unit.movesRemaining || 0;
+    if (movesCurrent <= 0) return false;
+    if (movesCurrent >= moveCost) return true;
+
+    // Civ1 exception: a fresh unit (no action taken, full movement intact)
+    // may always make its first move, even into heavy terrain.
+    const movesMax = typeof unit.maxMoves === 'number' ? unit.maxMoves : movesCurrent;
+    const isFresh = unit.hasMovedThisTurn !== true && movesCurrent >= movesMax;
+    return isFresh;
+  }
+
+  /**
    * Check if a unit can move to a specific position
    */
   canUnitMoveTo(unitId: string, targetCol: number, targetRow: number) {
@@ -1629,10 +1652,11 @@ export default class GameEngine {
 
     // Calculate move cost
     const distance = this.squareGrid.chebyshevDistance(unit.col, unit.row, targetCol, targetRow);
-    const moveCost = Math.max(1, TERRAIN_PROPS[targetTile.type]?.movement || 1);
+    const moveCost = Math.max(1, TERRAIN_PROPS[this.getTerrainKey(targetTile)]?.movement || 1);
 
-    // Check if unit has enough moves (only check moveCost since pathfinding gives adjacent tiles)
-    const hasEnoughMoves = (unit.movesRemaining || 0) >= moveCost;
+    // Civ1: a fresh unit may always enter one adjacent tile (Minimum 1 Move),
+    // even when the cost exceeds its remaining movement points.
+    const hasEnoughMoves = this.canUnitAffordMove(unit, moveCost);
     if (!hasEnoughMoves) {
       console.log(`[canUnitMoveTo] Insufficient moves for unit ${unitId}. Distance: ${distance}, MoveCost: ${moveCost}, MovesRemaining: ${unit.movesRemaining}`);
     }
@@ -1775,11 +1799,11 @@ export default class GameEngine {
     }
 
     // Move the unit
-    const moveCost = Math.max(1, TERRAIN_PROPS[targetTile.type]?.movement || 1);
+    const moveCost = Math.max(1, TERRAIN_PROPS[this.getTerrainKey(targetTile)]?.movement || 1);
 
-    // Require that unit has enough remaining moves to cover the move cost
-    // Note: pathfinding always gives adjacent tiles, so distance is 1
-    if ((unit.movesRemaining || 0) >= moveCost) {
+    // Civ1 "Minimum 1 Move": a fresh unit may always make its first move even
+    // into heavy terrain (cost > moves); that move consumes all its points.
+    if (this.canUnitAffordMove(unit, moveCost)) {
       const fromCol = unit.col;
       const fromRow = unit.row;
 
@@ -1793,7 +1817,14 @@ export default class GameEngine {
 
       unit.col = targetCol;
       unit.row = targetRow;
-      unit.movesRemaining = (unit.movesRemaining || 0) - moveCost;
+      // Standard case: subtract the tile cost. Civ1 exception case: the tile
+      // cost more than we had left, so the (forced) move spends everything.
+      unit.movesRemaining = (unit.movesRemaining || 0) >= moveCost
+        ? (unit.movesRemaining || 0) - moveCost
+        : 0;
+      // The unit has now executed a move this turn — the Minimum-1-Move
+      // exception no longer applies to subsequent moves.
+      unit.hasMovedThisTurn = true;
 
       // Civ1 village (goody hut) resolution — a military unit entering the
       // tile claims the village and rolls an outcome.
@@ -2203,6 +2234,7 @@ export default class GameEngine {
       attacker.col = defender.col;
       attacker.row = defender.row;
       attacker.movesRemaining = 0;
+      attacker.hasMovedThisTurn = true;
 
       // Update turn done status for attacker
       this.updateUnitTurnsDoneFlag(attacker);
@@ -2277,7 +2309,8 @@ export default class GameEngine {
       // Defender wins - attacker is damaged or destroyed
       attacker.health -= 25;
       attacker.movesRemaining = 0;
-      
+      attacker.hasMovedThisTurn = true;
+
       // Update turn done status for attacker
       this.updateUnitTurnsDoneFlag(attacker);
       
@@ -2344,6 +2377,7 @@ export default class GameEngine {
 
     // Spend the attacker's remaining movement either way.
     attacker.movesRemaining = 0;
+    attacker.hasMovedThisTurn = true;
     this.updateUnitTurnsDoneFlag(attacker);
 
     if (attackerWins) {
@@ -2545,6 +2579,7 @@ export default class GameEngine {
         cityAtLocation.hitPoints = Math.min(cityAtLocation.population, cityAtLocation.hitPoints + 1);
       }
       settler.movesRemaining = 0;
+      settler.hasMovedThisTurn = true;
       this.units = this.units.filter(u => u.id !== settlerId);
       this.unitTurnQueue?.removeUnit(settlerId);
       this.onStateChange?.('CITY_JOINED', { city: cityAtLocation, settler });
@@ -2608,6 +2643,7 @@ export default class GameEngine {
     
     // Consume the settler's movement (founding a city costs one turn)
     settler.movesRemaining = 0;
+    settler.hasMovedThisTurn = true;
     
     // Remove settler
     // NOT CHANGE THIS TO === THAN SETTLER NOT DISAPPEARS
@@ -3009,6 +3045,9 @@ export default class GameEngine {
     const success = UnitActionManager.skipUnit(unit);
 
     if (success) {
+      // The unit acted this turn — Minimum-1-Move no longer applies.
+      unit.hasMovedThisTurn = true;
+
       // Mark unit as done in the queue and advance to next unit
       if (this.unitTurnQueue) {
         this.unitTurnQueue.unitDone(unit.civilizationId, unitId);
@@ -3149,6 +3188,9 @@ export default class GameEngine {
 
     UnitActionManager.sleepUnit(unit);
 
+    // The unit acted this turn — Minimum-1-Move no longer applies.
+    unit.hasMovedThisTurn = true;
+
     // Update turn done status
     this.updateUnitTurnsDoneFlag(unit);
 
@@ -3195,6 +3237,9 @@ export default class GameEngine {
     }
 
     UnitActionManager.fortifyUnit(unit);
+
+    // The unit acted this turn — Minimum-1-Move no longer applies.
+    unit.hasMovedThisTurn = true;
 
     // Update turn done status
     this.updateUnitTurnsDoneFlag(unit);
@@ -3368,6 +3413,7 @@ export default class GameEngine {
 
     // The settler spends this turn working and cannot move.
     unit.movesRemaining = 0;
+    unit.hasMovedThisTurn = true;
     this.updateUnitTurnsDoneFlag(unit);
 
     if (this.onStateChange) {

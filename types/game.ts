@@ -132,6 +132,9 @@ export interface Unit {
   isVeteran?: boolean;
   maxMoves?: number;
   movement?: number;
+  /** Civ1: true once the unit has executed any movement or action this turn.
+   *  Controls whether the "Minimum 1 Move" exception still applies. */
+  hasMovedThisTurn?: boolean;
   attack?: number;
   defense?: number;
   maintenance?: number;

@@ -351,7 +351,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
             getTileAt,
             playerSettler.type,
             mapData.width,
-            mapData.height
+            mapData.height,
+            playerSettler
           );
           
           setReachableTiles(reachable);
@@ -458,7 +459,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         getTileAt,
         selectedUnit.type,
         mapData.width,
-        mapData.height
+        mapData.height,
+        selectedUnit
       );
       
       setReachableTiles(reachable);
@@ -573,7 +575,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         getTileAt,
         unit.type,
         mapData.width,
-        mapData.height
+        mapData.height,
+        unit
       );
       setReachableTiles(reachable);
     } catch (e) {

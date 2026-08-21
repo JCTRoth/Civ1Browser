@@ -570,6 +570,10 @@ export class TurnManager {
     units.forEach((unit: any) => {
       const unitProps = UNIT_PROPS?.[unit.type];
       unit.movesRemaining = unitProps?.movement || 1;
+      // Civ1: at the start of the owner's turn every unit is "fresh" — full
+      // movement restored and no action taken yet, so the Minimum-1-Move
+      // exception applies to its first move.
+      unit.hasMovedThisTurn = false;
       unit.areTurnsDone = false;
       unit.isSkipped = false; // "Skip turn" only applies to the current turn
 
@@ -776,6 +780,7 @@ export class TurnManager {
       movement: unitProps.movement,
       movesRemaining: unitProps.movement,
       maxMoves: unitProps.movement,
+      hasMovedThisTurn: false,
       isVeteran: false,
       attack: unitProps.attack || 0,
       defense: unitProps.defense || 1,
