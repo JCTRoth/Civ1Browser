@@ -12,9 +12,11 @@ import { SettlementEvaluator, MIN_CITY_CENTER_DISTANCE } from './SettlementEvalu
 import { AIStrategySelector } from './AIStrategySelector';
 import { AICoordinator } from './AICoordinator';
 import { AIResearch } from './AIResearch';
+import { computeAggression, planBulkAttack, BULK_ATTACK_STRENGTH_RATIO, type KnownTarget, type AggressionAssessment } from './AIAggression';
 import {
   createDefaultAIState,
   type AIState,
+  type AggressionState,
   type StrategyProfile,
 } from './AITypes';
 import {
@@ -170,8 +172,34 @@ export class AIManager {
       this.gameEngine.diplomacyManager.processAIDiplomacy(civilizationId);
     }
 
-    // ─── Phase 3: Update offensive plan & army groups ──────────────────
+    // ─── Phase 3: Situational aggression + offensive plan ─────────────
+    const aggressionState = this.getAggressionState(civilizationId, storage, roundNumber);
+    if (aggressionState.posture === 'aggressive') {
+      console.log(`[AI] ${civ.name} aggressive (score ${aggressionState.score}) — ${aggressionState.reasons.join(', ')}`);
+      this.gameEngine.log?.('ai', `Aggression — ${civ.name} (score ${aggressionState.score})`, {
+        civilizationId, action: 'aggression', score: aggressionState.score, reasons: aggressionState.reasons,
+      });
+    }
+
     this.updateOffensivePlan(civilizationId, storage, roundNumber);
+
+    // A committed, aggressive civ declares war on its chosen bulk target —
+    // this is the "rush": war is started deliberately instead of waiting for
+    // first contact, and the bulk army then presses the city.
+    if (aggressionState.posture === 'aggressive' && this.gameEngine.diplomacyManager) {
+      const plan = storage?.turnData?.offensivePlan;
+      const targetCivId = plan?.targetCivId;
+      if (typeof targetCivId === 'number' && targetCivId !== civilizationId) {
+        const dm = this.gameEngine.diplomacyManager;
+        if (!dm.isAtWar(civilizationId, targetCivId)) {
+          console.log(`[AI] ${civ.name} declares war (aggression ${aggressionState.score}) — rush against civ ${targetCivId}`);
+          this.gameEngine.log?.('ai', `War declaration — ${civ.name} rushes civ ${targetCivId}`, {
+            civilizationId, action: 'declare_war', target: targetCivId, score: aggressionState.score,
+          });
+          dm.declareWar(civilizationId, targetCivId);
+        }
+      }
+    }
 
     // Build army groups from known enemy positions
     const combatUnits = this.gameEngine.units.filter(
@@ -1693,47 +1721,156 @@ export class AIManager {
 
     const threatenedCities = this.identifyThreatenedCities(civilizationId, storage, roundNumber);
     // A genuinely besieged city (garrison clearly overwhelmed) takes priority
-    // over any offense. But minor border pressure must NOT permanently cancel
-    // the offensive plan — that left AI-vs-AI stuck in a defensive stalemate
-    // where neither side ever attacked the other's cities.
+    // over any offense — the civ must hold before it can push. Minor border
+    // pressure alone must NOT permanently cancel the offensive plan (that left
+    // AI-vs-AI stuck in a defensive stalemate where neither side attacked).
     const criticalThreats = threatenedCities.filter((t) => (t.assessment?.netThreat ?? 0) >= 2.5);
     if (criticalThreats.length > 0) {
+      if (storage.turnData.offensivePlan) {
+        console.log(`[AI] Bulk attack withdrawn — civ ${civilizationId} has ${criticalThreats.length} critical threat(s)`);
+      }
       storage.turnData.offensivePlan = null;
       return;
     }
 
-    const bestTarget = this.findBestOffensiveTarget(civilizationId, storage, roundNumber);
-    if (!bestTarget) {
-      storage.turnData.offensivePlan = null;
-      return;
-    }
+    // Situational aggression: how much this civ should push right now. Without
+    // an aggression read the AI only ever defended, so it never started wars.
+    const aggression = this.getAggressionState(civilizationId, storage, roundNumber);
+    const aggressive = aggression.posture === 'aggressive';
 
+    const combatUnits = this.gameEngine.units.filter(
+      (unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit),
+    );
+    const reserveIds = this.getCityDefenseReserveIds(civilizationId, combatUnits);
+    const offensiveUnits = combatUnits.filter((unit: Unit) => !reserveIds.has(unit.id));
     const availableStrength = this.calculateAvailableArmyStrength(civilizationId);
+
+    // Bulk attack: a coordinated assault on a single city (or, failing that,
+    // an enemy unit). Gated on the aggression posture AND on target strength —
+    // the AI must not trigger an assault it cannot win, and it withdraws an
+    // existing one when the target grows too strong.
+    const knownTargets = this.collectKnownTargets(civilizationId, storage, roundNumber);
+    const bulkPlan = planBulkAttack(
+      this.gameEngine,
+      civilizationId,
+      knownTargets,
+      availableStrength,
+      offensiveUnits.length,
+      roundNumber,
+      aggressive,
+    );
+
+    if (!bulkPlan) {
+      if (storage.turnData.offensivePlan) {
+        console.log(`[AI] Bulk attack withdrawn — civ ${civilizationId} (${aggression.posture}, score ${aggression.score})`);
+        this.gameEngine.log?.('ai', `Bulk attack withdrawn — civ ${civilizationId}`, {
+          civilizationId, action: 'withdraw', score: aggression.score, posture: aggression.posture,
+        });
+      }
+      storage.turnData.offensivePlan = null;
+      return;
+    }
+
     const personality = this.gameEngine.civilizations?.[civilizationId]?.personality;
-    const aggression = personality?.aggression ?? 5;
-    // Aggressive civilizations commit earlier, while cautious ones keep
-    // forming up. Situation (threats and relative strength) still dominates.
-    const requiredStrength = this.estimateRequiredStrength(bestTarget.location.type) *
-      (aggression >= 8 ? 0.8 : aggression <= 3 ? 1.15 : 1);
+    const personalityAggression = personality?.aggression ?? 5;
+    // Aggressive civilizations commit earlier, cautious ones keep forming up.
+    const requiredStrength = this.estimateRequiredStrength(bulkPlan.targetType) *
+      (personalityAggression >= 8 ? 0.8 : personalityAggression <= 3 ? 1.15 : 1);
 
     if (availableStrength < requiredStrength) {
       storage.turnData.offensivePlan = null;
       return;
     }
 
-    const combatUnits = this.gameEngine.units.filter((unit: Unit) => unit.civilizationId === civilizationId && this.isCombatUnit(unit));
-    const reserveIds = this.getCityDefenseReserveIds(civilizationId, combatUnits);
-    const offensiveUnits = combatUnits.filter((unit: Unit) => !reserveIds.has(unit.id));
-    const requiredUnits = Math.min(offensiveUnits.length, Math.max(3, Math.ceil(requiredStrength / 2)));
-
     storage.turnData.offensivePlan = {
-      target: { col: bestTarget.location.col, row: bestTarget.location.row },
-      targetType: bestTarget.location.type,
-      score: bestTarget.score,
-      requiredUnits,
+      target: { col: bulkPlan.target.col, row: bulkPlan.target.row },
+      targetType: bulkPlan.targetType,
+      score: bulkPlan.targetDefense,
+      requiredUnits: bulkPlan.requiredUnits,
       assignedUnitIds: [] as string[],
-      roundPrepared: roundNumber
+      roundPrepared: roundNumber,
+      targetDefense: bulkPlan.targetDefense,
+      targetCivId: bulkPlan.targetCivId,
     };
+
+    this.gameEngine.log?.('ai', `Bulk attack — ${this.gameEngine.civilizations?.[civilizationId]?.name ?? civilizationId} assaults (${bulkPlan.target.col},${bulkPlan.target.row})`, {
+      civilizationId, action: 'bulk_attack', targetCol: bulkPlan.target.col, targetRow: bulkPlan.target.row,
+      targetType: bulkPlan.targetType, targetDefense: bulkPlan.targetDefense, requiredUnits: bulkPlan.requiredUnits,
+      score: aggression.score, reasons: aggression.reasons,
+    });
+  }
+
+  /** Refresh (and cache) the civ's situational aggression posture. */
+  private getAggressionState(civilizationId: number, storage: any, roundNumber: number): AggressionState {
+    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+    const cached = aiState.aggression;
+    // Re-evaluate a few times per turn so captures/threats flip the posture
+    // reasonably quickly without per-unit overhead.
+    if (cached && roundNumber - (cached.lastEvaluation ?? 0) < 3) {
+      return cached;
+    }
+    const gameState = this.buildGameState(civilizationId);
+    const assessment = this.evaluateAggression(civilizationId, gameState);
+    const state: AggressionState = {
+      score: assessment.score,
+      posture: assessment.aggressive ? 'aggressive' : 'defensive',
+      reasons: assessment.reasons,
+      lastEvaluation: roundNumber,
+    };
+    if (storage?.turnData) {
+      aiState.aggression = state;
+      storage.turnData.aiState = aiState;
+    }
+    return state;
+  }
+
+  /** Situational aggression score from the current game snapshot. */
+  private evaluateAggression(civilizationId: number, gameState: any): AggressionAssessment {
+    const personality = this.gameEngine.civilizations?.[civilizationId]?.personality;
+    const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
+
+    let knownEnemyCities = 0;
+    if (storage?.enemyLocations) {
+      for (const enemies of storage.enemyLocations.values()) {
+        for (const e of enemies) {
+          if (e.type === 'city') knownEnemyCities++;
+        }
+      }
+    }
+
+    return computeAggression({
+      personalityAggression: personality?.aggression ?? 5,
+      ownArmyStrength: gameState.ownMilitaryStrength,
+      enemyArmyStrength: gameState.averageEnemyStrength,
+      criticalThreats: gameState.criticalThreatsCount,
+      threatenedCities: gameState.threatenedCitiesCount,
+      knownEnemyCities,
+      numOwnCities: gameState.numOwnCities,
+      numEnemyCities: knownEnemyCities,
+      isAtWar: gameState.isAtWar,
+      currentYear: gameState.currentYear,
+    });
+  }
+
+  /** Flatten stored enemy intelligence into the known-target list for bulk planning. */
+  private collectKnownTargets(civilizationId: number, storage: any, roundNumber: number): KnownTarget[] {
+    const targets: KnownTarget[] = [];
+    if (!storage?.enemyLocations) return targets;
+    for (const enemyList of storage.enemyLocations.values()) {
+      for (const loc of enemyList) {
+        const age = roundNumber - (loc.lastSeenRound ?? loc.discoveredRound ?? roundNumber);
+        if (age > 20) continue;
+        targets.push({
+          col: loc.col,
+          row: loc.row,
+          type: loc.type,
+          id: loc.id,
+          lastSeenRound: loc.lastSeenRound,
+          discoveredRound: loc.discoveredRound,
+        });
+      }
+    }
+    return targets;
   }
 
   private getOffensivePlanTarget(unit: Unit, storage: any): { col: number; row: number } | null {
@@ -1748,6 +1885,16 @@ export class AIManager {
 
     plan.assignedUnitIds = plan.assignedUnitIds || [];
 
+    // Withdraw: if the target has become too strong since the plan was made,
+    // units fall back to defensive/other assignments instead of suiciding into
+    // the assault. (The plan itself is cleared on the next re-plan.)
+    if (typeof plan.targetDefense === 'number') {
+      const availableStrength = this.calculateAvailableArmyStrength(unit.civilizationId);
+      if (availableStrength < plan.targetDefense * BULK_ATTACK_STRENGTH_RATIO) {
+        return null;
+      }
+    }
+
     if (plan.assignedUnitIds.includes(unit.id)) {
       return plan.target;
     }
@@ -1758,52 +1905,6 @@ export class AIManager {
     }
 
     return null;
-  }
-
-  private findBestOffensiveTarget(civilizationId: number, storage: any, roundNumber: number): { location: any; score: number } | null {
-    if (!storage || !storage.enemyLocations || storage.enemyLocations.size === 0) {
-      return null;
-    }
-
-    const friendlyCities = this.gameEngine.cities.filter((city: City) => city.civilizationId === civilizationId);
-    let best: { location: any; score: number } | null = null;
-
-    for (const enemyList of storage.enemyLocations.values()) {
-      for (const location of enemyList) {
-        const reference = friendlyCities.length > 0
-          ? friendlyCities
-          : this.gameEngine.units.filter((u: Unit) => u.civilizationId === civilizationId);
-        if (reference.length === 0) {
-          continue;
-        }
-
-        const estimatedDistance = reference.reduce((min: number, entity: any) => {
-          const distance = this.gameEngine.squareGrid!.squareDistance(entity.col, entity.row, location.col, location.row);
-          return Math.min(min, distance);
-        }, Infinity);
-
-        const isVisible = typeof this.gameEngine.isVisibleToPlayer === 'function'
-          ? this.gameEngine.isVisibleToPlayer(civilizationId, location.col, location.row)
-          : false;
-
-        const { score } = scoreEnemyTarget({
-          location,
-          distance: isFinite(estimatedDistance) ? estimatedDistance : 0,
-          currentRound: roundNumber,
-          isCurrentlyVisible: isVisible
-        });
-
-        if (score < 25) {
-          continue;
-        }
-
-        if (!best || score > best.score) {
-          best = { location, score };
-        }
-      }
-    }
-
-    return best;
   }
 
   /** Choose one strong/nearby combat unit to remain with each own city. */
@@ -2048,6 +2149,7 @@ export class AIManager {
     knownEnemyCities: number;
     numEnemyCitiesKnown: number;
     threatenedCitiesCount: number;
+    criticalThreatsCount: number;
     hasLibrary: boolean;
     totalScience: number;
     hasWaterAccess: boolean;
@@ -2085,6 +2187,9 @@ export class AIManager {
     // Count threatened cities
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
     const threatened = this.identifyThreatenedCities(civilizationId, storage, roundNumber);
+    const criticalThreatsCount = threatened.filter(
+      (t) => (t.assessment?.netThreat ?? 0) >= 2.5,
+    ).length;
 
     // Check for library in any city
     const hasLibrary = cities.some((c: any) => c.buildings?.includes('library'));
@@ -2107,6 +2212,7 @@ export class AIManager {
       knownEnemyCities,
       numEnemyCitiesKnown: knownEnemyCities,
       threatenedCitiesCount: threatened.length,
+      criticalThreatsCount,
       hasLibrary,
       totalScience,
       hasWaterAccess,

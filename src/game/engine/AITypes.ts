@@ -43,6 +43,20 @@ interface OffensivePlan {
   requiredUnits: number;
   assignedUnitIds: string[];
   roundPrepared: number;
+  /** Estimated defensive strength of the target (used to withdraw when it grows too strong). */
+  targetDefense?: number;
+  /** Owner of the target city (used to declare the rush war). */
+  targetCivId?: number;
+}
+
+/** Situational aggression state, refreshed a few times per turn. */
+export interface AggressionState {
+  /** 0-100 situational aggression score. */
+  score: number;
+  posture: 'defensive' | 'aggressive';
+  /** Human-readable reasons that pushed the score up or down. */
+  reasons: string[];
+  lastEvaluation: number;
 }
 
 export interface ArmyGroup {
@@ -78,6 +92,8 @@ export interface AIState {
   offensivePlan: OffensivePlan | null;
   /** Army groups for coordinated movement */
   armyGroups: ArmyGroup[];
+  /** Situational aggression posture (score + reasons). */
+  aggression: AggressionState | null;
   /** Per-city building priorities (cityId -> plans) */
   buildingPriorities: Record<string, BuildingPlan[]>;
   /** Current tech research rationale */
@@ -92,6 +108,7 @@ export function createDefaultAIState(): AIState {
     offensivePlans: [],
     offensivePlan: null,
     armyGroups: [],
+    aggression: null,
     buildingPriorities: {},
     researchPriority: null,
   };
