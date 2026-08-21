@@ -420,7 +420,7 @@ export class MapRenderer {
       }
     }
 
-    // ── Pass 2: color-based edge transitions (clean, no blob patterns) ───
+    // ── Pass 2: texture-based edge transitions (Wesnoth-style) ──────────
     if (tm && tm.isReady) {
       for (let row = 0; row < map.height; row++) {
         for (let col = 0; col < map.width; col++) {
@@ -441,12 +441,8 @@ export class MapRenderer {
             if (!n?.explored || n.type === tile.type) continue;
             const nPriority = tm.getPriority(n.type);
             if (nPriority <= tPriority) continue;
-            const diff    = nPriority - tPriority;
-            // Softer, wider blends than v1 — transitions should read as a
-            // gentle merge, not a hard painted band along the seam.
-            const alpha   = Math.min(0.55, 0.30 + diff * 0.04);
-            const blend   = Math.min(0.55, 0.30 + diff * 0.02);
-            tm.drawColorTransition(ctx, n.type, x, y, scaledTile, dir, blend, alpha);
+            const diff = nPriority - tPriority;
+            tm.drawTextureTransition(ctx, n.type, x, y, scaledTile, dir, diff);
           }
         }
       }
@@ -812,7 +808,7 @@ export class MapRenderer {
           ctx.fillRect(tileX, tileY, scaledTileSize, scaledTileSize);
         }
 
-        // Color-based edge transitions
+        // Texture-based edge transitions (Wesnoth-style)
         if (tm && tm.isReady) {
           const tPriority = tm.getPriority(tile.type);
           const edges: Array<{ dcol: number; drow: number; dir: 'N'|'E'|'S'|'W' }> = [
@@ -826,10 +822,8 @@ export class MapRenderer {
             if (!n?.explored || n.type === tile.type) continue;
             const nPriority = tm.getPriority(n.type);
             if (nPriority <= tPriority) continue;
-            const diff  = nPriority - tPriority;
-            const alpha = Math.min(0.72, 0.42 + diff * 0.05);
-            const blend = Math.min(0.42, 0.25 + diff * 0.025);
-            tm.drawColorTransition(ctx, n.type, tileX, tileY, scaledTileSize, dir, blend, alpha);
+            const diff = nPriority - tPriority;
+            tm.drawTextureTransition(ctx, n.type, tileX, tileY, scaledTileSize, dir, diff);
           }
         }
 

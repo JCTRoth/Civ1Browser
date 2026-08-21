@@ -73,6 +73,8 @@ export const TERRAIN_BLEND_COLOR: Record<string, string> = {
 export class TerrainTextureManager {
   private readonly baseCache    = new Map<string, HTMLImageElement>();
   private readonly featureCache = new Map<string, HTMLImageElement>();
+  /** Reusable offscreen canvas for texture-based transition compositing. */
+  private transitionCanvas: HTMLCanvasElement | null = null;
 
   readonly ready: Promise<void>;
   private loadedCount = 0;
@@ -143,10 +145,80 @@ export class TerrainTextureManager {
     }
   }
 
-  // ── Color-based edge transitions (clean, no texture-blob artifacts) ──────
+  // ── Texture-based edge transitions (Wesnoth-style) ──────────────────────
   //
-  // Draws a solid-color gradient from the shared edge inward, clipped to the
-  // half of the tile facing that edge so opposing transitions never overlap.
+  // Draws a strip of the actual neighbor terrain texture at the shared edge,
+  // masked with a gradient that fades from ~75 % at the seam to 0 % at ~40 %
+  // into the current tile.  Uses a cached offscreen canvas for compositing.
+  //
+  // The neighbor texture is drawn at its natural position relative to the
+  // current tile so only the "bleeding" portion shows through the mask.
+
+  drawTextureTransition(
+    ctx: CanvasRenderingContext2D,
+    neighborType: string,
+    tileX: number, tileY: number, tileSize: number,
+    direction: 'N' | 'E' | 'S' | 'W',
+    priorityDiff = 1,
+  ): void {
+    const img = this.getTexture(neighborType);
+    if (!img || !img.complete || img.naturalWidth === 0) {
+      this.drawColorTransition(ctx, neighborType, tileX, tileY, tileSize, direction);
+      return;
+    }
+
+    // Lazily create / resize the shared offscreen canvas.
+    if (!this.transitionCanvas) {
+      this.transitionCanvas = document.createElement('canvas');
+    }
+    const tc = this.transitionCanvas;
+    if (tc.width !== tileSize || tc.height !== tileSize) {
+      tc.width  = tileSize;
+      tc.height = tileSize;
+    }
+    const tCtx = tc.getContext('2d')!;
+    tCtx.clearRect(0, 0, tileSize, tileSize);
+
+    // Draw the neighbor texture positioned so the shared edge shows its texture.
+    // For seamless textures we just fill the offscreen canvas with the neighbor
+    // texture — the gradient mask determines how far it bleeds inward.
+    tCtx.drawImage(img, 0, 0, tileSize, tileSize);
+
+    // Scale blend strength with priority difference; clamp to a reasonable range.
+    const edgeAlpha = Math.min(0.82, 0.55 + priorityDiff * 0.06);
+    const fadeFrac  = Math.min(0.45, 0.28 + priorityDiff * 0.03);
+
+    // Mask with a gradient: opaque at the shared edge, transparent at fadeFrac.
+    tCtx.globalCompositeOperation = 'destination-in';
+    let g: CanvasGradient;
+    const fadeY = tileSize * fadeFrac;
+    switch (direction) {
+      case 'N': g = tCtx.createLinearGradient(0, 0,        0, tileSize);  break;
+      case 'S': g = tCtx.createLinearGradient(0, tileSize, 0, 0);          break;
+      case 'E': g = tCtx.createLinearGradient(tileSize, 0, 0, 0);          break;
+      case 'W': g = tCtx.createLinearGradient(0, 0, tileSize, 0);          break;
+    }
+    g.addColorStop(0,                       `rgba(0,0,0,${edgeAlpha.toFixed(2)})`);
+    g.addColorStop(fadeY * 0.35 / tileSize, `rgba(0,0,0,${(edgeAlpha * 0.4).toFixed(2)})`);
+    g.addColorStop(fadeFrac,                'rgba(0,0,0,0)');
+    g.addColorStop(1,                       'rgba(0,0,0,0)');
+    tCtx.fillStyle = g;
+    tCtx.fillRect(0, 0, tileSize, tileSize);
+    tCtx.globalCompositeOperation = 'source-over';
+
+    // Composite the masked texture onto the main canvas, clipped to this tile.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(tileX, tileY, tileSize, tileSize);
+    ctx.clip();
+    ctx.drawImage(tc, tileX, tileY);
+    ctx.restore();
+  }
+
+  // ── Color-based edge transitions (fallback) ──────────────────────────────
+  //
+  // Draws a solid-color gradient from the shared edge inward.
+  // Used when textures are not yet loaded.
 
   drawColorTransition(
     ctx: CanvasRenderingContext2D,
