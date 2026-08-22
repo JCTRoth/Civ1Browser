@@ -411,7 +411,7 @@ export class MapRenderer {
 
         const terrainInfo = this.resolveTerrain(tile.type);
         if (tm) {
-          tm.drawTile(ctx, tile.type, x, y, scaledTile, terrainInfo.color, true);
+          tm.drawTile(ctx, tile.type, x, y, scaledTile, terrainInfo.color, true, col, row);
         } else {
           ctx.fillStyle = terrainInfo.color;
           ctx.fillRect(x, y, scaledTile, scaledTile);
@@ -498,7 +498,7 @@ export class MapRenderer {
           if (!tile?.explored || !tile.visible) continue;
           const x = col * scaledTile;
           const y = row * scaledTile;
-          tm.drawFeature(ctx, tile.type, x, y, scaledTile);
+          tm.drawFeature(ctx, tile.type, x, y, scaledTile, col, row);
         }
       }
     }
@@ -851,7 +851,7 @@ export class MapRenderer {
 
         // Draw base terrain texture
         if (tm) {
-          tm.drawTile(ctx, tile.type, tileX, tileY, scaledTileSize, terrainInfo.color, true);
+          tm.drawTile(ctx, tile.type, tileX, tileY, scaledTileSize, terrainInfo.color, true, col, row);
         } else {
           ctx.fillStyle = terrainInfo.color;
           ctx.fillRect(tileX, tileY, scaledTileSize, scaledTileSize);
@@ -933,7 +933,7 @@ export class MapRenderer {
           const { x, y } = squareToScreen(col, row);
           if (this.isOutsideViewport(x, y + scaledTileSize / 2, canvasSize.width, canvasSize.height, scaledTileSize * 2)) continue;
           const half = scaledTileSize / 2;
-          tm.drawFeature(ctx, tile.type, x - half, y - half, scaledTileSize);
+          tm.drawFeature(ctx, tile.type, x - half, y - half, scaledTileSize, col, row);
         }
       }
     }

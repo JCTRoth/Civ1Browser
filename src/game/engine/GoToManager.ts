@@ -1,16 +1,18 @@
 import { Unit } from '../../../types/game';
 import { Pathfinding } from './Pathfinding';
+import type { GameEngine } from '../../../types/game';
+import type { TurnManager } from './TurnManager';
 
 /**
  * GoToManager - Manages unit "Go To" movement commands
  * Handles pathfinding, path execution, and automatic movement along calculated routes
  */
 export class GoToManager {
-  private gameEngine: any;
-  private roundManager: any;
+  private gameEngine: GameEngine;
+  private roundManager: TurnManager;
   private unitPaths: Map<string, Array<{ col: number; row: number }>>;
 
-  constructor(gameEngine: any, roundManager: any) {
+  constructor(gameEngine: GameEngine, roundManager: TurnManager) {
     this.gameEngine = gameEngine;
     this.roundManager = roundManager;
     this.unitPaths = new Map();
@@ -44,7 +46,7 @@ export class GoToManager {
 
       if (pathResult.success && pathResult.path.length > 1) {
         // Exclude starting position
-        const path = pathResult.path.slice(1).map((step: any) => ({
+        const path = pathResult.path.slice(1).map((step: { col: number; row: number }) => ({
           col: step.col,
           row: step.row
         }));

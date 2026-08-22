@@ -5,13 +5,14 @@ import { ModalUtils } from './ModalUtils';
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
 import ProductionSelectionModal from './ProductionSelectionModal';
+import GameEngine from '@/game/engine/GameEngine';
 import '../../../styles/cityModal.css';
 
 interface CityModalProps {
   show: boolean;
   onHide: () => void;
   selectedCity: any;
-  gameEngine: any;
+  GameEngine: GameEngine;
   actions: any;
   currentPlayer: any;
   isPlayerCity: boolean;
@@ -21,7 +22,7 @@ const CityModal: React.FC<CityModalProps> = ({
   show,
   onHide,
   selectedCity,
-  gameEngine,
+  GameEngine: gameEngine,
   actions,
   currentPlayer,
   isPlayerCity
@@ -84,6 +85,11 @@ const CityModal: React.FC<CityModalProps> = ({
         <Modal.Header className="hex-detail-modal-header text-white">
           <Modal.Title>
             <i className="bi bi-building"></i> {selectedCity.name}
+            {isPlayerCity && (
+              <span className="ms-3 fs-6 fw-normal">
+                <i className="bi bi-coin text-warning"></i> {currentPlayer?.resources?.gold ?? 0} gold
+              </span>
+            )}
           </Modal.Title>
           <Button variant="outline-light" size="sm" onClick={onHide} className="hex-detail-close-button">
             <i className="bi bi-x-lg"></i>
@@ -124,18 +130,58 @@ const CityModal: React.FC<CityModalProps> = ({
                               Turns remaining: {logic.getFormattedTurns()}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-danger ms-2"
-                            title="Remove current production"
-                            onClick={() => {
-                              if (gameEngine && typeof gameEngine.removeCurrentProduction === 'function') {
-                                gameEngine.removeCurrentProduction(selectedCity.id);
-                              }
-                            }}
-                          >
-                            <i className="bi bi-x-lg"></i>
-                          </button>
+                          <div className="d-flex flex-column gap-1 ms-2">
+                            {(() => {
+                              const totalCost = logic.getCurrentProductionCost();
+                              const progress = logic.getProductionProgressValue();
+                              const remainingShields = Math.max(0, totalCost - progress);
+                              const playerGold = currentPlayer?.resources?.gold ?? 0;
+                              const purchasedThisTurn = ((selectedCity as any).purchasedThisTurn?.length ?? 0) > 0;
+                              const canBuy = remainingShields > 0 && playerGold >= remainingShields && !purchasedThisTurn;
+                              return (
+                                <button
+                                  type="button"
+                                  className={`btn btn-sm ${canBuy ? 'btn-warning' : 'btn-outline-warning'}`}
+                                  disabled={!canBuy}
+                                  title={
+                                    purchasedThisTurn
+                                      ? 'Already purchased this turn'
+                                      : remainingShields <= 0
+                                        ? 'Production complete'
+                                        : playerGold < remainingShields
+                                          ? `Need ${remainingShields} gold (have ${playerGold})`
+                                          : `Buy remaining for ${remainingShields} gold`
+                                  }
+                                  onClick={() => {
+                                    if (gameEngine && typeof gameEngine.purchaseCityProduction === 'function') {
+                                      const item = selectedCity.currentProduction;
+                                      gameEngine.purchaseCityProduction(selectedCity.id, item);
+                                      if (actions?.addNotification) {
+                                        actions.addNotification({
+                                          type: 'success',
+                                          message: `Purchased ${logic.getCurrentProductionName()} for ${remainingShields} gold!`
+                                        });
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <i className="bi bi-coin"></i> Buy ({remainingShields}g)
+                                </button>
+                              );
+                            })()}
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              title="Remove current production"
+                              onClick={() => {
+                                if (gameEngine && typeof gameEngine.removeCurrentProduction === 'function') {
+                                  gameEngine.removeCurrentProduction(selectedCity.id);
+                                }
+                              }}
+                            >
+                              <i className="bi bi-x-lg"></i>
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="text-muted">No active production</div>
@@ -490,11 +536,25 @@ const CityModal: React.FC<CityModalProps> = ({
         show={showProductionModal}
         onHide={() => setShowProductionModal(false)}
         currentPlayer={currentPlayer}
+        playerGold={currentPlayer?.resources?.gold ?? 0}
+        purchasedThisTurn={((selectedCity as any)?.purchasedThisTurn?.length ?? 0) > 0}
         onSelectProduction={key => {
           // Always queue the selected item when picking from the modal
           handleQueueProduction(key);
           // keep the selected production visible after queuing
           setSelectedProductionKey(key);
+          setShowProductionModal(false);
+        }}
+        onPurchase={(key, item) => {
+          if (gameEngine && typeof gameEngine.purchaseCityProduction === 'function') {
+            gameEngine.purchaseCityProduction(selectedCity.id, item);
+            if (actions?.addNotification) {
+              actions.addNotification({
+                type: 'success',
+                message: `Purchased ${item.name} for ${item.cost} gold!`
+              });
+            }
+          }
           setShowProductionModal(false);
         }}
       />

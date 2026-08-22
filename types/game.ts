@@ -203,6 +203,8 @@ export interface City {
   processTurn?: (gameMap: any, turn: number) => void;
   /** Tile keys (e.g. "col,row") that citizens are currently working. */
   workingTiles?: Set<string>;
+  /** Items purchased this turn (queued for next turn creation). */
+  purchasedThisTurn?: Array<{ type?: string; itemType?: string; name?: string; cost?: number }>;
 }
 
 /**
@@ -437,6 +439,8 @@ export interface GameEngine {
   technologies: Technology[];
   onStateChange: ((eventType: string, eventData: any) => void) | null;
   goToManager: any; // GoToManager instance for path management
+  /** Log a game event with category, message, and optional detail object. */
+  log(category: string, message: string, detail?: Record<string, unknown>): void;
   newGame(): void;
   processTurn(): void;
   moveUnit(unitId: string, col: number, row: number): { success: boolean; reason?: string };

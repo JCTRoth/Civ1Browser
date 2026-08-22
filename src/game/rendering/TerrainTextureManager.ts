@@ -76,9 +76,13 @@ export const TERRAIN_BLEND_COLOR: Record<string, string> = {
  */
 export const TRANSITION_DISTANCE = 0.15;
 
+/** Max number of additional numbered variants to probe per type (_2 … _N+1). */
+const MAX_VARIANT_PROBES = 4;
+
 export class TerrainTextureManager {
-  private readonly baseCache    = new Map<string, HTMLImageElement>();
-  private readonly featureCache = new Map<string, HTMLImageElement>();
+  /** Arrays hold the primary image at index 0, then any loaded variants. */
+  private readonly baseCache    = new Map<string, HTMLImageElement[]>();
+  private readonly featureCache = new Map<string, HTMLImageElement[]>();
   /** Reusable offscreen canvas for texture-based transition compositing. */
   private transitionCanvas: HTMLCanvasElement | null = null;
   /** Dedicated offscreen canvas for feature blending (wider than a tile). */
@@ -101,29 +105,63 @@ export class TerrainTextureManager {
       if (this.loadedCount >= this.totalCount) { resolve(); onLoad?.(); }
     };
 
+    const probeVariants = (baseUrl: string, arr: HTMLImageElement[]) => {
+      const stem = baseUrl.replace(/\.png$/, '');
+      for (let v = 2; v <= 1 + MAX_VARIANT_PROBES; v++) {
+        const img = new Image();
+        img.onload = () => arr.push(img);
+        // onerror: variant absent — silently skip
+        img.src = `${stem}_${v}.png`;
+      }
+    };
+
     for (const type of baseTypes) {
+      const arr: HTMLImageElement[] = [];
+      this.baseCache.set(type, arr);
       const img = new Image();
-      img.onload = img.onerror = done;
+      img.onload = () => {
+        arr.push(img);
+        probeVariants(TERRAIN_TEXTURE_FILES[type]!, arr);
+        done();
+      };
+      img.onerror = done;
       img.src = TERRAIN_TEXTURE_FILES[type]!;
-      this.baseCache.set(type, img);
     }
     for (const type of featureTypes) {
+      const arr: HTMLImageElement[] = [];
+      this.featureCache.set(type, arr);
       const img = new Image();
-      img.onload = img.onerror = done;
+      img.onload = () => {
+        arr.push(img);
+        probeVariants(FEATURE_TEXTURE_FILES[type]!, arr);
+        done();
+      };
+      img.onerror = done;
       img.src = FEATURE_TEXTURE_FILES[type]!;
-      this.featureCache.set(type, img);
     }
   }
 
-  getTexture(type?: string | null): HTMLImageElement | null {
-    if (!type) return null;
-    return this.baseCache.get(type.toUpperCase()) ?? null;
+  /** Stable variant selection based on tile grid position. */
+  private pickVariant(arr: HTMLImageElement[], col: number, row: number): HTMLImageElement {
+    if (arr.length <= 1) return arr[0];
+    const idx = Math.abs(col * 7 + row * 13) % arr.length;
+    return arr[idx];
   }
 
-  getFeatureTexture(type?: string | null): HTMLImageElement | null {
+  getTexture(type?: string | null, col = 0, row = 0): HTMLImageElement | null {
     if (!type) return null;
-    const img = this.featureCache.get(type.toUpperCase());
-    return img?.complete && img.naturalWidth > 0 ? img : null;
+    const arr = this.baseCache.get(type.toUpperCase());
+    if (!arr || arr.length === 0) return null;
+    return this.pickVariant(arr, col, row);
+  }
+
+  getFeatureTexture(type?: string | null, col = 0, row = 0): HTMLImageElement | null {
+    if (!type) return null;
+    const arr = this.featureCache.get(type.toUpperCase());
+    if (!arr || arr.length === 0) return null;
+    const ready = arr.filter(img => img.complete && img.naturalWidth > 0);
+    if (ready.length === 0) return null;
+    return this.pickVariant(ready, col, row);
   }
 
   getPriority(type?: string | null): number {
@@ -141,8 +179,9 @@ export class TerrainTextureManager {
     x: number, y: number, size: number,
     fallbackColor: string,
     topLeft = false,
+    col = 0, row = 0,
   ): void {
-    const img = this.getTexture(terrainType);
+    const img = this.getTexture(terrainType, col, row);
     const px  = topLeft ? x : x - size / 2;
     const py  = topLeft ? y : y - size / 2;
     if (img && img.complete && img.naturalWidth > 0) {
@@ -168,8 +207,9 @@ export class TerrainTextureManager {
     tileX: number, tileY: number, tileSize: number,
     direction: 'N' | 'E' | 'S' | 'W',
     priorityDiff = 1,
+    col = 0, row = 0,
   ): void {
-    const img = this.getTexture(neighborType);
+    const img = this.getTexture(neighborType, col, row);
     if (!img || !img.complete || img.naturalWidth === 0) {
       this.drawColorTransition(ctx, neighborType, tileX, tileY, tileSize, direction);
       return;
@@ -270,7 +310,7 @@ export class TerrainTextureManager {
     if (winner.type === currentType) return;
 
     // Draw the corner transition with the winning texture
-    const img = this.getTexture(winner.type!);
+    const img = this.getTexture(winner.type!, tileX, tileY);
     if (!img || !img.complete || img.naturalWidth === 0) return;
 
     if (!this.transitionCanvas) {
@@ -373,8 +413,9 @@ export class TerrainTextureManager {
     ctx: CanvasRenderingContext2D,
     terrainType: string,
     tileX: number, tileY: number, tileSize: number,
+    col = 0, row = 0,
   ): void {
-    const img = this.getFeatureTexture(terrainType);
+    const img = this.getFeatureTexture(terrainType, col, row);
     if (!img) return;
 
     const overhang  = tileSize * 0.5;

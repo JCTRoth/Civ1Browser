@@ -6,8 +6,13 @@ interface ProductionSelectionModalProps {
   show: boolean;
   onHide: () => void;
   onSelectProduction: (key: string) => void;
+  onPurchase?: (key: string, item: { type: string; itemType: string; name: string; cost: number }) => void;
   /** The owning civilization (must expose `technologies` as an array of tech ids). */
   currentPlayer?: { technologies?: Array<string | Set<string>> | Set<string> } | null;
+  /** Player's current gold balance. */
+  playerGold?: number;
+  /** Whether the city already purchased something this turn. */
+  purchasedThisTurn?: boolean;
 }
 
 /** True when the civ has researched every tech in the (possibly single) requirement. */
@@ -40,17 +45,42 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
   show,
   onHide,
   onSelectProduction,
-  currentPlayer
+  onPurchase,
+  currentPlayer,
+  playerGold = 0,
+  purchasedThisTurn = false,
 }) => {
   const handleSelect = (key: string) => {
     onSelectProduction(key);
     onHide();
   };
 
+  const handleBuy = (key: string, type: 'unit' | 'building') => {
+    if (!onPurchase) return;
+    const props = type === 'unit' ? UNIT_PROPS[key] : BUILDING_PROPS[key];
+    if (!props) return;
+    onPurchase(key, {
+      type,
+      itemType: key,
+      name: props.name,
+      cost: props.cost,
+    });
+    onHide();
+  };
+
+  const canAfford = (cost: number) => playerGold >= cost;
+
   return (
     <Modal show={show} onHide={onHide} centered size="lg" dialogClassName="city-details-modal production-selection-modal hex-detail-modal">
       <Modal.Header className="hex-detail-modal-header text-white">
-        <Modal.Title>Select Production</Modal.Title>
+        <Modal.Title>
+          Select Production
+          {onPurchase && (
+            <span className="ms-3 fs-6 fw-normal">
+              <i className="bi bi-coin text-warning"></i> {playerGold} gold
+            </span>
+          )}
+        </Modal.Title>
         <Button variant="outline-light" size="sm" onClick={onHide} className="hex-detail-close-button">
           <i className="bi bi-x-lg"></i>
         </Button>
@@ -76,22 +106,43 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                     const canBuild = hasRequiredTechs(currentPlayer, requires);
                     const requiredTech = Array.isArray(requires) ? requires.join(', ') : requires || 'None';
                     const stats = `${unit.attack}/${unit.defense} (${unit.movement} moves)`;
+                    const affordable = canAfford(unit.cost);
+                    const canBuy = canBuild && affordable && !purchasedThisTurn && !!onPurchase;
                     return (
                       <tr key={key} className={canBuild ? '' : 'text-muted'}>
                         <td>{unit.name}</td>
                         <td>{requiredTech}</td>
                         <td>{stats}</td>
-                        <td>{unit.cost}</td>
+                        <td>{unit.cost} <i className="bi bi-gear"></i></td>
                         <td>
-                          <Button
-                            variant="outline-primary"
-                            size="sm"
-                            disabled={!canBuild}
-                            title={canBuild ? '' : `Requires ${requiredTech} technology`}
-                            onClick={() => handleSelect(key)}
-                          >
-                            {canBuild ? 'Select' : `Requires ${requiredTech}`}
-                          </Button>
+                          <div className="d-flex gap-1">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              disabled={!canBuild}
+                              title={canBuild ? '' : `Requires ${requiredTech} technology`}
+                              onClick={() => handleSelect(key)}
+                            >
+                              {canBuild ? 'Select' : `Requires ${requiredTech}`}
+                            </Button>
+                            {canBuild && (
+                              <Button
+                                variant="outline-warning"
+                                size="sm"
+                                disabled={!canBuy}
+                                title={
+                                  purchasedThisTurn
+                                    ? 'Already purchased this turn'
+                                    : !affordable
+                                      ? `Need ${unit.cost} gold (have ${playerGold})`
+                                      : `Buy now for ${unit.cost} gold`
+                                }
+                                onClick={() => handleBuy(key, 'unit')}
+                              >
+                                <i className="bi bi-coin"></i> Buy ({unit.cost}g)
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -117,22 +168,43 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                     const building = BUILDING_PROPS[key];
                     const requiredTech = (building as { requiredTechnology?: string }).requiredTechnology || null;
                     const canBuild = hasRequiredTechs(currentPlayer, requiredTech);
+                    const affordable = canAfford(building.cost);
+                    const canBuy = canBuild && affordable && !purchasedThisTurn && !!onPurchase;
                     return (
                       <tr key={key} className={canBuild ? '' : 'text-muted'}>
                         <td>{building.name}</td>
                         <td>{requiredTech || 'None'}</td>
                         <td>{building.description}</td>
-                        <td>{building.cost}</td>
+                        <td>{building.cost} <i className="bi bi-gear"></i></td>
                         <td>
-                          <Button
-                            variant="outline-success"
-                            size="sm"
-                            disabled={!canBuild}
-                            title={canBuild ? '' : `Requires ${requiredTech} technology`}
-                            onClick={() => handleSelect(key)}
-                          >
-                            {canBuild ? 'Select' : `Requires ${requiredTech}`}
-                          </Button>
+                          <div className="d-flex gap-1">
+                            <Button
+                              variant="outline-success"
+                              size="sm"
+                              disabled={!canBuild}
+                              title={canBuild ? '' : `Requires ${requiredTech} technology`}
+                              onClick={() => handleSelect(key)}
+                            >
+                              {canBuild ? 'Select' : `Requires ${requiredTech}`}
+                            </Button>
+                            {canBuild && (
+                              <Button
+                                variant="outline-warning"
+                                size="sm"
+                                disabled={!canBuy}
+                                title={
+                                  purchasedThisTurn
+                                    ? 'Already purchased this turn'
+                                    : !affordable
+                                      ? `Need ${building.cost} gold (have ${playerGold})`
+                                      : `Buy now for ${building.cost} gold`
+                                }
+                                onClick={() => handleBuy(key, 'building')}
+                              >
+                                <i className="bi bi-coin"></i> Buy ({building.cost}g)
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

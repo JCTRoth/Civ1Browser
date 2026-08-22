@@ -10,14 +10,15 @@
  */
 
 import { getGovernment } from '../../data/GovernmentData';
+import type { Civilization, GameEngine } from '../../../types/game';
 
 /** How many turns a revolution (anarchy) lasts before the new government applies. */
 export const ANARCHY_TURNS = 3;
 
 export class GovernmentManager {
-  private gameEngine: any;
+  private gameEngine: GameEngine;
 
-  constructor(gameEngine: any) {
+  constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
   }
 
@@ -25,7 +26,7 @@ export class GovernmentManager {
   // Tech-gated government availability
   // ------------------------------------------------------------------
 
-  private hasTech(civ: any, techId: string): boolean {
+  private hasTech(civ: Civilization, techId: string): boolean {
     const techs = civ?.technologies;
     if (!techs) return false;
     if (techs instanceof Set) return techs.has(techId);
@@ -37,7 +38,7 @@ export class GovernmentManager {
    * Governments unlocked by the civ's researched technologies.
    * Despotism is always available (the starting government).
    */
-  getAvailableGovernments(civ: any): string[] {
+  getAvailableGovernments(civ: Civilization): string[] {
     const unlocked: string[] = ['despotism'];
     if (this.hasTech(civ, 'monarchy')) unlocked.push('monarchy');
     if (this.hasTech(civ, 'republic')) unlocked.push('republic');
@@ -47,12 +48,12 @@ export class GovernmentManager {
   }
 
   /** Whether a civ is currently in anarchy (revolution in progress). */
-  isInRevolution(civ: any): boolean {
+  isInRevolution(civ: Civilization): boolean {
     return !!civ && civ.government === 'anarchy' && (civ.revolutionTurns ?? 0) > 0;
   }
 
   /** The government a civ should adopt next, or null if it has the best one. */
-  bestGovernmentForCiv(civ: any): string | null {
+  bestGovernmentForCiv(civ: Civilization): string | null {
     const available = this.getAvailableGovernments(civ);
     if (available.length <= 1) return null;
     const current = civ?.government ?? 'despotism';
@@ -100,10 +101,10 @@ export class GovernmentManager {
    * Advance a civ's revolution countdown. Called once per civ per turn; when the
    * countdown reaches 0 the pending government is applied and rates re-apply.
    */
-  processTurn(civ: any): void {
+  processTurn(civ: Civilization): void {
     if (!civ || (civ.revolutionTurns ?? 0) <= 0) return;
-    civ.revolutionTurns -= 1;
-    if (civ.revolutionTurns <= 0) {
+    civ.revolutionTurns! -= 1;
+    if (civ.revolutionTurns! <= 0) {
       const gov = civ.pendingGovernment ?? 'despotism';
       civ.revolutionTurns = 0;
       civ.pendingGovernment = undefined;

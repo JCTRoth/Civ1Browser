@@ -23,9 +23,10 @@ export enum TurnPhase {
 import { AIResearch } from './AIResearch';
 import { createDefaultAIState } from './AITypes';
 import { serializeCities } from '../../utils/CitySnapshots';
+import type { City, Civilization, GameEngine, Unit } from '../../../types/game';
 
 export class TurnManager {
-  private gameEngine: any;
+  private gameEngine: GameEngine;
   private unitPaths: Map<string, Array<{ col: number; row: number }>>;
   private AI_MAX_TURN_MS = 30000; // timeout for AI movement phase
   private isProcessingGoToPaths = false; // Prevents auto-end while GoTo is executing
@@ -36,7 +37,7 @@ export class TurnManager {
   private playerRegistered = false;
   private roundNumber = 0; // Tracks complete rounds (all players have played)
 
-  constructor(gameEngine: any) {
+  constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
     this.unitPaths = new Map();
     console.log('[TurnManager] Initialized');
@@ -50,7 +51,7 @@ export class TurnManager {
   isAITurnInProgress(): boolean { return this.aiTurnInProgress; }
 
   // --- Event helper ---
-  private emit(eventType: string, data: any = {}) {
+  private emit(eventType: string, data: Record<string, unknown> = {}) {
     if (this.gameEngine && typeof this.gameEngine.onStateChange === 'function') {
       this.gameEngine.onStateChange(eventType, data);
     }
@@ -679,7 +680,9 @@ export class TurnManager {
 
   private createPurchasedUnit(city: any, item: any): void {
     const unitType = item.itemType;
-    this.createProducedUnit(city, unitType, 'UNIT_PURCHASED');
+    // Purchased units do NOT consume population or destroy the city —
+    // that only happens for shield-based production (Civ1 rules).
+    this.createProducedUnit(city, unitType, 'UNIT_PURCHASED', /* isPurchased */ true);
   }
 
   private processCityProduction(city: any): void {
@@ -754,15 +757,17 @@ export class TurnManager {
     }
   }
 
-  private createProducedUnit(city: any, unitType: string, eventType = 'UNIT_PRODUCED'): boolean {
+  private createProducedUnit(city: any, unitType: string, eventType = 'UNIT_PRODUCED', isPurchased = false): boolean {
     const unitProps = (this.gameEngine.constructor as any).UNIT_PROPS?.[unitType]
       ?? { movement: 1, attack: 0, defense: 1 };
     const isSettler = unitType === 'settler';
     const isChieftain = String(this.gameEngine.gameSettings?.difficulty ?? '').toUpperCase() === 'CHIEFTAIN';
     const population = Number(city.population ?? 1);
+    // Purchased settlers do NOT consume population or destroy the city —
+    // only shield-based production triggers the Civ1 settler rule.
     const destroysCity = isSettler && population <= 1 && !isChieftain;
 
-    if (isSettler && population > 1) {
+    if (destroysCity) {
       // Civ1 consumes exactly one citizen when the settler completes.
       city.population = population - 1;
       city.foodNeeded = Math.max(20, city.population * 20);

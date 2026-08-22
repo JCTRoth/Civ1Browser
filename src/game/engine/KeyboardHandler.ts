@@ -1,18 +1,19 @@
 import { Unit } from '../../../types/game';
+import type { GameEngine, GameActions } from '../../../types/game';
 
 /**
  * KeyboardHandler - Manages keyboard input for unit actions
  */
 export class KeyboardHandler {
-  private gameEngine: any;
-  private actions: any;
+  private gameEngine: GameEngine;
+  private actions: GameActions;
   private getSelectedUnit: () => Unit | null;
   private getAllUnits: () => Unit[];
   private isMinimapMode: () => boolean;
 
   constructor(
-    gameEngine: any,
-    actions: any,
+    gameEngine: GameEngine,
+    actions: GameActions,
     getSelectedUnit: () => Unit | null,
     getAllUnits: () => Unit[],
     isMinimapMode: () => boolean

@@ -28,7 +28,7 @@ import {
   type CityThreatAssessment
 } from './AIStrategy';
 import type { DiplomatAction } from './DiplomacyTypes';
-import type { Unit, City } from '../../../types/game';
+import type { Unit, City, GameEngine, Civilization } from '../../../types/game';
 
 // How much better (in settlement-score points) the best location must be for a
 // settler to keep walking instead of founding at its current tile. Prevents
@@ -40,9 +40,9 @@ const SETTLE_SCORE_THRESHOLD = 12;
 const MAX_SETTLE_WALK_DISTANCE = 4;
 
 export class AIManager {
-  private gameEngine: any;
+  private gameEngine: GameEngine;
 
-  constructor(gameEngine: any) {
+  constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
   }
 

@@ -21,6 +21,7 @@ import type {
   DiplomatAction,
   TreatyType,
 } from './DiplomacyTypes';
+import type { GameEngine } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -47,13 +48,13 @@ const AI_DIPLOMACY_INTERVAL = 5;
 // ---------------------------------------------------------------------------
 
 export class DiplomacyManager {
-  private gameEngine: any;
+  private gameEngine: GameEngine;
   /** Canonical relation map keyed as "civA_civB" where civA < civB */
   private relations: Map<string, DiplomaticRelation> = new Map();
   /** Log of diplomatic events (most recent first, capped at 50) */
   private eventLog: DiplomacyEvent[] = [];
 
-  constructor(gameEngine: any) {
+  constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
   }
 

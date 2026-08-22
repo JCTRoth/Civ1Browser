@@ -1,4 +1,4 @@
-import type { Unit } from '../../../types/game';
+import type { Unit, City, GameEngine } from '../../../types/game';
 import { UNIT_PROPS } from '@/utils/Constants';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 
@@ -19,13 +19,13 @@ import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
  *    and then the city produces raiders every round.
  */
 export class BarbarianManager {
-  constructor(private readonly gameEngine: any) {}
+  constructor(private readonly gameEngine: GameEngine) {}
 
   /** Called once per round from the turn cycle. */
   processBarbarians(): void {
     const engine = this.gameEngine;
-    const units = (engine.units ?? []).filter((u: Unit) => u.civilizationId === BARBARIAN_CIV_ID);
-    const barbarianCities = (engine.cities ?? []).filter((c: any) => c.civilizationId === BARBARIAN_CIV_ID);
+    const units = (engine.units ?? []).filter((u) => u.civilizationId === BARBARIAN_CIV_ID);
+    const barbarianCities = (engine.cities ?? []).filter((c) => c.civilizationId === BARBARIAN_CIV_ID);
     if (units.length === 0 && barbarianCities.length === 0) return;
 
     // Global read of the battlefield.
