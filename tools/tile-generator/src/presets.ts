@@ -1,0 +1,126 @@
+import type { Preset } from './types';
+
+export const TERRAIN_PRESETS: Record<string, Preset> = {
+  ocean: {
+    name: 'Ocean',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, deep ocean water, rich cobalt blue with subtle whitecap ripple patterns, hand-painted illustration style like Battle for Wesnoth, viewed perfectly from above, no perspective, uniform tile pattern, natural organic water texture variation, ancient strategy game art, warm color grading',
+    color: '#4169E1',
+    file: 'terrain_ocean',
+    w: 256, h: 256,
+  },
+  plains: {
+    name: 'Plains',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, flat grassy plains, light yellowish-green grass with subtle variation, scattered wildflowers and pebbles, hand-painted illustration style like Battle for Wesnoth, viewed perfectly from above, no perspective, warm sun-lit color palette, soft green tones',
+    color: '#90EE90',
+    file: 'terrain_plains',
+    w: 256, h: 256,
+  },
+  grassland: {
+    name: 'Grassland',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, natural grassy meadow, soft muted sage-green short grass with gentle tonal variation, earthy yellow-olive undertones, subdued low-contrast palette, NOT saturated, NOT neon green, calm even lighting, faint tiny clover and dry herb details, classic Civilization 2 style, no trees no rocks, perfectly flat top-down view, painterly illustration',
+    color: '#32CD32',
+    file: 'terrain_grassland',
+    w: 256, h: 256,
+  },
+  forest: {
+    name: 'Forest',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, deciduous forest canopy viewed from directly above, dark green round tree crowns with dappled sunlight gaps between them, hand-painted illustration style like Battle for Wesnoth, rich greens and deep shadows between trees, organic natural pattern, warm forest light',
+    color: '#228B22',
+    file: 'terrain_forest',
+    w: 256, h: 256,
+  },
+  jungle: {
+    name: 'Jungle',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, dense tropical jungle canopy from directly above, very dark deep green with large overlapping broad leaves, exotic tropical feel, hand-painted illustration style like Battle for Wesnoth, deep shadow contrasts, dense thick foliage, humid tropical atmosphere',
+    color: '#1B7A3D',
+    file: 'terrain_jungle',
+    w: 256, h: 256,
+  },
+  hills: {
+    name: 'Hills',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, rolling hills terrain viewed from above, earthy yellowish-brown and green tones with subtle elevation shading, sparse dry grass and dirt patches, hand-painted illustration style like Battle for Wesnoth, warm earthy Mediterranean hills',
+    color: '#8FBC8F',
+    file: 'terrain_hills',
+    w: 256, h: 256,
+  },
+  mountains: {
+    name: 'Mountains',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, rocky mountain terrain viewed directly from above, gray stone with white snow at peaks, bare rock faces with crevices, hand-painted illustration style like Battle for Wesnoth, cool gray and white palette with dramatic rock shadows, high altitude alpine feel',
+    color: '#696969',
+    file: 'terrain_mountains',
+    w: 256, h: 256,
+  },
+  desert: {
+    name: 'Desert',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, arid sandy desert viewed from directly above, warm golden-orange sand with subtle dune ripple patterns and occasional pebbles, hand-painted illustration style like Battle for Wesnoth, hot dry atmosphere, rich sandy ochre and sienna tones',
+    color: '#F4A460',
+    file: 'terrain_desert',
+    w: 256, h: 256,
+  },
+  swamp: {
+    name: 'Swamp',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, murky swamp wetland viewed from above, dark brown-green muddy water with clumps of dead grass and moss, murky bubbles, hand-painted illustration style like Battle for Wesnoth, gloomy dark atmosphere, sickly olive and brown tones',
+    color: '#5B3A1E',
+    file: 'terrain_swamp',
+    w: 256, h: 256,
+  },
+  tundra: {
+    name: 'Tundra',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, frozen tundra viewed from directly above, cold pale gray-blue ground with sparse dead brown grass and frost patterns, icy patches, hand-painted illustration style like Battle for Wesnoth, cold bleak winter atmosphere, desaturated blue-gray palette',
+    color: '#B0C4DE',
+    file: 'terrain_tundra',
+    w: 256, h: 256,
+  },
+  arctic: {
+    name: 'Arctic',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, arctic snow and ice field viewed from directly above, pure white snow with subtle blue shadow patterns in snow drifts, cracked ice surface, hand-painted illustration style like Battle for Wesnoth, clean crisp cold atmosphere, white and pale blue palette',
+    color: '#F0F8FF',
+    file: 'terrain_arctic',
+    w: 256, h: 256,
+  },
+  river: {
+    name: 'River',
+    prompt: 'seamless tileable top-down 2D strategy game terrain texture, flowing river water viewed from directly above, clear blue-green water with subtle current ripples and small rocks, shallow riverbed visible, hand-painted illustration style like Battle for Wesnoth, fresh clean water feel, bright azure and teal tones',
+    color: '#3b82f6',
+    file: 'terrain_river',
+    w: 256, h: 256,
+  },
+};
+
+export const FEATURE_PRESETS: Record<string, Preset> = {
+  forest: {
+    name: 'Forest',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, cluster of 3-4 round deciduous tree canopies viewed from directly above (90-degree bird\'s-eye top-down view), flat circular leafy canopy tops fill the lower 70 percent of the image, tree trunks and ground completely hidden, rich deep green hand-painted canopies with subtle leaf clusters and soft warm highlights, classic Civilization 2 or Wesnoth strategy game art style, clean solid pale neutral background for easy background removal, portrait 256x384, no side view, no ground, no drop shadows',
+    color: '#228B22',
+    file: 'terrain_forest_feature',
+    w: 256, h: 384,
+  },
+  jungle: {
+    name: 'Jungle',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, dense tropical jungle canopy viewed from directly above (90-degree bird\'s-eye top-down view), large overlapping dark green palm fronds and broad tropical leaves seen flat from above, circular canopy shapes fill the lower 70 percent of the image, very lush and dense, trunk and ground hidden, classic Civilization 2 or Wesnoth strategy game art style, hand-painted, clean solid pale neutral background for easy background removal, portrait 256x384, no side view, no ground',
+    color: '#1B7A3D',
+    file: 'terrain_jungle_feature',
+    w: 256, h: 384,
+  },
+  hills: {
+    name: 'Hills',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, a single rounded grassy hill mound viewed from a steep top-down angle, mostly flat oval grassy top with warm green grass and subtle darker shading around the rounded rim to suggest gentle elevation, compact oval shape seen from above, feature sits in the lower 70 percent of the image, no trees no rocks, classic Civilization 2 or Wesnoth strategy game art style, hand-painted, clean solid pale neutral background for easy background removal, portrait 256x384',
+    color: '#8FBC8F',
+    file: 'terrain_hills_feature',
+    w: 256, h: 384,
+  },
+  mountains: {
+    name: 'Mountains',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, a dramatic rocky mountain peak viewed from a steep top-down angle, grey craggy stone ridges radiating from a central summit with white snow at the peak, wide rocky base with the peak as the highest point seen slightly from above, feature sits in the lower 60 percent with the summit reaching into the upper 40 percent, classic Civilization 2 or Wesnoth strategy game art style, hand-painted, clean solid pale neutral background for easy background removal, portrait 256x384',
+    color: '#696969',
+    file: 'terrain_mountains_feature',
+    w: 256, h: 384,
+  },
+  swamp: {
+    name: 'Swamp',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, a gnarled dead tree viewed from a steep top-down angle, twisted bare dark branches radiating outward seen from above, mossy bark, dark murky swamp water visible at the base, feature sits in the lower 70 percent of the image, classic Civilization 2 or Wesnoth strategy game art style, hand-painted, clean solid pale neutral background for easy background removal, portrait 256x384, no side view',
+    color: '#5B3A1E',
+    file: 'terrain_swamp_feature',
+    w: 256, h: 384,
+  },
+};
