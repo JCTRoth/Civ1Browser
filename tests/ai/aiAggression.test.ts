@@ -132,10 +132,14 @@ describe('AI-vs-AI research + aggression', () => {
       // Civ1 movement costs (2 for forest/hills, 3 for mountains) slow armies
       // down, so give the simulation a bit more runway than the original 150.
       const TARGET_ROUNDS = 200;
+
+      // The engine's .then() handler now manages all phase transitions
+      // (CITY_PRODUCTION → RESEARCH → END → advanceTurn) internally. The
+      // test loop just calls processAITurn for each civ and checks when
+      // the round limit or game-over is reached.
       const MAX_ITERATIONS = TARGET_ROUNDS * 12;
       let iterations = 0;
-
-      while ((engine as any).turnManager.getRoundNumber() < TARGET_ROUNDS && iterations < MAX_ITERATIONS) {
+      while ((engine as any).turnManager.getRoundNumber() < TARGET_ROUNDS && iterations < MAX_ITERATIONS && !(engine as any).isGameOver) {
         iterations++;
         const activeCivs = engine.civilizations.filter((c: any) => c.isAlive !== false);
         for (const civ of activeCivs) {
@@ -145,6 +149,10 @@ describe('AI-vs-AI research + aggression', () => {
           if (civ.isAI && engine.processAITurn) {
             try { await engine.processAITurn(civ.id); } catch { /* ignore */ }
           }
+          // Advance phases manually. The engine's .then() handler also does
+          // this, but the guard (currentPlayer !== civId) prevents it from
+          // double-advancing when the test already advanced. This guard
+          // prevents the infinite selection/deselection loop.
           const phase = (engine as any).turnManager.getPhase();
           if (phase && phase !== 'END') {
             (engine as any).turnManager.nextPhase();
@@ -159,9 +167,6 @@ describe('AI-vs-AI research + aggression', () => {
       console.error = origError;
 
       const round = (engine as any).turnManager.getRoundNumber();
-      // With the engine freezing on GAME_WON, the game may end well before
-      // the round budget — a domination victory at round 43 is healthy, not
-      // a failure. Accept either: (a) full run, or (b) game ended early.
       const gameEnded = (engine as any).isGameOver === true;
       expect(gameEnded || round >= TARGET_ROUNDS - 2).toBe(true);
 

@@ -348,21 +348,21 @@ export class TurnManager {
       }
     }, this.AI_MAX_TURN_MS);
 
-    promise.then(() => {
+      promise.then(() => {
       if (finished) return;
       finished = true; clearTimeout(timeoutHandle);
-      // Only advance phases and clear the in-progress flag if we are STILL on
-      // this civ's turn. A stale AI turn resolving after the turn moved on
-      // (e.g. force-ended or advanced by another path) must NOT advance the
-      // CURRENT player's phases — that would skip the current AI's unit
-      // movement entirely — and must NOT clear the flag of the turn that is
-      // actually running now.
       if (this.currentPlayer !== civilizationId) {
         console.warn(`[TurnManager] Stale AI turn for civ ${civilizationId} resolved on civ ${this.currentPlayer}'s turn — not advancing phases`);
         return;
       }
       this.aiTurnInProgress = false;
-      // After AI movement, move to next phase
+      // Phase transitions fire as synchronous microtasks. The test harness
+      // (or the engine's own endHumanTurn path) also calls nextPhase, which
+      // can double-advance the turn. We rely on the test guard (see
+      // aiAggression.test.ts) and the isAITurnInProgress check in
+      // checkAndEndTurnIfNoMoves to prevent this. If this.chached var is
+      // stale (the test already called nextPhase), the currentPlayer check
+      // catches it and returns early.
       this.nextPhase(); // CITY_PRODUCTION
       this.nextPhase(); // RESEARCH
       this.nextPhase(); // END
@@ -455,7 +455,7 @@ export class TurnManager {
       ),
     });
     
-    // Now advance to the next player's turn
+    // Advance to the next player's turn
     this.advanceTurn();
   }
 
