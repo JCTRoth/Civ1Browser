@@ -510,7 +510,8 @@ export class AIManager {
 
         // Wait a little so moves are visible (skip in headless AI-vs-AI — the
         // 200ms per move adds up and trips the TurnManager AI timeout).
-        const isAIVsAI = this.gameEngine.gameSettings?.mapType === 'AI_VS_AI';
+        const isAIVsAI = this.gameEngine.gameSettings?.mapType === 'AI_VS_AI'
+          || this.gameEngine.gameSettings?.mapType === 'AI_VS_AI_SMALL';
         if (!isAIVsAI) {
           await this.gameEngine.sleep(200);
         }

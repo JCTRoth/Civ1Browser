@@ -111,7 +111,8 @@ function App() {
 
       // Start a named game-log session for every game. AI vs AI sessions get
       // a dedicated timestamped session id; others share a per-run id.
-      const logSessionId = gameSettings.mapType === 'AI_VS_AI'
+      const isAIVsAI = gameSettings.mapType === 'AI_VS_AI' || gameSettings.mapType === 'AI_VS_AI_SMALL';
+      const logSessionId = isAIVsAI
         ? `aivsai-${new Date().toISOString().replace(/[:.]/g, '-')}`
         : `game-${Date.now()}`;
       gameLogger.setSession(logSessionId);
@@ -124,7 +125,7 @@ function App() {
       }
 
       // AI vs AI sessions auto-enable dev mode so the whole map is observable.
-      if (gameSettings.mapType === 'AI_VS_AI') {
+      if (isAIVsAI) {
         actions.updateSettings({ devMode: true });
       }
 
@@ -478,7 +479,8 @@ function App() {
     // engine API (moveCursor, undoLastAction, …) is not part of the static
     // GameEngine type; a full typing pass is a separate cleanup.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const isAIVsAI = (gameEngine as any)?.gameSettings?.mapType === 'AI_VS_AI';
+    const isAIVsAI = (gameEngine as any)?.gameSettings?.mapType === 'AI_VS_AI'
+      || (gameEngine as any)?.gameSettings?.mapType === 'AI_VS_AI_SMALL';
     if (!isAIVsAI) {
       return;
     }

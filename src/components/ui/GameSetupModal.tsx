@@ -281,6 +281,7 @@ function GameSetupModal({ show, onStart }) {
                     <option value="TECH_LEVEL_10">Tech. Level 10 · All technologies researched</option>
                     <option value="ALL_UNITS">All Units Showcase · Every unit type on the board</option>
                     <option value="AI_VS_AI">Computer vs Computer · Auto-playing AI duel</option>
+                    <option value="AI_VS_AI_SMALL">Computer vs Computer (Small) · Tall narrow corridor</option>
                   </Form.Select>
                 </div>
               </div>
@@ -394,6 +395,14 @@ function GameSetupModal({ show, onStart }) {
                       <li>Map: <strong>40x40 tiles</strong></li>
                       <li>Players: <strong>All civilizations are AI</strong></li>
                       <li>Mode: <strong>Fully automatic — no human input</strong></li>
+                      <li>Log: <strong>Every move is written to a log file</strong></li>
+                    </ul>
+                  )}
+                  {mapType === 'AI_VS_AI_SMALL' && (
+                    <ul>
+                      <li>Map: <strong>16x26 tiles (Tall, narrow corridor)</strong></li>
+                      <li>Players: <strong>All civilizations are AI</strong></li>
+                      <li>Mode: <strong>Fully automatic — fast, tight combat</strong></li>
                       <li>Log: <strong>Every move is written to a log file</strong></li>
                     </ul>
                   )}

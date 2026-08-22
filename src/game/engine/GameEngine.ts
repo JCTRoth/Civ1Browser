@@ -434,7 +434,7 @@ export default class GameEngine {
    * turns crawl when the AI fields many units.
    */
   getAIMoveDelay(): number {
-    if (this.gameSettings?.mapType === 'AI_VS_AI') {
+    if (this.gameSettings?.mapType === 'AI_VS_AI' || this.gameSettings?.mapType === 'AI_VS_AI_SMALL') {
       return 5;
     }
     return 60;
@@ -444,7 +444,7 @@ export default class GameEngine {
    * Delay before an AI turn starts (visual pacing only).
    */
   getAITurnStartDelay(): number {
-    if (this.gameSettings?.mapType === 'AI_VS_AI') {
+    if (this.gameSettings?.mapType === 'AI_VS_AI' || this.gameSettings?.mapType === 'AI_VS_AI_SMALL') {
       return 10;
     }
     return 120;
@@ -694,6 +694,10 @@ export default class GameEngine {
       mapWidth = 40;
       mapHeight = 40;
       console.log(`[GameEngine] Using medium map size for ${mapType}: ${mapWidth}x${mapHeight}`);
+    } else if (mapType === 'AI_VS_AI_SMALL') {
+      mapWidth = 16;
+      mapHeight = 26;
+      console.log(`[GameEngine] Using small tall map for ${mapType}: ${mapWidth}x${mapHeight}`);
     }
     
     // Create hex grid system with appropriate size
@@ -887,7 +891,7 @@ export default class GameEngine {
       const civData = selectedCivs[i];
       
       // In AI_VS_AI mode every civilization is AI-controlled (no human player).
-      const isHuman = i === 0 && mapType !== 'AI_VS_AI';
+      const isHuman = i === 0 && mapType !== 'AI_VS_AI' && mapType !== 'AI_VS_AI_SMALL';
       const civ = {
         id: i,
         name: civData.name,
@@ -1010,6 +1014,7 @@ export default class GameEngine {
       case 'NORMAL_SKIRMISH':
       case 'CLOSEUP_1V1':
       case 'AI_VS_AI':
+      case 'AI_VS_AI_SMALL':
       case 'TECH_LEVEL_10':
         // Standard: 1 settler
         console.log(`[UNITS] Creating 1 settler for civ ${civId}`);
