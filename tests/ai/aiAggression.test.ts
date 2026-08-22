@@ -170,9 +170,11 @@ describe('AI-vs-AI research + aggression', () => {
         const techCount = (civ.technologies ?? []).length;
         // With conquest now a real outcome, a fully eliminated civ (0 cities
         // → 0 science) legitimately stalls; the winners must still have
-        // researched far past the starting 3.
+        // researched far past the starting 3. Floor is 5: since villages no
+        // longer grant non-settlers free cities, expansion (and with it tech
+        // pacing) is a touch slower, but 5+ still proves research is running.
         if (civ.isAlive !== false) {
-          expect(techCount).toBeGreaterThanOrEqual(6);
+          expect(techCount).toBeGreaterThanOrEqual(5);
         }
       }
       const maxTechs = Math.max(...engine.civilizations.map((c: any) => (c.technologies ?? []).length));

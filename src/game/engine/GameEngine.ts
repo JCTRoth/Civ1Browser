@@ -1985,6 +1985,8 @@ export default class GameEngine {
    *    Advanced Tribe, Scroll of Ancient Wisdom, Valuable Metals, Friendly
    *    Mercenaries, or Barbarian Ambush. Invalid rolls (city adjacency for
    *    Advanced Tribe, no researchable tech for Scroll) are re-rolled.
+   *  - A village never turns into a city for a NON-settler unit: only a
+   *    settler's hut can roll the Advanced Tribe (new settlement) outcome.
    *  - Civ1 "NONE" hack: when a SETTLER triggers the hut and rolls a new
    *    unit, the reward is a Settler with a NONE home city.
    */
@@ -2005,6 +2007,10 @@ export default class GameEngine {
       const outcome = VILLAGE_OUTCOMES[Math.floor(Math.random() * VILLAGE_OUTCOMES.length)];
       switch (outcome) {
         case VILLAGE_OUTCOME.ADVANCED_TRIBE: {
+          // Only a SETTLER's hut can become a new city — a military or other
+          // non-settler unit finding a village never founds a city, so re-roll
+          // it into one of the other outcomes.
+          if (String(unit.type) !== 'settler') continue;
           // Re-roll when on or adjacent to an existing city.
           if (this.isTileAdjacentToCity(unit.col, unit.row)) continue;
           const city = this.foundTribeCity(unit);

@@ -57,7 +57,7 @@ describe('Same-tile attacks', () => {
     const e = await setup();
     const tile = e.getTileAt(10, 10) as any;
     const attacker = spawnUnit(e, 'att2', 0, 'archer', tile.col, tile.row, 3, 2);
-    const defender = spawnUnit(e, 'def2', 1, 'warrior', tile.col, tile.row, 1, 1);
+    spawnUnit(e, 'def2', 1, 'warrior', tile.col, tile.row, 1, 1);
 
     const res = e.moveUnit(attacker.id, tile.col, tile.row);
 

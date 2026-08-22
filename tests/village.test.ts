@@ -206,15 +206,15 @@ describe('Civ1 village trigger & outcomes', () => {
     expect(horde.length).toBeLessThanOrEqual(4);
   });
 
-  it('Advanced Tribe founds a size-1 city with a random free building', async () => {
+  it('Advanced Tribe founds a size-1 city with a random free building (settler trigger only)', async () => {
     const e = await setup();
     const spot = villageSpot(e);
     const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
     tile.village = true;
-    const warrior = spawnUnit(e, 'warrior', spot.adj.col, spot.adj.row);
+    const settler = spawnUnit(e, 'settler', spot.adj.col, spot.adj.row, 0, 0, 0);
 
     const spy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // advanced_tribe, building idx 0 (barracks)
-    e.moveUnit(warrior.id, spot.col, spot.row);
+    e.moveUnit(settler.id, spot.col, spot.row);
     spy.mockRestore();
 
     expect(tile.village).toBe(false); // hut disappears at trigger
@@ -223,6 +223,23 @@ describe('Civ1 village trigger & outcomes', () => {
     expect(city).toBeDefined();
     expect(city?.population).toBe(1);
     expect(['barracks', 'granary', 'temple']).toContain(city?.buildings[0]);
+  });
+
+  it('a non-settler unit visiting a village never founds a city (roll is re-rolled)', async () => {
+    const e = await setup();
+    const spot = villageSpot(e);
+    const tile = e.getTileAt(spot.col, spot.row) as unknown as { village?: boolean };
+    tile.village = true;
+    const warrior = spawnUnit(e, 'warrior', spot.adj.col, spot.adj.row);
+
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.05); // → advanced_tribe, which non-settlers re-roll
+    const res = e.moveUnit(warrior.id, spot.col, spot.row);
+    spy.mockRestore();
+
+    expect(res.success).toBe(true);
+    expect(tile.village).toBe(false); // hut disappears at trigger
+    const cities = (e as unknown as { cities: Array<{ col: number; row: number }> }).cities;
+    expect(cities.some((c) => c.col === spot.col && c.row === spot.row)).toBe(false);
   });
 
   it('Scroll of Ancient Wisdom grants a free researchable tech', async () => {
