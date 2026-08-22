@@ -1333,7 +1333,15 @@ export default class GameEngine {
     ).length;
     const cityCount = this.cities.filter((c) => c.civilizationId === civId).length;
 
-    if (cityCount <= 1) {
+    // First two cities always builds a scout first if none exists yet — the scout
+    // feeds the intelligence pipeline that drives war-planning, so it is
+    // more valuable than an extra warrior in the early game.
+    if (scoutCount === 0) {
+      return { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 };
+    }
+
+    if (cityCount <= 2) {
+      // Already has a scout — build the cheapest valid defender next.
       const civ = this.civilizations[civId];
       const defender = Object.entries(UNIT_PROPS)
         .filter(([unitType, props]) =>
@@ -1354,9 +1362,6 @@ export default class GameEngine {
         name: defenderProps.name,
         cost: defenderProps.cost,
       };
-    }
-    if (scoutCount === 0) {
-      return { type: 'unit', itemType: 'scout', name: 'Scout', cost: 15 };
     }
     return { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 };
   }

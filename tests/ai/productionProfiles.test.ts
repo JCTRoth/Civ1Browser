@@ -201,7 +201,7 @@ describe('initial AI production (real engine)', () => {
     expect(p1?.aggression).toBe(8);
   });
 
-  it('starts the first AI city with a settler', async () => {
+  it('starts the first AI city with a scout (before any enemy contact)', async () => {
     const e = new GameEngine(null);
     (e as unknown as { sleep: () => Promise<void> }).sleep = () => Promise.resolve();
     (e as unknown as { isPaused: boolean }).isPaused = true;
@@ -214,6 +214,6 @@ describe('initial AI production (real engine)', () => {
 
     const city = e.cities.find((c) => c.civilizationId === 0);
     expect(city).toBeDefined();
-    expect((city as unknown as { currentProduction?: { itemType?: string } }).currentProduction?.itemType).toBe('settler');
+    expect((city as unknown as { currentProduction?: { itemType?: string } }).currentProduction?.itemType).toBe('scout');
   });
 });
