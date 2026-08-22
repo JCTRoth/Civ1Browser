@@ -463,6 +463,8 @@ export class AIManager {
             } else {
              console.log(`[AI] Not enough moves for move (${unit.movesRemaining} < ${moveCost}), skipping`);
               this.gameEngine.log('ai', `Move blocked — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'insufficient_moves' });
+              // Blacklist adjacent tile so scout doesn't retry it next turn
+              this.blacklistScoutTarget(unit, target.col, target.row);
              this.gameEngine.skipUnit(unit.id);
               break;
             }
@@ -475,6 +477,15 @@ export class AIManager {
             : new Set<string>();
           const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, obstacles, this.gameEngine.getPassabilityFilter?.());
           if (path.length > 1) {
+            // Store the full path as a GoTo so the TurnManager walks the
+            // scout toward the target over multiple turns. This avoids the
+            // old pattern where the AI picked a distant target, took one
+            // step, got skipped, and re-picked a new target next turn
+            // (causing the "insufficient_moves" oscillation).
+            if (unit.type === 'scout' && this.gameEngine.roundManager) {
+              this.gameEngine.roundManager.setUnitPath(unit.id, path);
+              console.log(`[AI-SCOUT] Set GoTo path for ${unit.id} with ${path.length} steps toward (${target.col},${target.row})`);
+            }
             let next = path[1];
             console.log(`[AI] Path found, next step to (${next.col},${next.row}), path length: ${path.length}`);
             const tt = this.gameEngine.getTileAt(next.col, next.row);
@@ -488,6 +499,11 @@ export class AIManager {
               if (!affordable) {
                console.log(`[AI] No affordable step for unit ${unit.id}, skipping`);
                 this.gameEngine.log('ai', `No affordable step — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_affordable_step' });
+                // Blacklist the target so the scout picks a different
+                // destination next turn instead of retrying the same
+                // unreachable one (which was the cause of the
+                // "insufficient_moves" loop in late-game AI-vs-AI).
+                this.blacklistScoutTarget(unit, target.col, target.row);
                 // Settler fallback: block unreachable target and re-evaluate.
                 if (unit.type === 'settler') {
                   if (this.settlerReevaluateSettlement(unit, civ.name, civilizationId, target, aiState)) break;
