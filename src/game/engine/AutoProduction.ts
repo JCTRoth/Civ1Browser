@@ -314,12 +314,18 @@ export class AutoProduction {
     //    still replaces consumed settlers instead of freezing at a city cap.
     //    A city may start a settler at population 1 so a fresh capital builds
     //    a settler, not a hospital.
+    const isSmallMap = this.gameEngine?.gameSettings?.mapType === 'AI_VS_AI_SMALL';
     const expansion = EXPANSION_PARAMS[strategy] ?? EXPANSION_PARAMS.balanced_growth;
-    const desiredSettlers = Math.min(
-      expansion.maxSettlers,
-      Math.max(expansion.minSettlers, Math.ceil(civCities.length / expansion.settlersPerCities)) +
-        (civCities.length < 3 && expansion.earlyBonus ? 1 : 0),
-    );
+    // On small maps (AI_VS_AI_SMALL, 16x26) a civ only needs one extra city
+    // before the economy stalls — cap settlers there so the capital doesn't
+    // churn settlers forever and never builds scouts or a real army.
+    const desiredSettlers = isSmallMap
+      ? Math.min(2, expansion.maxSettlers)
+      : Math.min(
+          expansion.maxSettlers,
+          Math.max(expansion.minSettlers, Math.ceil(civCities.length / expansion.settlersPerCities)) +
+            (civCities.length < 3 && expansion.earlyBonus ? 1 : 0),
+        );
     if (!needsHappiness && city.population >= 1) {
       const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
       const settlerCount = this.gameEngine.units.filter(
@@ -392,7 +398,6 @@ export class AutoProduction {
     // On small maps (AI_VS_AI_SMALL) cities may never reach pop 2 — require
     // only pop 1 there so scouts are still built. On larger maps keep pop 2
     // so the city grows a little before diverting shields to exploration.
-    const isSmallMap = this.gameEngine?.gameSettings?.mapType === 'AI_VS_AI_SMALL';
     const scoutPopThreshold = isSmallMap ? 1 : 2;
     if (this.needsScout(city.civilizationId, plannedScouts) && city.population >= scoutPopThreshold) {
       const scoutProps = UNIT_PROPS.scout;
