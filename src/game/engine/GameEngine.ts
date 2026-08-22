@@ -2348,7 +2348,7 @@ export default class GameEngine {
         if (defender.type === 'scout') {
           this.onScoutDeath(defender);
         }
-      }, 5000);
+      }, 1200);
 
       if (this.onStateChange) {
         this.onStateChange('COMBAT_VICTORY', {
@@ -2422,7 +2422,7 @@ export default class GameEngine {
           if (attacker.type === 'scout') {
             this.onScoutDeath(attacker);
           }
-        }, 5000);
+        }, 1200);
       }
       
       if (this.onStateChange) {
@@ -2544,7 +2544,7 @@ export default class GameEngine {
       }
       setTimeout(() => {
         this.units = this.units.filter(u => u.id !== attacker.id);
-      }, 5000);
+      }, 1200);
       console.log(`[COMBAT] ${attacker.type} destroyed attacking city ${city.name}`);
     }
     if (!hasWalls && (city.population || 1) > 1 && Math.random() < 0.5) {

@@ -284,7 +284,7 @@ export class EngineEventRouter {
         attackerSurvived: !!eventData.attackerSurvived,
         defenderSurvived: !!eventData.defenderSurvived,
         startTime: performance.now(),
-        duration: 2000,
+        duration: 800, // Fast combat — 0.8s
       };
       this.actions.addCombatAnimation(animation);
 
@@ -296,7 +296,7 @@ export class EngineEventRouter {
         if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
           this.gameEngine.checkAndEndTurnIfNoMoves();
         }
-      }, animation.duration + 400);
+      }, animation.duration + 200);
     }
   }
 
@@ -321,7 +321,7 @@ export class EngineEventRouter {
         attackerSurvived: true,
         defenderSurvived: true,
         startTime: performance.now(),
-        duration: 2000,
+        duration: 800, // Fast city attack — 0.8s
         cityAttack: true, // flag so the renderer can draw 💥 instead of 🫯
       };
       this.actions.addCombatAnimation(animation);
@@ -330,7 +330,7 @@ export class EngineEventRouter {
         if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
           this.gameEngine.checkAndEndTurnIfNoMoves();
         }
-      }, animation.duration + 400);
+      }, animation.duration + 200);
     }
   }
 
