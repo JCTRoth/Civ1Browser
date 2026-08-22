@@ -1324,8 +1324,9 @@ export class MapRenderer {
         continue;
       }
 
-      // Fade the cloud in quickly and keep it fully opaque until it ends.
-      const fadeIn = Math.min(1, elapsed / 150);
+      // Fade the cloud in quickly and keep it at 40% opacity (60% transparent)
+      // so the combat doesn't fully obscure the units underneath.
+      const fadeIn = Math.min(0.4, (elapsed / 150) * 0.4);
       ctx.save();
       ctx.globalAlpha = fadeIn;
 
