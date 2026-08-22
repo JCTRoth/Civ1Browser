@@ -140,8 +140,10 @@ describe('City capture & destruction', () => {
     expect(engine.cities.find((c: any) => c.id === city.id)?.civilizationId).toBe(0);
     // Population dropped by one.
     expect(engine.cities.find((c: any) => c.id === city.id)?.population).toBe(1);
-    // Attacker consumed.
-    expect(engine.units.some((u: any) => u.id === 'atk1')).toBe(false);
+    // Attacker survives but is spent for this turn.
+    expect(engine.units.some((u: any) => u.id === 'atk1')).toBe(true);
+    const attacker = engine.units.find((u: any) => u.id === 'atk1');
+    expect(attacker.movesRemaining).toBe(0);
     expect(emitted).toContain('CITY_CAPTURED');
   });
 
@@ -314,11 +316,13 @@ describe('City capture & destruction', () => {
     expect(captured?.civilizationId).toBe(0);
     expect(captured?.population).toBe(1);
     // The defender is destroyed (kept briefly for the death animation) and
-    // the (consumed) attacker is gone from the unit list.
+    // the attacker survives (spent for this turn, moves=0).
     const garrison: any = engine.units.find((u: any) => u.id === 'garrison1');
     expect(garrison).toBeDefined();
     expect(garrison.isDefeated).toBe(true);
-    expect(engine.units.some((u: any) => u.id === 'atkD')).toBe(false);
+    expect(engine.units.some((u: any) => u.id === 'atkD')).toBe(true);
+    const attacker = engine.units.find((u: any) => u.id === 'atkD');
+    expect(attacker.movesRemaining).toBe(0);
     expect(emitted).toContain('CITY_CAPTURED');
   });
 
@@ -456,7 +460,9 @@ describe('AI captures cities', () => {
     const cityAfter = engine.cities.find((c: any) => c.id === targetCity.id);
     expect(cityAfter).toBeDefined();
     expect(cityAfter!.civilizationId).toBe(1);
-    // Attacker consumed on capture.
-    expect(engine.units.some((u: any) => u.id === 'ai_attacker')).toBe(false);
+    // Attacker survives but is spent for this turn.
+    expect(engine.units.some((u: any) => u.id === 'ai_attacker')).toBe(true);
+    const attacker = engine.units.find((u: any) => u.id === 'ai_attacker');
+    expect(attacker.movesRemaining).toBe(0);
   });
 });

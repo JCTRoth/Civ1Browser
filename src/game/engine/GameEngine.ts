@@ -1822,8 +1822,10 @@ export default class GameEngine {
       }
 
       if (result === 'captured') {
-        // Remove unit (sacrificed in capture)
-        this.units = this.units.filter(u => u.id !== unitId);
+        // In this clone the attacker survives city capture.
+        // Set moves to 0 so the unit is spent for this turn.
+        unit.movesRemaining = 0;
+        unit.hasMovedThisTurn = true;
         if (this.onStateChange) {
           this.onStateChange('CITY_CAPTURED', {
             city: targetCity,
@@ -1843,9 +1845,11 @@ export default class GameEngine {
         }
         return { success: true, reason: 'city_damaged' };
       }
-      // Attacker destroyed (or city was destroyed by attacker — treat as captured)
+      // Attacker survived (or city was destroyed by attacker — treat as captured)
       if (result === 'city_destroyed') {
-        this.units = this.units.filter(u => u.id !== unitId);
+        // Unit survives — just spend its moves for this turn.
+        unit.movesRemaining = 0;
+        unit.hasMovedThisTurn = true;
         if (this.onStateChange) {
           this.onStateChange('CITY_CAPTURED', {
             city: targetCity,
@@ -2369,9 +2373,10 @@ export default class GameEngine {
         if (!stillDefended) {
           const captureResult = this.resolveCityCombat(attacker, cityHere);
           if (captureResult === 'captured' || captureResult === 'city_destroyed') {
-            // Attacker consumed on capture (same rule as a direct assault).
-            this.unitTurnQueue?.removeUnit?.(attacker.id);
-            this.units = this.units.filter(u => u.id !== attacker.id);
+            // Attacker survives city capture — spend its moves for this turn.
+            attacker.movesRemaining = 0;
+            attacker.hasMovedThisTurn = true;
+            this.updateUnitTurnsDoneFlag(attacker);
             if (captureResult === 'captured' && this.onStateChange) {
               this.onStateChange('CITY_CAPTURED', {
                 city: cityHere,
