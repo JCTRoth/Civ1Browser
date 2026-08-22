@@ -897,7 +897,12 @@ function App() {
             }
             break;
           case 'p':
-            // Pause / resume the game (Ctrl+P)
+            // Pause / resume the game (Ctrl+P). Once the game is won, the
+            // engine is frozen and the Resume button is removed — Ctrl+P
+            // must not be able to unpause and resume AI processing.
+            if (gameResult) {
+              break; // game over — ignore
+            }
             if (isPaused) {
               handleResume();
             } else {
@@ -1102,10 +1107,11 @@ function App() {
 
       {/* Pause overlay */}
       <PauseScreen
-        show={isPaused}
+        show={isPaused || !!gameResult}
         onResume={handleResume}
         currentTurn={gameState.currentTurn}
         currentYear={gameState.currentYear != null ? GameUtils.formatYear(gameState.currentYear) : undefined}
+        gameOver={!!gameResult}
       />
 
       <GameResultOverlay

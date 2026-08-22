@@ -3101,6 +3101,7 @@ export default class GameEngine {
     });
 
     this.isGameOver = false;
+    this.isPaused = false;
     this.victoryManager.reset();
     
     // Reset fog of war before reinitializing

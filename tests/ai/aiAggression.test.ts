@@ -159,7 +159,11 @@ describe('AI-vs-AI research + aggression', () => {
       console.error = origError;
 
       const round = (engine as any).turnManager.getRoundNumber();
-      expect(round).toBeGreaterThanOrEqual(TARGET_ROUNDS - 2);
+      // With the engine freezing on GAME_WON, the game may end well before
+      // the round budget — a domination victory at round 43 is healthy, not
+      // a failure. Accept either: (a) full run, or (b) game ended early.
+      const gameEnded = (engine as any).isGameOver === true;
+      expect(gameEnded || round >= TARGET_ROUNDS - 2).toBe(true);
 
       const disbands = logs.filter(l => l.includes('UNIT_DISBANDED')).length;
       const attacks = logs.filter(l => l.includes('[AI] Unit') && l.includes('attacking')).length;

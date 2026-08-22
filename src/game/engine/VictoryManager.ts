@@ -191,6 +191,10 @@ export class VictoryManager {
     this.gameAlreadyEnded = true;
     this.gameEngine.isGameOver = true;
 
+    // Freeze the game engine so no AI, turn processing, or unit movement
+    // continues behind the result overlay.
+    this.gameEngine.setPaused(true);
+
     const actions = this.gameEngine.storeActions || this.storeActions;
     actions?.setGameResult?.(result);
     actions?.updateGameState?.({

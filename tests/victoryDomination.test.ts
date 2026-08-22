@@ -16,10 +16,12 @@ interface MockEngine {
   units: Array<{ civilizationId: number }>;
   cities: Array<{ civilizationId: number; id: string }>;
   isGameOver: boolean;
+  isPaused?: boolean;
   currentTurn: number;
   currentYear: number | string;
   onStateChange: ((event: string, data: Record<string, unknown>) => void) | null;
   storeActions: GameActions | null;
+  setPaused?: (paused: boolean) => void;
 }
 
 function makeCiv(id: number, name: string, isHuman = false): Civilization {
@@ -65,6 +67,7 @@ beforeEach(() => {
     currentYear: '3000 BC',
     onStateChange: (event: string, data: Record<string, unknown>) => emitted.push({ event, data }),
     storeActions: null,
+    setPaused: (_paused: boolean) => {},  // no-op for VictoryManager tests
   };
 });
 
