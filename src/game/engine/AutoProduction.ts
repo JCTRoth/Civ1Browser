@@ -327,13 +327,25 @@ export class AutoProduction {
             (civCities.length < 3 && expansion.earlyBonus ? 1 : 0),
         );
     if (!needsHappiness && city.population >= 1) {
-      const plannedSettlers = plannedTypes.filter((t: string) => t === 'settler').length;
+      // Count queued settlers across ALL cities so the cap is enforced
+      // globally — without this, three cities each queueing a settler all
+      // pass the per-city check and the civ overshoots the cap.
+      const allCivCities = this.gameEngine.cities.filter(
+        (c: City) => c.civilizationId === city.civilizationId,
+      );
+      const queuedSettlers = allCivCities.reduce((count: number, c: City) => {
+        if (c.currentProduction?.type === 'unit' && c.currentProduction?.itemType === 'settler') return count + 1;
+        if (Array.isArray(c.buildQueue)) {
+          return count + c.buildQueue.filter((q: QueueItem) => q.type === 'unit' && (q.itemType === 'settler' || q.name?.toLowerCase() === 'settler')).length;
+        }
+        return count;
+      }, 0);
       const settlerCount = this.gameEngine.units.filter(
         (u: Unit) => u.civilizationId === city.civilizationId && u.type === 'settler'
-      ).length + plannedSettlers;
+      ).length + queuedSettlers;
 
       if (settlerCount < desiredSettlers) {
-        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s), building another (target ${desiredSettlers}, profile ${strategy})`);
+        console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s) (unit list + queued across all cities), building another (target ${desiredSettlers}, profile ${strategy})`);
         return {
           type: 'unit',
           itemType: 'settler',
