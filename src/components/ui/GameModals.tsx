@@ -729,7 +729,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
                       {/* Leader portrait slot */}
                       <div className="diplomacy-portrait-slot" style={{ borderColor: moodColors.border }}>
                         {portraitConfig ? (
-                          <LeaderPortrait config={portraitConfig} mood={selectedAttitude} size={110} leaderName={leaderName} />
+                          <LeaderPortrait config={portraitConfig} mood={selectedAttitude as 'friendly' | 'neutral' | 'annoyed' | 'hostile'} size={110} leaderName={leaderName} />
                         ) : (
                           <div className="diplomacy-portrait-placeholder" style={{ color: selectedCivData.color || '#fff' }}>
                             <span className="diplomacy-portrait-icon">{selectedCivData.icon || '👤'}</span>
@@ -1066,7 +1066,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
                   <div key={civ.id} className="diplomacy-report-row" style={{ borderLeftColor: civ.color || '#555' }}>
                     <div className="diplomacy-report-portrait">
                       {portraitConfig ? (
-                        <LeaderPortrait config={portraitConfig} mood={attitude} size={60} leaderName={leaderName} />
+                        <LeaderPortrait config={portraitConfig} mood={attitude as 'friendly' | 'neutral' | 'annoyed' | 'hostile'} size={60} leaderName={leaderName} />
                       ) : (
                         <span className="diplomacy-report-icon" style={{ color: civ.color || '#fff' }}>
                           {civ.icon || '👤'}

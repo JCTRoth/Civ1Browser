@@ -549,7 +549,7 @@ export interface GameEngine {
   /** Economic manager for tax/science/luxury rates and upkeep. */
   economicManager: { setGovernment(civId: number, government: string): void; calculateCityTrade?(city: City): number };
   /** Civ I–style research manager (tech cost, beaker modifiers, turn caps). */
-  researchManager: { processTurn(): void; effectiveTechCost?(civ: Civilization, techId: string | Technology): number; estimatedTurns?(civ: Civilization, techId: string | Technology): number };
+  researchManager: { processTurn(): void; effectiveTechCost?(civ: Civilization, techId: string | Technology): number; estimatedTurns?(civ: Civilization, techId: string | Technology, perTurnScience: number): number };
   /** Per-civilization persistent turn storage (AI state, explored tiles…). */
   getPlayerStorage(civilizationId: number): { turnData: Record<string, unknown>; visibility: boolean[]; explored: boolean[] };
   /** Square grid backing the map (null until a game is initialized). */
