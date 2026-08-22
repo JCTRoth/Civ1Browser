@@ -131,20 +131,24 @@ export class EngineEventRouter {
   }
 
   /**
-   * A village (goody hut) was encountered. Refresh the store from the engine
-   * (the map/units/cities/civs/techs may all have changed) and, for the human
-   * player, open the village-result modal.
+   * A village (goody hut) was encountered. Always refresh the store from the
+   * engine (units, cities, civs, techs, gold may all have changed regardless
+   * of who triggered it), and open the village-result modal only for the
+   * human player. AI hut outcomes now visibly take effect in the UI.
    */
   private onVillageResult(eventData: any): void {
-    if (this.isAIVsAI) return;
-    // Only the human's own encounters open a modal (AI huts resolve silently).
-    if (eventData.civId !== HUMAN_PLAYER_ID) return;
-
+    // Always refresh — the engine applied the outcome (gold, tech, units,
+    // cities) and the store must reflect it even when an AI triggered the hut.
     this.actions.updateMap?.(this.gameEngine.map);
     this.actions.updateUnits?.(this.gameEngine.getAllUnits());
     this.actions.updateCities?.(this.gameEngine.getAllCities());
     this.actions.updateCivilizations?.(this.gameEngine.civilizations);
     this.actions.updateTechnologies?.(this.gameEngine.technologies);
+
+    // The result modal only opens for the human player's own encounters.
+    if (this.isAIVsAI) return;
+    if (eventData.civId !== HUMAN_PLAYER_ID) return;
+
     this.actions.showVillageResult?.({
       outcome: eventData.outcome,
       civId: eventData.civId,
