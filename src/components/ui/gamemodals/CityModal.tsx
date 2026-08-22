@@ -138,35 +138,35 @@ const CityModal: React.FC<CityModalProps> = ({
                               const remainingShields = Math.max(0, totalCost - progress);
                               const playerGold = currentPlayer?.resources?.gold ?? 0;
                               const purchasedThisTurn = (selectedCity.purchasedThisTurn?.length ?? 0) > 0;
-                              const canBuy = remainingShields > 0 && playerGold >= remainingShields && !purchasedThisTurn;
+                              const goldCost = remainingShields * 2;
+                              const canBuy = remainingShields > 0 && playerGold >= goldCost && !purchasedThisTurn;
                               return (
                                 <button
                                   type="button"
-                                  className={`btn btn-sm ${canBuy ? 'btn-warning' : 'btn-outline-warning'}`}
+                                  className="btn btn-sm city-buy-button"
                                   disabled={!canBuy}
                                   title={
                                     purchasedThisTurn
                                       ? 'Already purchased this turn'
                                       : remainingShields <= 0
                                         ? 'Production complete'
-                                        : playerGold < remainingShields
-                                          ? `Need ${remainingShields} Gold (have ${playerGold})`
-                                          : `Buy remaining for ${remainingShields} Gold`
+                                        : playerGold < goldCost
+                                          ? `Need ${goldCost} Gold (have ${playerGold})`
+                                          : `Buy remaining for ${goldCost} Gold`
                                   }
                                   onClick={() => {
-                                    if (gameEngine && typeof gameEngine.purchaseCityProduction === 'function') {
-                                      const item = selectedCity.currentProduction;
-                                      gameEngine.purchaseCityProduction(selectedCity.id, item);
+                                    if (gameEngine && typeof gameEngine.rushCityProduction === 'function') {
+                                      gameEngine.rushCityProduction(selectedCity.id);
                                       if (actions?.addNotification) {
                                         actions.addNotification({
                                           type: 'success',
-                                          message: `Purchased ${logic.getCurrentProductionName()} for ${remainingShields} Gold!`
+                                          message: `Rushed ${logic.getCurrentProductionName()} for ${goldCost} Gold!`
                                         });
                                       }
                                     }
                                   }}
                                 >
-                                  🪙{remainingShields}
+                                  🪙 Rush ({goldCost}g)
                                 </button>
                               );
                             })()}
