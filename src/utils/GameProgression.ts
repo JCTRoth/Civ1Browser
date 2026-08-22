@@ -36,7 +36,7 @@ import type {
   CompactUnit,
   ProgressionWorldSnapshot,
 } from '../../types/progression';
-import type { GameEngine } from '../../types/game';
+import type { GameEngine, City, Unit, Civilization } from '../../types/game';
 
 /** Change this one value to alter how often full world snapshots are emitted. */
 export const PROGRESSION_SNAPSHOT_INTERVAL = 20;
@@ -239,21 +239,20 @@ function serializeUnitCompact(unit: Unit): CompactUnit {
   return {
     id: String(unit?.id ?? ''),
     type: String(unit?.type ?? 'unknown'),
-    civilizationId: Number(unit?.civilizationId ?? unit?.civilization?.id ?? -1),
+    civilizationId: Number(unit?.civilizationId ?? -1),
     col: Number(unit?.col ?? 0),
     row: Number(unit?.row ?? 0),
     movesRemaining: unit?.movesRemaining,
     health: unit?.health,
     hitPoints: unit?.hitPoints,
     maxHitPoints: unit?.maxHitPoints,
-    attack: unit?.attack ?? unit?.attackPoints,
-    defense: unit?.defense ?? unit?.defensePoints,
+    attack: unit?.attack ?? 0,
+    defense: unit?.defense ?? 0,
     maintenance: unit?.maintenance,
     foodSupport: unit?.foodSupport,
     shieldSupport: unit?.shieldSupport,
-    experience: unit?.experience,
-    veteran: unit?.isVeteran ?? unit?.veteran,
-    fortified: unit?.isFortified ?? unit?.fortified,
+    veteran: unit?.isVeteran ?? false,
+    fortified: unit?.isFortified ?? false,
     sleeping: unit?.isSleeping,
     workTarget: unit?.workTarget ?? null,
     workTurns: unit?.workTurns,
@@ -458,6 +457,8 @@ class GameProgression {
   }
 
   private buildRound(engine: GameEngine | null, round: number): ProgressionRound {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const engineAny = engine as any;
     const year = engine?.currentYear ?? 0;
     const civs: Record<string, ProgressionCivDelta> = {};
     const cities: City[] = engine?.getAllCities?.() ?? [];
@@ -486,12 +487,14 @@ class GameProgression {
       const currentResearch = researchRaw == null
         ? null
         : typeof researchRaw === 'object'
-          ? String(researchRaw.id ?? researchRaw.name ?? '')
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ? String((researchRaw as any).id ?? (researchRaw as any).name ?? '')
           : String(researchRaw);
 
       // Real per-turn outputs / treasury live under `civ.resources` on the
       // engine's plain-object civs (there is no top-level `civ.gold`).
-      const resources = civ?.resources ?? {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resources: any = civ?.resources ?? {};
 
       const full: ProgressionCivSnapshot = {
         id: civ?.id ?? Number(civId),
@@ -504,7 +507,7 @@ class GameProgression {
         gold: resources.gold ?? 0,
         goldPerTurn: civCities.reduce((sum, c) => sum + (c.tax ?? 0), 0),
         science: resources.science ?? 0,
-        trade: resources.trade ?? civCities.reduce((sum, c) => sum + (c.trade ?? 0), 0),
+          trade: resources.trade ?? civCities.reduce((sum: number, c: any) => sum + (c.trade ?? 0), 0),
         production: civCities.reduce((sum, c) => sum + (c.yields?.production ?? 0), 0),
         food: civCities.reduce((sum, c) => sum + (c.yields?.food ?? 0), 0),
         taxRate: civ?.taxRate ?? 0,
@@ -528,7 +531,7 @@ class GameProgression {
           ...(engineAny?.diplomacyManager?.getEnemies?.(civ?.id) ?? [...(civ?.warWith ?? [])]),
         ].map(String),
         wonders: civCities.reduce(
-          (sum, c) => sum + (Array.isArray(c?.wonders) ? c.wonders.length : 0),
+          (sum: number, c: any) => sum + (Array.isArray(c?.wonders) ? c.wonders.length : 0),
           0,
         ),
         strategy: String(
@@ -538,7 +541,7 @@ class GameProgression {
         ),
         unitComposition,
         personality: { ...(civ?.personality ?? {}) },
-        priorities: { ...(civ?.priorities ?? {}) },
+        priorities: { ...((civ as any)?.priorities ?? {}) },
       };
 
       civs[civId] = computeCivDelta(full, this.lastCivState[civId]);
