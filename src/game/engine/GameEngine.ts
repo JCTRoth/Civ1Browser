@@ -1791,15 +1791,106 @@ export default class GameEngine {
     // Check if there's an enemy city at target
     const targetCity = this.getCityAt(targetCol, targetRow);
     if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
-      // Civilian units (settlers, workers, diplomats, caravans, scouts) cannot
+      // Civilian units (settlers, workers, diplomats, caravans) cannot
       // attack or capture cities. Block the move — otherwise a wandering
       // settler rolls a 50/50 capture against a size-1 city (resolveCityCombat
       // treated attack 0 as strength 1 via `attack || 1`) and can wipe out an
       // opponent's capital in the ancient era.
-      const civilianTypes = new Set(['settler', 'worker', 'caravan', 'diplomat', 'scout']);
+      //
+      // EXCEPTION — Scouts may attempt a "rush" on an undefended city:
+      // 30% chance to slip in and capture it.  If the rush fails, the move
+      // is rejected and the scout stays put.
+      const isScout = unit.type === 'scout';
+      const civilianTypes = new Set(['settler', 'worker', 'caravan', 'diplomat']);
       if (civilianTypes.has(unit.type)) {
         console.log(`[moveUnit] Civilian ${unit.type} cannot attack enemy city — blocked`);
         return { success: false, reason: 'civilian_cannot_attack_city' };
+      }
+
+      // Scout rush check: only works if the city has NO defending units.
+      if (isScout) {
+        const cityDefenders = this.units.filter(
+          (u: Unit) => u.civilizationId === targetCity.civilizationId
+            && u.col === targetCity.col
+            && u.row === targetCity.row
+            && (u as any).isDefeated !== true
+            && u.id !== unit.id,
+        );
+        if (cityDefenders.length > 0) {
+          console.log(`[moveUnit] Scout rush blocked — city ${targetCity.name} is defended (${cityDefenders.length} unit(s))`);
+          return { success: false, reason: 'city_defended' };
+        }
+
+        // 30% chance to capture an undefended city
+        if (Math.random() < 0.30) {
+          console.log(`[SCOUT RUSH] Scout ${unit.id} rushes ${targetCity.name} — success!`);
+
+          // Declare war first
+          if (this.diplomacyManager) {
+            const dipStatus = this.diplomacyManager.getStatus(unit.civilizationId, targetCity.civilizationId);
+            if (dipStatus !== 'war') {
+              this.diplomacyManager.declareWar(unit.civilizationId, targetCity.civilizationId);
+            }
+          }
+
+          const oldCiv = targetCity.civilizationId;
+
+          // If city has pop ≤ 1 it's razed rather than captured.
+          if ((targetCity.population || 1) <= 1) {
+            this.destroyGarrisonOnCapture(targetCity, oldCiv);
+            this.cities = this.cities.filter(c => c.id !== targetCity.id);
+            console.log(`[SCOUT RUSH] City ${targetCity.name} destroyed by scout rush`);
+            if (targetCity.isCapital === true) {
+              this.governmentManager?.ensureCapital(oldCiv);
+            }
+            if (this.onStateChange) {
+              this.onStateChange('CITY_DESTROYED', { city: targetCity, attacker: unit });
+            }
+          } else {
+            // Capture the city
+            targetCity.population -= 1;
+            targetCity.civilizationId = unit.civilizationId;
+            targetCity.buildings = targetCity.buildings ?? [];
+            this.destroyBuildingsOnCapture(targetCity);
+            this.plunderCityGold(oldCiv, unit.civilizationId);
+            this.destroyGarrisonOnCapture(targetCity, oldCiv);
+            targetCity.currentProduction = null;
+            if (Array.isArray(targetCity.buildQueue)) targetCity.buildQueue.length = 0;
+            targetCity.productionStored = 0;
+            targetCity.productionProgress = 0;
+            targetCity.capturedTurns = 5;
+            if (targetCity.isCapital === true) {
+              targetCity.isCapital = false;
+              const pIdx = targetCity.buildings.indexOf('palace');
+              if (pIdx !== -1) targetCity.buildings.splice(pIdx, 1);
+              this.governmentManager?.ensureCapital(oldCiv);
+            }
+            console.log(`[SCOUT RUSH] City ${targetCity.name} captured by civ ${unit.civilizationId} (pop ${targetCity.population})`);
+          }
+
+          // Spend the scout's moves
+          unit.movesRemaining = 0;
+          unit.hasMovedThisTurn = true;
+
+          if (this.unitTurnQueue) {
+            this.unitTurnQueue.removeUnit(unitId);
+          }
+          if (this.activePlayer === unit.civilizationId) {
+            this.checkAndEndTurnIfNoMoves();
+          }
+          if (this.onStateChange) {
+            this.onStateChange('CITY_CAPTURED', {
+              city: targetCity,
+              capturedBy: unit.civilizationId,
+              originalCiv: oldCiv,
+            });
+          }
+          return { success: true, reason: 'scout_rush_captured' };
+        }
+
+        // Rush failed — scout cannot enter defended or contested cities
+        console.log(`[SCOUT RUSH] Scout ${unit.id} rush failed on ${targetCity.name} (30% miss)`);
+        return { success: false, reason: 'scout_rush_failed' };
       }
 
       // Attacking an enemy city declares war (mirrors combatUnit behavior).

@@ -910,6 +910,26 @@ export class AIManager {
             // contact, so enemy cities were never recorded and the AI never
             // laid siege (its armies only ever chased dead unit locations).
             if (enemyResult.targetType === 'city') {
+              const targetCity = this.gameEngine.getCityAt(enemyResult.col, enemyResult.row);
+
+              // Scout rush: if the enemy city is undefended, the AI scout
+              // attempts a 30% rush capture instead of running home.
+              if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
+                const cityDefenders = this.gameEngine.units.filter(
+                  (u: Unit) => u.civilizationId === targetCity.civilizationId
+                    && u.col === targetCity.col
+                    && u.row === targetCity.row
+                    && (u as any).isDefeated !== true
+                    && u.id !== unit.id,
+                );
+                if (cityDefenders.length === 0) {
+                  // Move the scout onto the city tile — moveUnit will
+                  // evaluate the 30% rush chance automatically.
+                  console.log(`[AI-SCOUT] Rush opportunity: undefended city ${targetCity.name} at (${enemyResult.col},${enemyResult.row})`);
+                  return { col: enemyResult.col, row: enemyResult.row };
+                }
+              }
+
               // Mark that scout found enemy
               unit.enemyFound = true;
               unit.enemyLocation = { col: enemyResult.col, row: enemyResult.row };
