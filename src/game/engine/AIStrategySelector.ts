@@ -10,6 +10,7 @@ import {
   type Personality,
   type AIState,
 } from './AITypes';
+import type { Civilization } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -34,7 +35,7 @@ export class AIStrategySelector {
    * @returns Updated strategy profile, or the existing one if not time to re-evaluate
    */
   static evaluateStrategy(
-    civ: any,
+    civ: Civilization,
     gameState: {
       currentYear: number;
       roundNumber: number;

@@ -3,13 +3,14 @@
 import { ModalUtils } from './ModalUtils';
 import { UNIT_PROPS } from '@/utils/Constants';
 import {CityUtils} from "@/utils/CityUtils";
+import type { City, Civilization, GameEngine, ProductionItem } from '../../../../types/game';
 
 export class CityModalLogic {
-  private readonly city: any;
-  private readonly gameEngine: any;
-  private readonly currentPlayer: any;
+  private readonly city: City;
+  private readonly gameEngine: GameEngine;
+  private readonly currentPlayer: Civilization;
 
-  constructor(city: any, gameEngine: any, _actions: any, currentPlayer: any) {
+  constructor(city: City, gameEngine: GameEngine, _actions: unknown, currentPlayer: Civilization) {
     this.city = city;
     this.gameEngine = gameEngine;
     this.currentPlayer = currentPlayer;
@@ -55,13 +56,13 @@ export class CityModalLogic {
     return Array.isArray(this.city.buildQueue) && this.city.buildQueue.length > 0;
   }
 
-  getQueueItems(): any[] {
+  getQueueItems(): ProductionItem[] {
     return this.city.buildQueue || [];
   }
 
-  canPurchase(item: any): boolean {
+  canPurchase(item: ProductionItem): boolean {
     // Check if city has already purchased something this turn
-    const purchasedThisTurn = (this.city as any).purchasedThisTurn || [];
+    const purchasedThisTurn = this.city.purchasedThisTurn || [];
     if (purchasedThisTurn.length > 0) {
       return false;
     }
@@ -74,39 +75,39 @@ export class CityModalLogic {
     return (civ.resources.gold || 0) >= cost;
   }
 
-  purchaseProduction(item: any): void {
+  purchaseProduction(item: ProductionItem): void {
     if (this.gameEngine && this.gameEngine.purchaseCityProduction) {
       this.gameEngine.purchaseCityProduction(this.city.id, item);
     }
   }
 
-  setProduction(item: any, queue: boolean = false): void {
-    if (this.gameEngine && this.gameEngine.setCityProduction) {
-      this.gameEngine.setCityProduction(this.city.id, item, queue);
+  setProduction(item: ProductionItem, queue: boolean = false): void {
+    if (this.gameEngine && this.gameEngine.productionManager) {
+      this.gameEngine.productionManager.setCityProduction(this.city.id, item, queue);
     }
   }
 
   removeQueueItem(index: number): void {
-    if (this.gameEngine && this.gameEngine.removeCityQueueItem) {
-      this.gameEngine.removeCityQueueItem(this.city.id, index);
+    if (this.gameEngine && this.gameEngine.productionManager) {
+      this.gameEngine.productionManager.removeCityQueueItem(this.city.id, index);
       // ProductionManager now handles updating currentProduction automatically
     }
   }
 
   moveQueueItem(fromIndex: number, toIndex: number): void {
-    if (this.gameEngine && this.gameEngine.moveCityQueueItem) {
-      this.gameEngine.moveCityQueueItem(this.city.id, fromIndex, toIndex);
+    if (this.gameEngine && this.gameEngine.productionManager) {
+      this.gameEngine.productionManager.moveCityQueueItem(this.city.id, fromIndex, toIndex);
     }
   }
 
   getAvailableProductionKeys(): string[] {
     return Object.keys(UNIT_PROPS).filter((key) => {
       const u = UNIT_PROPS[key];
-      const req = (u as any).requires || null;
+      const req = u.requires || null;
       if (req && this.currentPlayer && Array.isArray(this.currentPlayer.technologies)) {
         // Handle both single requirement and array of requirements
         const requirements = Array.isArray(req) ? req : [req];
-        const hasAllRequiredTechs = requirements.every((tech: string) => this.currentPlayer.technologies.includes(tech));
+        const hasAllRequiredTechs = requirements.every((tech: string) => this.currentPlayer.technologies!.includes(tech));
         if (!hasAllRequiredTechs) return false;
       }
 
@@ -144,7 +145,7 @@ export class CityModalLogic {
 
   canAffordBuyNow(itemType: string): boolean {
     // Check if city has already purchased something this turn
-    const purchasedThisTurn = (this.city as any).purchasedThisTurn || [];
+    const purchasedThisTurn = this.city.purchasedThisTurn || [];
     if (purchasedThisTurn.length > 0) {
       return false;
     }

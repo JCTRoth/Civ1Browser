@@ -107,7 +107,7 @@ export class GoToManager {
       return { success: false, reason: 'no_path', remainingPath: [] };
     }
 
-    const unit = this.gameEngine.units.find((u: any) => u.id === unitId);
+    const unit = this.gameEngine.units.find((u: Unit) => u.id === unitId);
     if (!unit) {
       return { success: false, reason: 'unit_not_found', remainingPath: [] };
     }
@@ -159,7 +159,7 @@ export class GoToManager {
     // Before doing the first move, log how many steps the current path has and an
     // estimated number of turns this path will take based on the unit's moves per turn.
     try {
-      const unit = this.gameEngine.units.find((u: any) => u.id === unitId);
+      const unit = this.gameEngine.units.find((u: Unit) => u.id === unitId);
       const path = this.unitPaths.get(unitId) || [];
       const steps = path.length;
       if (unit) {
@@ -189,7 +189,7 @@ export class GoToManager {
     let continueMoving = true;
 
     while (continueMoving) {
-      const unit = this.gameEngine.units.find((u: any) => u.id === unitId);
+      const unit = this.gameEngine.units.find((u: Unit) => u.id === unitId);
       if (!unit || (unit.movesRemaining || 0) <= 0) {
         console.log(`[GoToManager] Unit ${unitId} has no more moves`);
         break;

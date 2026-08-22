@@ -235,8 +235,7 @@ function csvCell(value: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serializeUnitCompact(unit: any): CompactUnit {
+function serializeUnitCompact(unit: Unit): CompactUnit {
   return {
     id: String(unit?.id ?? ''),
     type: String(unit?.type ?? 'unknown'),
@@ -459,16 +458,11 @@ class GameProgression {
   }
 
   private buildRound(engine: GameEngine | null, round: number): ProgressionRound {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const engineAny = engine as any;
-    const year = engineAny?.currentYear ?? 0;
+    const year = engine?.currentYear ?? 0;
     const civs: Record<string, ProgressionCivDelta> = {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cities: any[] = engine?.getAllCities?.() ?? [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const units: any[] = engine?.getAllUnits?.() ?? [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-   const civList: any[] = engineAny?.civilizations ?? [];
+    const cities: City[] = engine?.getAllCities?.() ?? [];
+    const units: Unit[] = engine?.getAllUnits?.() ?? [];
+    const civList: Civilization[] = engine?.civilizations ?? [];
     const snapshot: ProgressionWorldSnapshot | undefined =
       round > 0 && round % PROGRESSION_SNAPSHOT_INTERVAL === 0
         ? { units: units.map(serializeUnitCompact), cities: cities.map((city) => serializeCityCompact(city)) }

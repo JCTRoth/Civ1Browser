@@ -1131,7 +1131,7 @@ export class MapRenderer {
 
         // Civ1: villages (goody huts) are visible through the fog of war so
         // the player can map out exploration routes before scouting a tile.
-        const authoritativeTile: any = map.tiles?.[tileIndex];
+        const authoritativeTile = map.tiles?.[tileIndex];
 
         // Check if tile is explored (either from terrain grid or map data)
         const isExplored = tile?.explored ?? map.revealed?.[tileIndex] ?? false;
@@ -1439,7 +1439,7 @@ export class MapRenderer {
     for (let row = 0; row < map.height; row++) {
       for (let col = 0; col < map.width; col++) {
         const tileIndex = this.getTileIndex(row, col, map.width);
-        const tile: any = map.tiles?.[tileIndex];
+        const tile = map.tiles?.[tileIndex];
         if (!tile) continue;
 
         // Default to black for unexplored tiles when fog data is available
@@ -2154,8 +2154,8 @@ export class MapRenderer {
     const isEnemyAtUnit = targetUnit && targetUnit.civilizationId !== unit.civilizationId;
     
     // Check for enemy city at destination
-    const cities = (gameState as any).cities || [];
-    const targetCity = cities.find((c: any) => c.col === lastPathStep.col && c.row === lastPathStep.row);
+    const cities = (gameState as Record<string, unknown>).cities as City[] || [];
+    const targetCity = cities.find((c: City) => c.col === lastPathStep.col && c.row === lastPathStep.row);
     const isEnemyAtCity = targetCity && targetCity.civilizationId !== unit.civilizationId;
     const isEnemyAtDestination = isEnemyAtUnit || isEnemyAtCity;
 

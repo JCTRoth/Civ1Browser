@@ -1,7 +1,7 @@
 import { useGameStore } from '../stores/GameStore';
 import { centerCameraOnTile, getGameViewport } from './CameraUtils';
 import { firstUnresearchedInPath } from './ResearchPath';
-import type { GameEngine, Technology } from '../../types/game';
+import type { GameEngine, Technology, Unit, City, Civilization } from '../../types/game';
 
 // The human player is always civilization 0 (mirrors the store's fog of war).
 const HUMAN_PLAYER_ID = 0;
@@ -19,10 +19,10 @@ export class EngineEventRouter {
   /** True in AI-vs-AI mode (every civilization is AI-controlled). */
   private get isAIVsAI(): boolean {
     const civs = this.gameEngine?.civilizations ?? [];
-    return civs.length > 0 && civs.every((c) => !(c as any).isHuman);
+    return civs.length > 0 && civs.every((c) => !c.isHuman);
   }
 
-  handle(eventType: string, eventData: any) {
+  handle(eventType: string, eventData: Record<string, unknown>) {
     switch (eventType) {
       case 'TURN_START':
         this.onTurnStart(eventData);
@@ -139,7 +139,7 @@ export class EngineEventRouter {
    * of who triggered it), and open the village-result modal only for the
    * human player. AI hut outcomes now visibly take effect in the UI.
    */
-  private onVillageResult(eventData: any): void {
+  private onVillageResult(eventData: Record<string, unknown>): void {
     // Always refresh — the engine applied the outcome (gold, tech, units,
     // cities) and the store must reflect it even when an AI triggered the hut.
     this.actions.updateMap?.(this.gameEngine.map);
@@ -168,8 +168,8 @@ export class EngineEventRouter {
     });
   }
 
-  private onTurnStart(_eventData: any) {
-    const active = (this.gameEngine as any).activePlayer;
+  private onTurnStart(_eventData: Record<string, unknown>) {
+    const active = this.gameEngine.activePlayer;
     const civ = this.gameEngine.civilizations?.[active];
     console.log('[EngineEventRouter] TURN_START for player', active, civ?.name);
 
@@ -197,31 +197,31 @@ export class EngineEventRouter {
     this.actions.updateVisibility();
   }
 
-  private onPhaseChange(eventData: any) {
+  private onPhaseChange(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] PHASE_CHANGE:', eventData);
     this.actions.updateGameState({ currentTurn: useGameStore.getState().gameState.currentTurn });
   }
 
-  private onNewGame(eventData: any) {
+  private onNewGame(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] NEW_GAME: Updating map and initial visibility');
     this.lastQueueLengths.clear();
     this.endTurnPromptShown.clear();
-    eventData.civilizations.forEach((civ: any, index: number) => {
+    (eventData.civilizations as Civilization[]).forEach((civ: Civilization, index: number) => {
       if (!civ.capital) {
-        const firstCity = eventData.cities.find((c: any) => c.civilizationId === index);
+        const firstCity = (eventData.cities as City[]).find((c: City) => c.civilizationId === index);
         if (firstCity) civ.capital = firstCity;
       }
     });
-    this.actions.updateCivilizations(eventData.civilizations);
+    this.actions.updateCivilizations(eventData.civilizations as Civilization[]);
     this.actions.updateMap(eventData.map);
-    this.actions.updateUnits(eventData.units);
-    this.actions.updateCities(eventData.cities);
-    this.actions.updateTechnologies(eventData.technologies);
+    this.actions.updateUnits(eventData.units as Unit[]);
+    this.actions.updateCities(eventData.cities as City[]);
+    this.actions.updateTechnologies(eventData.technologies as Technology[]);
     this.actions.updateVisibility();
     this.actions.startGame();
   }
 
-  private onUnitMoved(eventData: any) {
+  private onUnitMoved(eventData: Record<string, unknown>) {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     // In AI-vs-AI mode don't follow AI moves — no auto-selection or camera
@@ -259,7 +259,7 @@ export class EngineEventRouter {
     return !!state.map?.visibility?.[index];
   }
 
-  private onCombat(eventType: string, eventData: any) {
+  private onCombat(eventType: string, eventData: Record<string, unknown>) {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     this.actions.addNotification({
@@ -300,7 +300,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onCityAttacked(eventData: any) {
+  private onCityAttacked(eventData: Record<string, unknown>) {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     this.actions.updateCities(this.gameEngine.getAllCities());
@@ -334,7 +334,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onUnitCreated(eventData: any) {
+  private onUnitCreated(eventData: Record<string, unknown>) {
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     if (eventData && eventData.unit) {
@@ -346,7 +346,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onCityFounded(eventData: any) {
+  private onCityFounded(eventData: Record<string, unknown>) {
     const civId = eventData.city.civilizationId;
     const civ = this.gameEngine.civilizations[civId];
     if (civ && !civ.capital) {
@@ -362,7 +362,7 @@ export class EngineEventRouter {
     this.actions.addNotification({ type: 'info', message: `${eventData.city.name} founded!` });
   }
 
-  private onCityProductionChanged(eventData: any) {
+  private onCityProductionChanged(eventData: Record<string, unknown>) {
     this.actions.updateCities(this.gameEngine.getAllCities());
     if (eventData && eventData.item) {
       const name = eventData.item.name || eventData.item.itemType || 'Production';
@@ -384,7 +384,7 @@ export class EngineEventRouter {
     this.actions.addNotification({ type: 'info', message: 'AI finished its turn' });
   }
 
-  private onImprovementBuilt(eventData: any) {
+  private onImprovementBuilt(eventData: Record<string, unknown>) {
     try {
       console.log('[EngineEventRouter] IMPROVEMENT_BUILT', eventData);
       this.actions.updateUnits(this.gameEngine.getAllUnits());
@@ -400,7 +400,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onAutoEndTurn(eventData: any) {
+  private onAutoEndTurn(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] AUTO_END_TURN for civ', eventData?.civilizationId);
     // Pure UI updates only - no game logic
     this.actions.setGoToMode(false, null);
@@ -461,7 +461,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onTurnEnd(eventData: any) {
+  private onTurnEnd(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] TURN_END: Clearing UI state, civ:', eventData?.civilizationId);
     // Pure UI cleanup only
     this.actions.setGoToMode(false, null);
@@ -477,26 +477,26 @@ export class EngineEventRouter {
     }
   }
 
-  private onAIClearHighlights(eventData: any) {
+  private onAIClearHighlights(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] AI_CLEAR_HIGHLIGHTS for civ', eventData?.civilizationId);
     // Clear any UI highlights when AI finishes its turn
     this.actions.setGoToMode(false, null);
     this.actions.selectUnit(null);
   }
 
-  private onCityProductionPhase(eventData: any) {
+  private onCityProductionPhase(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] CITY_PRODUCTION_PHASE for civ', eventData?.civilizationId);
     // Update UI to show city production phase
     this.actions.updateGameState({ currentTurn: useGameStore.getState().gameState.currentTurn });
   }
 
-  private onResearchPhase(eventData: any) {
+  private onResearchPhase(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] RESEARCH_PHASE for civ', eventData?.civilizationId);
     // Update UI to show research phase
     this.actions.updateGameState({ currentTurn: useGameStore.getState().gameState.currentTurn });
   }
 
-  private onTechResearched(eventData: any) {
+  private onTechResearched(eventData: Record<string, unknown>) {
     const { civilizationId, techId } = eventData || {};
     const tech = this.gameEngine.technologies?.find((t: Technology) => t.id === techId);
     if (!tech) return;
@@ -526,13 +526,13 @@ export class EngineEventRouter {
     this.actions.updateCivilizations([...(this.gameEngine.civilizations || [])]);
   }
 
-  private onPlayerRegistered(eventData: any) {
+  private onPlayerRegistered(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] PLAYER_REGISTERED for civ', eventData?.civilizationId);
     // Player registration is handled - update UI state
     this.actions.updateGameState({ currentTurn: useGameStore.getState().gameState.currentTurn });
   }
 
-  private onUnitSkipped(eventData: any) {
+  private onUnitSkipped(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] UNIT_SKIPPED:', eventData?.unit?.id, eventData?.unit?.type);
     // Unit was skipped - update unit state in UI
     if (this.actions?.updateUnits) {
@@ -540,14 +540,14 @@ export class EngineEventRouter {
     }
   }
 
-  private onAITargetHighlight(eventData: any) {
+  private onAITargetHighlight(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] AI_TARGET_HIGHLIGHT:', eventData);
     // Optionally, highlight the target tile in the UI (red overlay, etc.)
     // For now, just log and update visibility
     this.actions.updateVisibility();
   }
 
-  private onUnitQueueInit(eventData: any) {
+  private onUnitQueueInit(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] UNIT_QUEUE_INIT:', eventData);
     const unitId = eventData?.unitId || null;
     this.actions.setCurrentQueueUnitId(unitId);
@@ -565,7 +565,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onUnitQueueAdvance(eventData: any) {
+  private onUnitQueueAdvance(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] UNIT_QUEUE_ADVANCE:', eventData);
     const unitId = eventData?.unitId || null;
     this.actions.setCurrentQueueUnitId(unitId);
@@ -583,7 +583,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onUnitQueueChange(eventData: any) {
+  private onUnitQueueChange(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] UNIT_QUEUE_CHANGE:', eventData);
     const unitId = eventData?.currentUnitId || null;
     const civilizationId = eventData?.civilizationId;
@@ -643,7 +643,7 @@ export class EngineEventRouter {
     }
   }
 
-  private onSelectQueueUnit(eventData: any) {
+  private onSelectQueueUnit(eventData: Record<string, unknown>) {
     console.log('[EngineEventRouter] SELECT_QUEUE_UNIT:', eventData);
     const unit = eventData?.unit;
     if (unit) {
@@ -660,9 +660,9 @@ export class EngineEventRouter {
    * Focus camera on a specific unit, preserving the current zoom and clamping
    * to the map bounds so the view never lands on empty black space.
    */
-  private focusOnUnit(unit: any): void {
+  private focusOnUnit(unit: Unit): void {
     const currentCamera = useGameStore.getState().camera;
-    const map = (this.gameEngine as any)?.map;
+    const map = this.gameEngine.map;
     const mapWidth = map?.width ?? 80;
     const mapHeight = map?.height ?? 50;
     const zoom = currentCamera?.zoom ?? 2.0;
@@ -690,36 +690,36 @@ export class EngineEventRouter {
     this.actions.updateCamera(newCamera);
   }
 
-  private onWarDeclared(eventData: any) {
+  private onWarDeclared(eventData: Record<string, unknown>) {
     const civs = this.gameEngine.civilizations || [];
-    const aggressor = civs.find((c: any) => c.id === eventData?.aggressorId);
-    const target = civs.find((c: any) => c.id === eventData?.targetId);
+    const aggressor = civs.find((c: Civilization) => c.id === eventData?.aggressorId);
+    const target = civs.find((c: Civilization) => c.id === eventData?.targetId);
     const msg = `${aggressor?.name ?? 'Unknown'} declared war on ${target?.name ?? 'Unknown'}!`;
     console.log('[EngineEventRouter] WAR_DECLARED:', msg);
     this.actions.addNotification?.({ type: 'warning', message: msg });
     this.syncState();
   }
 
-  private onPeaceMade(eventData: any) {
+  private onPeaceMade(eventData: Record<string, unknown>) {
     const civs = this.gameEngine.civilizations || [];
-    const civA = civs.find((c: any) => c.id === eventData?.civA);
-    const civB = civs.find((c: any) => c.id === eventData?.civB);
+    const civA = civs.find((c: Civilization) => c.id === eventData?.civA);
+    const civB = civs.find((c: Civilization) => c.id === eventData?.civB);
     const msg = `Peace between ${civA?.name ?? 'Unknown'} and ${civB?.name ?? 'Unknown'}!`;
     console.log('[EngineEventRouter] PEACE_MADE:', msg);
     this.actions.addNotification?.({ type: 'success', message: msg });
     this.syncState();
   }
 
-  private onDiplomacyEvent(eventData: any) {
+  private onDiplomacyEvent(eventData: Record<string, unknown>) {
     if (eventData?.message) {
       this.actions.addNotification?.({ type: 'info', message: eventData.message });
     }
   }
 
-  private onAllianceBroken(eventData: any) {
+  private onAllianceBroken(eventData: Record<string, unknown>) {
     const civs = this.gameEngine.civilizations || [];
-    const civA = civs.find((c: any) => c.id === eventData?.civA);
-    const civB = civs.find((c: any) => c.id === eventData?.civB);
+    const civA = civs.find((c: Civilization) => c.id === eventData?.civA);
+    const civB = civs.find((c: Civilization) => c.id === eventData?.civB);
     const msg = `💔 Alliance broken: ${civA?.name ?? 'Unknown'} declared war on ${civB?.name ?? 'Unknown'}!`;
     console.log('[EngineEventRouter] ALLIANCE_BROKEN:', msg);
     this.actions.addNotification?.({ type: 'warning', message: msg });
@@ -732,12 +732,12 @@ export class EngineEventRouter {
    * of auto-resolving — the player decides. In AI-vs-AI games there is no
    * human, so offers are never routed here.
    */
-  private onAIDiplomacyOffer(eventData: any) {
+  private onAIDiplomacyOffer(eventData: Record<string, unknown>) {
     if (this.isAIVsAI) return;
     if (typeof eventData?.fromCivId !== 'number') return;
 
     const civs = this.gameEngine.civilizations || [];
-    const from = civs.find((c: any) => c.id === eventData.fromCivId);
+    const from = civs.find((c: Civilization) => c.id === eventData.fromCivId);
     console.log('[EngineEventRouter] AI_DIPLOMACY_OFFER from', from?.name ?? eventData.fromCivId, '→', eventData.action);
 
     if (eventData?.message) {

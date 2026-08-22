@@ -206,7 +206,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   }, []);
 
   const createTerrainGrid = useCallback((
-    tiles: any[] | undefined,
+    tiles: Array<{ type?: string; resource?: string; improvement?: string; visible?: boolean; explored?: boolean; hasRoad?: boolean; hasRiver?: boolean; village?: boolean }> | undefined,
     width: number,
     height: number,
     visibility?: boolean[],
@@ -307,7 +307,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           rebuilt[row] = new Array(mapData.width);
           for (let col = 0; col < mapData.width; col++) {
             const idx = row * mapData.width + col;
-            const tile: any = (mapData.tiles[idx] as any) || {};
+            const tile = mapData.tiles[idx] as { type?: string; resource?: string; improvement?: string; visible?: boolean; explored?: boolean } || {};
             rebuilt[row][col] = {
               type: tile.type || 'OCEAN',
               resource: tile.resource ?? null,
@@ -544,7 +544,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       const mapObj = (gameEngine as any).map;
       if (mapObj && typeof mapObj.getUnitAt === 'function') return mapObj.getUnitAt(col, row);
       const unitsArr = (gameEngine as any).units;
-      if (Array.isArray(unitsArr)) return unitsArr.find((u: any) => u && u.col === col && u.row === row) || null;
+      if (Array.isArray(unitsArr)) return unitsArr.find((u: Unit) => u && u.col === col && u.row === row) || null;
     } catch (err) {
       console.error('[GameCanvas] getUnitAtFromEngine error', err);
     }
@@ -559,7 +559,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       const mapObj = (gameEngine as any).map;
       if (mapObj && typeof mapObj.getCityAt === 'function') return mapObj.getCityAt(col, row);
       const citiesArr = (gameEngine as any).cities;
-      if (Array.isArray(citiesArr)) return citiesArr.find((c: any) => c && c.col === col && c.row === row) || null;
+      if (Array.isArray(citiesArr)) return citiesArr.find((c: City) => c && c.col === col && c.row === row) || null;
     } catch (err) {
       console.error('[GameCanvas] getCityAtFromEngine error', err);
     }
@@ -968,7 +968,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
         // Check for unit or city at this location
         let unitAt = null;
-        let cityAt: { id: string; name: any; civilizationId: number; };
+        let cityAt: { id: string; name: string; civilizationId: number; } | null;
          try {
            unitAt = getUnitAtFromEngine(hex.col, hex.row);
            cityAt = getCityAtFromEngine(hex.col, hex.row);
@@ -1117,7 +1117,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
               );
 
               if (pathResult.success && pathResult.path.length > 1) {
-                const pathToFollow: UnitPathStep[] = pathResult.path.slice(1).map((step: any) => ({ col: step.col, row: step.row }));
+                const pathToFollow: UnitPathStep[] = pathResult.path.slice(1).map((step: { col: number; row: number }) => ({ col: step.col, row: step.row }));
 
                 // Use GoToManager to set the path and execute with animation
                 const goToManager = (gameEngine as any)?.goToManager;
@@ -1414,7 +1414,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   };
 
   /** "Road construction started (2 turns)" — Civ1 multi-turn construction feedback. */
-  const buildStartedMessage = (engine: GameEngine, unit: any, improvement: string): string => {
+  const buildStartedMessage = (engine: GameEngine, unit: Unit, improvement: string): string => {
     const tile = engine.getTileAt(unit.col, unit.row) as { terrain?: string; type?: string } | undefined;
     const terrain = tile?.terrain || tile?.type || '';
     const turns = engine.improvementBuildTurns?.(improvement, terrain) ?? 1;
@@ -1671,7 +1671,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           }
           if (result?.success) {
             if (result.type === 'intelligence') {
-              const r = result.report;
+              const r = result.report as Record<string, unknown> | undefined;
               if (actions?.addNotification) {
                 actions.addNotification({
                   type: 'info',
@@ -1679,15 +1679,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
                 });
               }
             } else if (result.type === 'proposal') {
-              const accepted = result.response?.accepted;
+              const resp = result.response as Record<string, unknown> | undefined;
+              const accepted = resp?.accepted;
               if (actions?.addNotification) actions.addNotification({
                 type: accepted ? 'success' : 'warning',
-                message: accepted ? `Proposal accepted!` : `Proposal rejected: ${result.response?.reason || 'unknown'}`
+                message: accepted ? `Proposal accepted!` : `Proposal rejected: ${resp?.reason || 'unknown'}`
               });
             } else if (result.type === 'bribe') {
+              const resp = result.response as Record<string, unknown> | undefined;
               if (actions?.addNotification) actions.addNotification({
-                type: result.response?.success ? 'success' : 'warning',
-                message: result.response?.success ? 'Unit bribed!' : `Bribe failed: ${result.response?.reason || 'not enough gold'}`
+                type: resp?.success ? 'success' : 'warning',
+                message: resp?.success ? 'Unit bribed!' : `Bribe failed: ${resp?.reason || 'not enough gold'}`
               });
             }
           } else {

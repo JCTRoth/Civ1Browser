@@ -652,7 +652,7 @@ export function findInterceptPosition(
  * apply the correct behaviour is to stay put and defend.
  */
 export function findPatrolWaypoint(
-  _unit: any,
+  _unit: UnitData,
   _unitCol: number,
   _unitRow: number,
   _cities: Array<{ col: number; row: number; civilizationId: number }>,

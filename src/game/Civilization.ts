@@ -26,7 +26,7 @@ interface Technology {
     cost: number;
     prerequisites: string[];
     category: string;
-    effects: any;
+    effects: { enables?: string[] };
 }
 
 interface CivilizationInfo {
@@ -72,21 +72,21 @@ export class Civilization {
     // Game state
     public alive: boolean;
     public turnActive: boolean;
-    public capital: any; // First city becomes capital
+    public capital: import('../../types/game').City | null; // First city becomes capital
 
     // AI properties
     public personality: Personality;
     public priorities: Priorities;
 
     // Game reference
-    public gameMap: any;
+    public gameMap: import('../../types/game').MapState | null;
 
     // Units and cities (will be managed by game map)
-    public units: any[];
-    public cities: any[];
+    public units: import('../../types/game').Unit[];
+    public cities: import('../../types/game').City[];
     
     // Callback for state changes (replaces EventEmitter)
-    public onStateChange: ((eventType: string, data: any) => void) | null;
+    public onStateChange: ((eventType: string, data: Record<string, unknown>) => void) | null;
 
     constructor(id: string, name: string, leaderName: string, color: string, isHuman: boolean = false) {
         this.id = id;
@@ -163,7 +163,7 @@ export class Civilization {
     }
 
     // Start civilization's turn
-    startTurn(gameMap: any, turn: number): void {
+    startTurn(gameMap: import('../../types/game').MapState, turn: number): void {
         this.turnActive = true;
 
         // Calculate total resources from cities
@@ -185,7 +185,7 @@ export class Civilization {
     }
 
     // Calculate resources from all cities
-    calculateResources(_gameMap: any): void {
+    calculateResources(_gameMap: import('../../types/game').MapState): void {
         let totalGold = 0;
         let totalScience = 0;
 
@@ -338,12 +338,12 @@ export class Civilization {
     // ──────────────────────────────────────────────────────────────────
 
     // Check if civilization is enemy
-    isEnemy(otherCiv: any): boolean {
+    isEnemy(otherCiv: Civilization): boolean {
         return this.warWith.has(otherCiv.id);
     }
 
     // Diplomatic decisions (simplified - declare war / make peace)
-    declareWar(otherCiv: any): void {
+    declareWar(otherCiv: Civilization): void {
         this.warWith.add(otherCiv.id);
         otherCiv.warWith.add(this.id);
 
@@ -351,7 +351,7 @@ export class Civilization {
     }
 
     // Make peace with another civilization
-    makePeace(otherCiv: any): void {
+    makePeace(otherCiv: Civilization): void {
         this.warWith.delete(otherCiv.id);
         otherCiv.warWith.delete(this.id);
 

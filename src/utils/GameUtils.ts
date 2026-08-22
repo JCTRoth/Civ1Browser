@@ -28,11 +28,11 @@ export const GameUtils = {
         if (obj instanceof Date) return new Date(obj.getTime()) as T;
         if (Array.isArray(obj)) return obj.map(item => GameUtils.deepClone(item)) as T;
         if (typeof obj === 'object') {
-            const clonedObj: any = {};
+            const clonedObj: Record<string, unknown> = {};
             Object.keys(obj).forEach(key => {
-                clonedObj[key] = GameUtils.deepClone((obj as any)[key]);
+                clonedObj[key] = GameUtils.deepClone((obj as Record<string, unknown>)[key]);
             });
-            return clonedObj;
+            return clonedObj as T;
         }
         return obj;
     },

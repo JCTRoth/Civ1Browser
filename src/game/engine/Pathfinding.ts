@@ -1,5 +1,6 @@
 import { TERRAIN_PROPS } from '../../utils/Constants';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES } from '../../data/TileImprovementConstants';
+import type { MapTile } from './GameEngine';
 
 /**
  * Node for A* pathfinding
@@ -30,7 +31,7 @@ export class Pathfinding {
    * Calculate movement cost for a tile
    */
   private static getMovementCost(
-    tile: any,
+    tile: MapTile,
     unitType: string
   ): number {
     if (!tile) return Infinity;

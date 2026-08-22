@@ -1,5 +1,6 @@
 import type { EnemyLocation } from './EnemySearcher';
-import type { City } from '../../../types/game';
+import type { City, Unit, GameEngine } from '../../../types/game';
+import type { PlayerTurnStorage } from './GameEngine';
 
 const DIFFICULTY_THRESHOLD_MODIFIERS: Record<string, number> = {
   CHIEFTAIN: 1.4,
@@ -134,22 +135,22 @@ export function calculateDangerThreshold(currentYear: number, difficulty: string
   return parseFloat(threshold.toFixed(2));
 }
 
-export function computeCityGarrisonStrength(gameEngine: any, city: City, civilizationId: number, radius: number = 2): number {
+export function computeCityGarrisonStrength(gameEngine: GameEngine, city: City, civilizationId: number, radius: number = 2): number {
   if (!gameEngine?.squareGrid) {
     return 0;
   }
 
   return gameEngine.units
-    .filter((unit: any) => unit.civilizationId === civilizationId)
-    .filter((unit: any) => gameEngine.squareGrid!.squareDistance(unit.col, unit.row, city.col, city.row) <= radius)
-    .reduce((total: number, unit: any) => total + Math.max(1, unit.defense || unit.attack || 1), 0);
+    .filter((unit: Unit) => unit.civilizationId === civilizationId)
+    .filter((unit: Unit) => gameEngine.squareGrid!.squareDistance(unit.col, unit.row, city.col, city.row) <= radius)
+    .reduce((total: number, unit: Unit) => total + Math.max(1, unit.defense || unit.attack || 1), 0);
 }
 
 export function collectCityThreatSamples(
-  gameEngine: any,
+  gameEngine: GameEngine,
   city: City,
   civilizationId: number,
-  storage: any,
+  storage: PlayerTurnStorage,
   roundNumber: number,
   maxDistance: number = 8
 ): CityThreatSample[] {
@@ -159,7 +160,7 @@ export function collectCityThreatSamples(
 
   const samples: CityThreatSample[] = [];
 
-  for (const unit of gameEngine.units as any[]) {
+  for (const unit of gameEngine.units as Unit[]) {
     if (unit.civilizationId === civilizationId) continue;
     const distance = gameEngine.squareGrid.squareDistance(unit.col, unit.row, city.col, city.row);
     if (distance > maxDistance) continue;

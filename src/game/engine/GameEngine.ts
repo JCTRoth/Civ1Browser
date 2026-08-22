@@ -32,7 +32,7 @@ import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
 import { AIResearch } from './AIResearch';
 import { MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
-import type { GameActions, Unit, City, Civilization, VillageResult } from '../../../types/game';
+import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem } from '../../../types/game';
 
 
 
@@ -49,7 +49,7 @@ interface GameSettings {
   startingGold: number;
 }
 
-interface MapTile {
+export interface MapTile {
   terrain: string;
   resource?: string;
   improvement?: string;
@@ -66,9 +66,11 @@ interface MapData {
   width: number;
   height: number;
   tiles: MapTile[];
+  visibility: boolean[];
+  revealed: boolean[];
 }
 
-interface PlayerTurnStorage {
+export interface PlayerTurnStorage {
   civilizationId: number;
   visibility: boolean[]; // Current visibility (fog of war)
   explored: boolean[]; // Permanently explored tiles
@@ -94,13 +96,13 @@ export default class GameEngine {
   units: Unit[];
   cities: City[];
   civilizations: Civilization[];
-  technologies: any[];
+  technologies: Technology[];
   gameSettings: GameSettings;
   isInitialized: boolean;
   currentTurn: number;
   currentYear: number;
   activePlayer: number;
-  onStateChange: ((eventType: string, eventData?: any) => void) | null;
+  onStateChange: ((eventType: string, eventData?: Record<string, unknown>) => void) | null;
   productionManager: ProductionManager;
   autoProduction: AutoProduction;
   economicManager: EconomicManager;
@@ -155,19 +157,21 @@ export default class GameEngine {
     
     // Callbacks for React state updates
     this.onStateChange = null;
-    this.productionManager = new ProductionManager(this);
-    this.autoProduction = new AutoProduction(this);
-    this.economicManager = new EconomicManager(this);
-    this.governmentManager = new GovernmentManager(this);
-    this.researchManager = new ResearchManager(this);
-    this.roundManager = new TurnManager(this);
-    this.goToManager = new GoToManager(this, this.roundManager);
+    // Cast this to GameEngine interface for constructor calls
+    const self = this as unknown as import('../../../types/game').GameEngine;
+    this.productionManager = new ProductionManager(self);
+    this.autoProduction = new AutoProduction(self);
+    this.economicManager = new EconomicManager(self);
+    this.governmentManager = new GovernmentManager(self);
+    this.researchManager = new ResearchManager(self);
+    this.roundManager = new TurnManager(self);
+    this.goToManager = new GoToManager(self, this.roundManager);
     this.playerStorage = new Map();
     this.scoutMemory = new ScoutMemory(); // Phase 3.1: Initialize scout memory
-    this.aiManager = new AIManager(this);
-    this.barbarianManager = new BarbarianManager(this);
-    this.unitTurnQueue = new UnitTurnQueue(this); // Initialize unit turn queue
-    this.diplomacyManager = new DiplomacyManager(this);
+    this.aiManager = new AIManager(self);
+    this.barbarianManager = new BarbarianManager(self);
+    this.unitTurnQueue = new UnitTurnQueue(self); // Initialize unit turn queue
+    this.diplomacyManager = new DiplomacyManager(self);
     this.devMode = false;
     this.victoryManager = new VictoryManager(this);
     this.isGameOver = false;
@@ -371,11 +375,11 @@ export default class GameEngine {
    * Set or queue production for a city by id.
    * If queue=true the item will be added to city's build queue, otherwise it will become current production.
    */
-  setCityProduction(cityId: string, item: any, queue: boolean = false) {
+  setCityProduction(cityId: string, item: ProductionItem, queue: boolean = false) {
     return this.productionManager.setCityProduction(cityId, item, queue);
   }
 
-  purchaseCityProduction(cityId: string, item: any, civId?: number) {
+  purchaseCityProduction(cityId: string, item: ProductionItem, civId?: number) {
     return this.productionManager.purchaseCityProduction(cityId, item, civId);
   }
 
@@ -482,7 +486,7 @@ export default class GameEngine {
    * Check and update the areTurnsDone flag for a unit
    * Sets to true if unit has no moves left OR is fortified OR is sleeping
    */
-  private updateUnitTurnsDoneFlag(unit: any): void {
+  private updateUnitTurnsDoneFlag(unit: Unit): void {
     const noMovesLeft = (unit.movesRemaining || 0) <= 0;
     const isFortified = unit.isFortified === true;
     const isSleeping = unit.isSleeping === true;
@@ -719,7 +723,7 @@ export default class GameEngine {
     }
 
     // Initialize diplomacy between all civilizations
-    this.diplomacyManager.initialize(this.civilizations.map((c: any) => c.id));
+    this.diplomacyManager.initialize(this.civilizations.map((c: Civilization) => c.id));
     console.log('[GameEngine] Diplomacy initialized for', this.civilizations.length, 'civilizations');
 
     // Initialize fog of war visibility
@@ -1061,7 +1065,7 @@ export default class GameEngine {
    * Create a single unit
    */
   private createUnit(civId: number, type: string, col: number, row: number) {
-    const unitProps: any = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
+    const unitProps: { movement: number; attack: number; defense: number; icon: string; hitPoints?: number; name?: string; type?: string; maintenance?: number } = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
     const unitId = `${type}_${civId}_${this.units.filter(u => u.civilizationId === civId).length}`;
     
     const unit = {
@@ -1103,7 +1107,7 @@ export default class GameEngine {
   /**
    * Create starting cities for MANY_CITIES mode
    */
-  private createStartingCities(civId: number, civ: any, startPos: { col: number; row: number }) {
+  private createStartingCities(civId: number, civ: Civilization, startPos: { col: number; row: number }) {
     const cityPositions = [
       { col: startPos.col, row: startPos.row },
       { col: startPos.col + 5, row: startPos.row },
@@ -1301,8 +1305,8 @@ export default class GameEngine {
     const cityNames = Array.isArray(civ.cityNames) ? civ.cityNames : [];
     const usedNames = new Set(
       this.cities
-        .filter((c: any) => c.civilizationId === civilizationId)
-        .map((c: any) => String(c.name)),
+        .filter((c: City) => c.civilizationId === civilizationId)
+        .map((c: City) => String(c.name)),
     );
 
     while (civ.nextCityNameIndex < cityNames.length) {
@@ -1611,7 +1615,7 @@ export default class GameEngine {
    * moved (or taken any action), the exception no longer applies and the
    * standard `moves_current >= cost` check governs.
    */
-  canUnitAffordMove(unit: any, moveCost: number): boolean {
+  canUnitAffordMove(unit: Unit, moveCost: number): boolean {
     const movesCurrent = unit.movesRemaining || 0;
     if (movesCurrent <= 0) return false;
     if (movesCurrent >= moveCost) return true;
@@ -2541,7 +2545,7 @@ export default class GameEngine {
    *   city walls). On success the attacker is removed and the city changes
    *   hands (or is destroyed if it had only 1 population).
    */
-  private resolveCityCombat(attacker: any, city: any): 'captured' | 'hit' | 'city_destroyed' | 'defended' {
+  private resolveCityCombat(attacker: Unit, city: City): 'captured' | 'hit' | 'city_destroyed' | 'defended' {
     // Attack 0 units (civilians) must have zero strength — `attack || 1` would
     // give a settler the same strength as a warrior and a 50/50 capture roll.
     const attackerStrength = (attacker.attack && attacker.attack > 0 ? attacker.attack : 0)
@@ -2649,7 +2653,7 @@ export default class GameEngine {
    * Civ1: air units (fighters/bombers) and siege artillery (cannon/artillery,
    * the local stand-ins for the Howitzer) ignore city walls entirely.
    */
-  private unitIgnoresCityWalls(attacker: any): boolean {
+  private unitIgnoresCityWalls(attacker: Unit): boolean {
     const type = String(attacker.type ?? '').toLowerCase();
     const props = UNIT_PROPS[type];
     if (props?.type === 'air') return true;
@@ -2661,7 +2665,7 @@ export default class GameEngine {
    * one random non-palace, non-wonder building per point of population lost
    * (capture costs exactly 1). Wonders and the palace survive.
    */
-  private destroyBuildingsOnCapture(city: any): void {
+  private destroyBuildingsOnCapture(city: City): void {
     const buildings = Array.isArray(city.buildings) ? city.buildings : [];
     const wonders = new Set(Array.isArray(city.wonders) ? city.wonders : []);
     const removals: string[] = [];
@@ -2711,11 +2715,11 @@ export default class GameEngine {
    * defeated units (e.g. the last defender killed in unit combat moments ago)
    * are left to their own removal to avoid double-removal/double-events.
    */
-  private destroyGarrisonOnCapture(city: any, oldCivId: number): void {
+  private destroyGarrisonOnCapture(city: City, oldCivId: number): void {
     const killed = this.units.filter(
-      (u: any) => u.civilizationId === oldCivId
+      (u: Unit) => u.civilizationId === oldCivId
         && u.col === city.col && u.row === city.row
-        && (u as any).isDefeated !== true,
+        && u.isDefeated !== true,
     );
     for (const u of killed) {
       this.unitTurnQueue?.removeUnit?.(u.id);
@@ -2723,7 +2727,7 @@ export default class GameEngine {
       console.log(`[COMBAT] Garrison ${u.type} destroyed in captured city ${city.name}`);
     }
     if (killed.length > 0) {
-      this.units = this.units.filter((u: any) => !killed.includes(u));
+      this.units = this.units.filter((u: Unit) => !killed.includes(u));
     }
   }
 
@@ -2881,7 +2885,7 @@ export default class GameEngine {
    * 50% chance the enemy settler rushes in and captures the brand-new city.
    * The capturing settler is consumed (removed from the map).
    */
-  private checkSettlerRushCapture(city: any): void {
+  private checkSettlerRushCapture(city: City): void {
     if (!this.squareGrid) return;
 
     const neighbors = this.squareGrid.getNeighbors(city.col, city.row);
@@ -3574,12 +3578,12 @@ export default class GameEngine {
   /**
    * Execute a diplomat action. Consumes the diplomat's move.
    */
-  executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any {
+  executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): { success: boolean; type?: string; report?: unknown; reason?: string; response?: unknown } {
     const diplomat = this.units.find(u => u.id === diplomatId);
     if (!diplomat || diplomat.type !== 'diplomat') return { success: false, reason: 'Not a diplomat' };
     if ((diplomat.movesRemaining || 0) <= 0) return { success: false, reason: 'No moves remaining' };
 
-    let result: any;
+    let result: unknown;
 
     switch (action) {
       case 'gather_intelligence':
@@ -3824,7 +3828,7 @@ export default class GameEngine {
    * Apply the finished improvement: terrain transformation (Civ1) or a plain
    * improvement placement. Clears the settler's work state.
    */
-  private completeImprovement(unit: any): void {
+  private completeImprovement(unit: Unit): void {
     const type = unit.workTarget;
     const tile = this.getTileAt(unit.col, unit.row);
     unit.workTarget = null;
@@ -4163,8 +4167,8 @@ export default class GameEngine {
       }
 
       // Serialize diplomacy state
-      const diplomacyRelations: any[] = [];
-      const diplomacyEvents: any[] = [];
+      const diplomacyRelations: Record<string, unknown>[] = [];
+      const diplomacyEvents: Record<string, unknown>[] = [];
       if (this.diplomacyManager) {
         const rels = this.diplomacyManager.getAllRelations();
         for (const rel of rels) {
@@ -4307,7 +4311,7 @@ export default class GameEngine {
       }
 
       // ── Restore diplomacy state ──
-      this.diplomacyManager.initialize(this.civilizations.map((c: any) => c.id));
+      this.diplomacyManager.initialize(this.civilizations.map((c: Civilization) => c.id));
       if (saveData.version >= 2 && saveData.diplomacyRelations) {
         this.diplomacyManager.restoreRelations(saveData.diplomacyRelations);
       }
@@ -4359,7 +4363,7 @@ export default class GameEngine {
             }
             // Restore scout zones
             current.scoutZones = Array.isArray(storage.scoutZones)
-              ? storage.scoutZones.map((z: any) => ({ ...z }))
+              ? storage.scoutZones.map((z: { minCol: number; maxCol: number; minRow: number; maxRow: number }) => ({ ...z }))
               : [];
             // Restore AI turn data
             current.turnData = storage.turnData

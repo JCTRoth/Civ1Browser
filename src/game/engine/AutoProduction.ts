@@ -893,8 +893,7 @@ export class AutoProduction {
    *  - WAR_DECLARED → re-pick production for both sides (fresh threat eval).
    * Wired from the engine event tap in `src/hooks/UseGameEngine.ts`.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onGameEvent(eventType: string, data: any): void {
+  onGameEvent(eventType: string, data: Record<string, unknown>): void {
     try {
       switch (eventType) {
         case 'UNIT_PRODUCED':

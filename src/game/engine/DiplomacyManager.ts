@@ -21,7 +21,7 @@ import type {
   DiplomatAction,
   TreatyType,
 } from './DiplomacyTypes';
-import type { GameEngine } from '../../../types/game';
+import type { GameEngine, Unit, City } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -210,8 +210,8 @@ export class DiplomacyManager {
     if (ownStrength > theirStrength * 2) score += 5; // contempt → more aggressive but not hostile
 
     // Border friction: nearby cities create tension
-    const ownCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === fromCivId) ?? [];
-    const theirCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === towardCivId) ?? [];
+    const ownCities = this.gameEngine.cities?.filter((c: City) => c.civilizationId === fromCivId) ?? [];
+    const theirCities = this.gameEngine.cities?.filter((c: City) => c.civilizationId === towardCivId) ?? [];
     let minCityDist = Infinity;
     for (const oc of ownCities) {
       for (const tc of theirCities) {
@@ -544,9 +544,9 @@ export class DiplomacyManager {
   /** Generate an intelligence report on a civilization */
   gatherIntelligence(spyCivId: number, targetCivId: number): IntelligenceReport {
     const civ = this.gameEngine.civilizations?.[targetCivId];
-    const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === targetCivId) ?? [];
+    const cities = this.gameEngine.cities?.filter((c: City) => c.civilizationId === targetCivId) ?? [];
     const military = this.gameEngine.units?.filter(
-      (u: any) => u.civilizationId === targetCivId && (u.attack || 0) > 0
+      (u: Unit) => u.civilizationId === targetCivId && (u.attack || 0) > 0
     ) ?? [];
 
     this.logEvent({
@@ -569,7 +569,7 @@ export class DiplomacyManager {
 
   /** Attempt to bribe an enemy unit with a diplomat */
   bribeUnit(diplomatCivId: number, targetUnitId: string): DiplomacyResponse {
-    const unit = this.gameEngine.units?.find((u: any) => u.id === targetUnitId);
+    const unit = this.gameEngine.units?.find((u: Unit) => u.id === targetUnitId);
     if (!unit) return { accepted: false, reason: 'Unit not found' };
     if (unit.civilizationId === diplomatCivId) return { accepted: false, reason: 'Cannot bribe own unit' };
 
@@ -919,9 +919,9 @@ export class DiplomacyManager {
 
   estimateMilitaryStrength(civId: number): number {
     const units = this.gameEngine.units?.filter(
-      (u: any) => u.civilizationId === civId && (u.attack || 0) > 0
+      (u: Unit) => u.civilizationId === civId && (u.attack || 0) > 0
     ) ?? [];
-    return units.reduce((sum: number, u: any) => sum + (u.attack || 0) + (u.defense || 0) * 0.5, 0);
+    return units.reduce((sum: number, u: Unit) => sum + (u.attack || 0) + (u.defense || 0) * 0.5, 0);
   }
 
   private applyReputationPenalty(aggressorId: number, targetId: number, penalty: number): void {
@@ -952,7 +952,7 @@ export class DiplomacyManager {
     if (this.eventLog.length > 50) this.eventLog.length = 50;
   }
 
-  private emitEvent(type: string, data: any): void {
+  private emitEvent(type: string, data: Record<string, unknown>): void {
     if (this.gameEngine.onStateChange) {
       this.gameEngine.onStateChange(type, data);
     }

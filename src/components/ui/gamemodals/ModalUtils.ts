@@ -2,6 +2,7 @@
 
 import { UNIT_PROPS } from '../../../utils/Constants';
 import { BUILDING_PROPERTIES } from '../../../data/BuildingConstants';
+import type { City, ProductionItem } from '../../../../types/game';
 
 // Shared utilities for modal logic
 export class ModalUtils {
@@ -10,7 +11,7 @@ export class ModalUtils {
     return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
-  static getProductionPerTurn(city: any): number {
+  static getProductionPerTurn(city: City): number {
     if (!city) return 0;
     if (typeof city?.yields?.production === 'number') return city.yields.production;
     if (typeof city?.production === 'number') return city.production;
@@ -18,7 +19,7 @@ export class ModalUtils {
     return 0;
   }
 
-  static getProductionProgressValue(city: any): number {
+  static getProductionProgressValue(city: City): number {
     if (!city) return 0;
     // Prefer productionProgress for progress (used in original code)
     if (typeof city?.productionProgress === 'number') return city.productionProgress;
@@ -27,7 +28,7 @@ export class ModalUtils {
     return 0;
   }
 
-  static getProductionCost(item: any): number {
+  static getProductionCost(item: string | ProductionItem | number | null | undefined): number {
     if (!item) return 0;
     if (typeof item === 'number') return item;
     if (typeof item === 'string') {
@@ -62,7 +63,7 @@ export class ModalUtils {
     return 0;
   }
 
-  static getProductionName(item: any): string {
+  static getProductionName(item: string | ProductionItem | null | undefined): string {
     if (!item) return 'Unknown';
     if (typeof item === 'string') {
       const normalizedKey = ModalUtils.normalizeUnitKey(item);

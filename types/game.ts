@@ -115,6 +115,15 @@ export interface CameraState {
   maxZoom: number;
 }
 
+/** A production item that can be queued in a city's build queue. */
+export interface ProductionItem {
+  type: 'unit' | 'building';
+  itemType: string;
+  name: string;
+  cost: number;
+  shields?: number;
+}
+
 export interface Unit {
   id: string;
   type: string;
@@ -138,7 +147,7 @@ export interface Unit {
   attack?: number;
   defense?: number;
   maintenance?: number;
-  orders?: any;
+  orders?: { type: string; target?: { col: number; row: number } } | null;
   isFortified?: boolean;
   isSkipped?: boolean;
   isSleeping?: boolean;
@@ -153,6 +162,22 @@ export interface Unit {
   workTarget?: string | null;
   /** Civ1 multi-turn improvement construction: worker-turns remaining. */
   workTurns?: number;
+  /** Whether this unit has been defeated (killed) but still needs visual cleanup. */
+  isDefeated?: boolean;
+  /** Whether this unit is a naval unit. */
+  isNaval?: boolean;
+  /** Unit sight range for fog of war. */
+  sightRange?: number;
+  // AI-specific runtime state (set dynamically by AIManager)
+  _aiSettlement?: { col: number; row: number; score: number } | null;
+  _blockedSettlementTargets?: Set<string>;
+  _lastSettlementTarget?: { col: number; row: number };
+  _positionHistory?: string[];
+  _probeTarget?: { col: number; row: number };
+  _exploreTarget?: { col: number; row: number };
+  _exploreBearing?: { dx: number; dy: number };
+  _blockedScoutTargets?: Set<string>;
+  _aiCommittedTarget?: { target: { col: number; row: number }; round: number };
 }
 
 export interface City {
@@ -180,9 +205,9 @@ export interface City {
   // Current production progress (0..1 or absolute depending on implementation)
   productionProgress?: number;
   // Queue of production items (units/buildings)
-  buildQueue?: Array<any>;
+  buildQueue?: ProductionItem[];
   // Currently active production item
-  currentProduction?: any | null;
+  currentProduction?: ProductionItem | null;
   // Production carried over from previous completed item
   carriedOverProgress?: number;
   isCapital?: boolean;
@@ -195,16 +220,22 @@ export interface City {
   foodNeeded?: number;
   foodRequired?: number;
   productionStored?: number;
-  buildings?: any[];
+  buildings?: string[];
   shields?: number;
-  productionQueue?: any[];
+  productionQueue?: ProductionItem[];
   autoProduction?: boolean; // When true, the engine auto-selects production for this city
-  output?: any;
-  processTurn?: (gameMap: any, turn: number) => void;
+  output?: { food: number; production: number; trade: number };
+  processTurn?: (gameMap: MapState, turn: number) => void;
   /** Tile keys (e.g. "col,row") that citizens are currently working. */
   workingTiles?: Set<string>;
   /** Items purchased this turn (queued for next turn creation). */
   purchasedThisTurn?: Array<{ type?: string; itemType?: string; name?: string; cost?: number }>;
+  /** Whether barbarian scout has been built from this city. */
+  barbarianScoutBuilt?: boolean;
+  /** Method to queue production (if available on city instance). */
+  queueProduction?: (item: ProductionItem) => void;
+  /** Method to set production (if available on city instance). */
+  setProduction?: (item: ProductionItem) => void;
 }
 
 /**
@@ -224,7 +255,7 @@ export interface Civilization {
   name: string;
   color: string;
   isAlive: boolean;
-  capital?: any; // Reference to the capital city
+  capital?: City | null; // Reference to the capital city
   resources: {
     food: number;
     production: number;
@@ -247,15 +278,21 @@ export interface Civilization {
   leaderName?: string;
   cityNames?: string[];
   nextCityNameIndex?: number;
-  currentResearch?: any;
+  currentResearch?: string | null;
   researchProgress?: number;
-  technologies?: any[];
+  technologies?: string[];
   score?: number;
   isHuman?: boolean;
   isAI?: boolean;
   /** Fixed per-civ AI identity — drives AutoProduction (and seeds research). */
   productionProfile?: AIProductionProfile;
   icon?: string;
+  /** AI personality traits (optional, set by AI systems). */
+  personality?: {
+    aggression?: number;
+    expansion?: number;
+    science?: number;
+  };
 }
 
 export interface UIState {
@@ -432,13 +469,13 @@ export interface GameActions {
 
 export interface GameEngine {
   isInitialized: boolean;
-  map: any; // TODO: type properly
+  map: MapState | null;
   units: Unit[];
   cities: City[];
   civilizations: Civilization[];
   technologies: Technology[];
-  onStateChange: ((eventType: string, eventData: any) => void) | null;
-  goToManager: any; // GoToManager instance for path management
+  onStateChange: ((eventType: string, eventData?: Record<string, unknown>) => void) | null;
+  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined } | null;
   /** Log a game event with category, message, and optional detail object. */
   log(category: string, message: string, detail?: Record<string, unknown>): void;
   newGame(): void;
@@ -447,7 +484,7 @@ export interface GameEngine {
   canUnitMoveTo: (unitId: string, col: number, row: number) => boolean;
   /** End the current player's turn automatically if every unit is done/skipped. */
   checkAndEndTurnIfNoMoves(): void;
-  foundCity(col: number, row: number, civilizationId: number, customName?: string | null): any;
+  foundCity(col: number, row: number, civilizationId: number, customName?: string | null): City | null;
   foundCityWithSettler(settlerId: string): boolean;
   setResearch(civId: number, techId: string, savedProgress?: number): void;
   /** Set Tax/Science/Luxury rates (sum always 100). */
@@ -468,7 +505,8 @@ export interface GameEngine {
   unitWake(unitId: string): void;
   unitFortify(unitId: string): void;
   skipUnit(unitId: string): void;
-  buildImprovement(unitId: string, improvement: string): boolean;  /** Whether a unit could build this improvement on its current tile (ignores moves). */
+  buildImprovement(unitId: string, improvement: string): boolean;
+  /** Whether a unit could build this improvement on its current tile (ignores moves). */
   canBuildImprovement(unitId: string, improvementType: string): boolean;
   /** Whether the unit can start/continue improvement work this turn (has moves, not fortified). */
   hasMovesForImprovement(unitId: string, improvementType: string): boolean;
@@ -477,7 +515,8 @@ export interface GameEngine {
   /** Advance an in-progress improvement by one worker-turn; true when completed. */
   advanceUnitWork(unitId: string): boolean;
   /** Whether a settler can found a city on its current tile. */
-  canFoundCity(settlerId: string): boolean;  cleanPollution(unitId: string): boolean;
+  canFoundCity(settlerId: string): boolean;
+  cleanPollution(unitId: string): boolean;
   disbandUnit(unitId: string): boolean;
   rushCityProduction(cityId: string): boolean;
   cycleUnitsInTile(unitId: string): string | null;
@@ -486,28 +525,28 @@ export interface GameEngine {
   getSaveJSON(): string | null;
   loadGame(): Promise<boolean>;
   getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
-  executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): any;
-  diplomacyManager: any;
+  executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): { success: boolean; type?: string; report?: unknown; reason?: string; response?: unknown; message?: string };
+  diplomacyManager: { getStatus(civA: number, civB: number): { status: string }; declareWar(attacker: number, defender: number): void };
   /** Auto-production manager for AI/human city queues. */
-  autoProduction: any;
+  autoProduction: { processAutoProductionForCivilization(civId: number): void };
   /** Production manager for city build queues. */
-  productionManager: any;
+  productionManager: { setCityProduction(cityId: string, item: ProductionItem, queue?: boolean): { success: boolean; reason?: string; city?: City }; purchaseCityProduction(cityId: string, item: ProductionItem, civId?: number): { success: boolean; reason?: string }; removeCurrentProduction(cityId: string): { success: boolean; reason?: string; removed?: ProductionItem }; removeCityQueueItem(cityId: string, index: number): { success: boolean; reason?: string; removed?: ProductionItem }; moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number): { success: boolean; reason?: string; moved?: ProductionItem } };
   /** Economic manager for tax/science/luxury rates and upkeep. */
-  economicManager: any;
+  economicManager: { setGovernment(civId: number, government: string): void };
   /** Civ I–style research manager (tech cost, beaker modifiers, turn caps). */
-  researchManager: any;
+  researchManager: { processTurn(): void };
   /** Per-civilization persistent turn storage (AI state, explored tiles…). */
-  getPlayerStorage(civilizationId: number): any;
+  getPlayerStorage(civilizationId: number): { turnData: Record<string, unknown>; visibility: boolean[]; explored: boolean[] };
   /** Square grid backing the map (null until a game is initialized). */
-  squareGrid: any;
+  squareGrid: { isValidSquare(col: number, row: number): boolean; squareDistance(col1: number, row1: number, col2: number, row2: number): number } | null;
   /** Get the map tile at a grid position (null when out of bounds). */
-  getTileAt(col: number, row: number): any;
+  getTileAt(col: number, row: number): { terrain: string; type?: string; resource?: string; improvement?: string; village?: boolean } | null;
   /** Turn/phase manager. */
-  roundManager: any;
+  roundManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getPhase(): string | null; getCurrentPlayer(): number | null; getRoundNumber(): number; isAITurnInProgress(): boolean };
   /** Current in-game year (negative = BC). */
   currentYear: number;
   /** Current game settings (difficulty, map type, civilizations…). */
-  gameSettings: any;
+  gameSettings: { difficulty: string; mapType: string; numberOfCivilizations: number; playerCivilization: number; startingYear: number; startingGold: number };
   /** Remove the active production item from a city. */
   removeCurrentProduction(cityId: string): void;
   getAllUnits(): Unit[];
@@ -515,4 +554,42 @@ export interface GameEngine {
   restartCurrentGame(): Promise<void>;
   shutdownToMenu(): void;
   isGameOver: boolean;
+  /** Toggle auto-production for a city. */
+  toggleAutoProduction?(cityId: string, enabled: boolean): boolean;
+  /** Purchase city production. */
+  purchaseCityProduction?(cityId: string, item: ProductionItem): { success: boolean; reason?: string };
+  /** Active player index. */
+  activePlayer: number;
+  /** Store actions for UI updates. */
+  storeActions: GameActions | null;
+  /** Whether the game is paused. */
+  isPaused?: boolean;
+  /** Current game turn number. */
+  currentTurn?: number;
+  /** Unit turn queue for managing unit order. */
+  unitTurnQueue?: { initializeQueue(civId: number): void; clearQueue(civId: number): void };
+  /** Scout memory for persistence across turns. */
+  scoutMemory?: { setCurrentRound(round: number): void };
+  /** Barbarian manager for aggressive AI. */
+  barbarianManager?: { processBarbarians(): void };
+  /** Victory manager for end-game detection. */
+  victoryManager?: { evaluateEndOfTurn(): boolean };
+  /** Government manager for revolution and capital. */
+  governmentManager?: { processTurn(civ: Civilization): void; ensureCapital?(civId: number): void; designateCapital?(civId: number, city: City): void };
+  /** Called when a scout is created. */
+  onScoutCreated?(unit: Unit): void;
+  /** Process AI turn for a civilization. */
+  processAITurn?(civilizationId: number): Promise<void>;
+  /** Scrap obsolete city walls when metallurgy is discovered. */
+  scrapObsoleteCityWalls?(civId: number): void;
+  /** Update technology availability based on researched techs. */
+  updateTechnologyAvailability?(): void;
+  /** Economic manager with full methods. */
+  economicManager: { setGovernment(civId: number, government: string): void; processTurn?(civ: Civilization): { upkeep: number; deficit: number; disbanded: number }; recomputeCityYields?(city: City): void; applyCityOutputs?(city: City, civ: Civilization): void };
+  /** Research manager with full methods. */
+  researchManager: { processTurn(): void; advanceResearch?(civ: Civilization, techId: string, totalScience: number): string | null };
+  /** Diplomacy manager with full methods. */
+  diplomacyManager: { getStatus(civA: number, civB: number): { status: string }; declareWar(attacker: number, defender: number): void; processTurn(roundNumber: number): void };
+  /** GoTo manager with full methods. */
+  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined; executePathWithAnimation?(unitId: string, delayMs: number): Promise<boolean> } | null;
 }

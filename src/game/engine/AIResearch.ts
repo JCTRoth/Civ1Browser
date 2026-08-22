@@ -15,6 +15,7 @@ import {
   type TechCategory,
   TECH_CATEGORIES,
 } from './AITypes';
+import type { Civilization } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,7 +159,7 @@ export class AIResearch {
    * @returns techId to research, or null if nothing available
    */
   static selectResearch(
-    civ: any,
+    civ: Civilization,
     strategy: StrategyProfile,
     gameState: GameStateSnapshot
   ): string | null {
@@ -311,7 +312,7 @@ export class AIResearch {
    * Get all technologies available for a civilization to research.
    * Handles both the engine's TECHNOLOGIES_DATA and the civ's technology list/set.
    */
-  static getAvailableTechnologies(civ: any): string[] {
+  static getAvailableTechnologies(civ: Civilization): string[] {
     const available: string[] = [];
     const civTechs = civ.technologies;
 

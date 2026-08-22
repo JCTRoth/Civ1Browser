@@ -9,7 +9,7 @@
  * choice is a weighted coin-flip, so games don't all play out identically.
  */
 
-import type { City } from '../../../types/game';
+import type { City, Unit, GameEngine } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -201,7 +201,7 @@ export function computeAggression(
 // ---------------------------------------------------------------------------
 
 /** Estimate the defensive strength of an enemy city: garrison + walls + pop. */
-export function estimateCityDefense(engine: any, city: City): number {
+export function estimateCityDefense(engine: GameEngine, city: City): number {
   let defense = Math.max(1, city.population ?? 1);
   const hasWalls =
     (city.buildings?.includes?.('city_walls') ?? false) ||
@@ -234,7 +234,7 @@ export function estimateCityDefense(engine: any, city: City): number {
  *    won must not be triggered.
  */
 export function planBulkAttack(
-  engine: any,
+  engine: GameEngine,
   civId: number,
   targets: KnownTarget[],
   availableStrength: number,

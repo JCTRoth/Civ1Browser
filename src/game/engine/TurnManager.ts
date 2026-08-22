@@ -407,16 +407,16 @@ export class TurnManager {
         const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
         const strategy = aiState.strategyProfile ?? 'balanced_growth';
 
-        const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) ?? [];
+        const cities = this.gameEngine.cities?.filter((c) => c.civilizationId === civilizationId) ?? [];
         const gameState = {
           currentYear: this.gameEngine.currentYear ?? -4000,
           roundNumber: this.roundNumber,
           numCities: cities.length,
           numEnemyCitiesKnown: 0,
           isAtWar: (civ.warWith?.size ?? 0) > 0,
-          hasLibrary: cities.some((c: any) => c.buildings?.some?.((b: any) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
-          totalScience: this.gameEngine.cities?.reduce((s: number, c: any) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
-          hasWaterAccess: cities.some((city: any) => this.cityHasDirectWaterAccess(city)),
+          hasLibrary: cities.some((c) => c.buildings?.some?.((b) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
+          totalScience: this.gameEngine.cities?.reduce((s: number, c) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
+          hasWaterAccess: cities.some((city) => this.cityHasDirectWaterAccess(city)),
         };
 
         const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
@@ -478,7 +478,7 @@ export class TurnManager {
     const previousPlayer = this.currentPlayer;
     
     // Get only active (alive) civilizations
-    const activeCivs = this.gameEngine.civilizations?.filter((civ: any) => civ.isAlive !== false) || [];
+    const activeCivs = this.gameEngine.civilizations?.filter((civ) => civ.isAlive !== false) || [];
     const numActiveCivs = activeCivs.length;
     
     if (numActiveCivs === 0) {
@@ -487,7 +487,7 @@ export class TurnManager {
     }
     
     // Find current player's index in active civs and move to next
-    const currentActiveIndex = activeCivs.findIndex((civ: any) => civ.id === previousPlayer);
+    const currentActiveIndex = activeCivs.findIndex((civ) => civ.id === previousPlayer);
     const nextActiveIndex = (currentActiveIndex + 1) % numActiveCivs;
     const nextCiv = activeCivs[nextActiveIndex];
     const nextPlayer = nextCiv?.id ?? 0;
@@ -569,11 +569,11 @@ export class TurnManager {
   private resetUnitsForPlayer(playerId: number): void {
     // Access UNIT_PROPS from Constants or global scope
     const UNIT_PROPS = (this.gameEngine.constructor as any).UNIT_PROPS || (globalThis as any).UNIT_PROPS;
-    const units = this.gameEngine.units.filter((u: any) => u.civilizationId === playerId);
+    const units = this.gameEngine.units.filter((u) => u.civilizationId === playerId);
     
     console.log(`[TurnManager] Resetting moves for ${units.length} units of player ${playerId}`);
     
-    units.forEach((unit: any) => {
+    units.forEach((unit) => {
       const unitProps = UNIT_PROPS?.[unit.type];
       unit.movesRemaining = unitProps?.movement || 1;
       // Civ1: at the start of the owner's turn every unit is "fresh" — full
@@ -601,9 +601,9 @@ export class TurnManager {
     console.log(`[TurnManager] Processing turn events for player ${playerId}`);
     
     // Process purchased items from previous turn
-    this.gameEngine.cities?.forEach((city: any) => {
+    this.gameEngine.cities?.forEach((city) => {
       if (city.purchasedThisTurn && city.purchasedThisTurn.length > 0) {
-        city.purchasedThisTurn.forEach((item: any) => {
+        city.purchasedThisTurn.forEach((item) => {
           if (item.type === 'unit') {
             this.createPurchasedUnit(city, item);
           } else if (item.type === 'building') {
@@ -615,18 +615,18 @@ export class TurnManager {
     });
 
     // Process cities for the active player
-    const playerCities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === playerId) || [];
+    const playerCities = this.gameEngine.cities?.filter((c) => c.civilizationId === playerId) || [];
     const civ = this.gameEngine.civilizations[playerId];
 
     // Compute real tile-based yields FIRST so production/growth use real
     // food/production, then economic outputs + happiness so disorder is known
     // before production/growth is applied.
-    playerCities.forEach((city: any) => {
+    playerCities.forEach((city: City) => {
       this.gameEngine.economicManager?.recomputeCityYields(city);
       this.gameEngine.economicManager?.applyCityOutputs(city, civ);
     });
 
-    playerCities.forEach((city: any) => {
+    playerCities.forEach((city: City) => {
       // Captured-city unrest fades a little each turn (Civ1: resentment
       // subsides once the new owner garrisons and manages the city).
       if (city.capturedTurns && city.capturedTurns > 0) {
@@ -678,14 +678,14 @@ export class TurnManager {
     this.emit('TURN_PROCESSED', { civilizationId: playerId });
   }
 
-  private createPurchasedUnit(city: any, item: any): void {
+  private createPurchasedUnit(city: City, item: { type?: string; itemType?: string; name?: string; cost?: number }): void {
     const unitType = item.itemType;
     // Purchased units do NOT consume population or destroy the city —
     // that only happens for shield-based production (Civ1 rules).
     this.createProducedUnit(city, unitType, 'UNIT_PURCHASED', /* isPurchased */ true);
   }
 
-  private processCityProduction(city: any): void {
+  private processCityProduction(city: City): void {
     // Start production from queue if needed
     if (!city.currentProduction && city.buildQueue && city.buildQueue.length > 0) {
       const nextItem = city.buildQueue.shift();
@@ -714,7 +714,7 @@ export class TurnManager {
    * by the government's per-city allowance; units beyond that allowance
    * consume one shield each. NONE units never enter the calculation.
    */
-  private calculateCityShieldSupport(city: any): number {
+  private calculateCityShieldSupport(city: City): number {
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
     const government = String(civ?.government ?? 'despotism').toLowerCase();
     const allowanceByGovernment: Record<string, number> = {
@@ -730,12 +730,12 @@ export class TurnManager {
       allowanceByGovernment[government] ?? allowanceByGovernment.despotism,
     );
     const supportedUnits = (this.gameEngine.units ?? []).filter(
-      (unit: any) => unit.homeCityId === city.id && !unit.isNoneUnit,
+      (unit) => unit.homeCityId === city.id && !unit.isNoneUnit,
     ).length;
     return Math.max(0, supportedUnits - freeUnits);
   }
 
-  private completeProduction(city: any): void {
+  private completeProduction(city: City): void {
     console.log(`[TurnManager] City ${city.name} completed production: ${city.currentProduction.type} ${city.currentProduction.itemType}`);
     
     city.productionStored = 0;
@@ -757,7 +757,7 @@ export class TurnManager {
     }
   }
 
-  private createProducedUnit(city: any, unitType: string, eventType = 'UNIT_PRODUCED', isPurchased = false): boolean {
+  private createProducedUnit(city: City, unitType: string, eventType = 'UNIT_PRODUCED', isPurchased = false): boolean {
     const unitProps = (this.gameEngine.constructor as any).UNIT_PROPS?.[unitType]
       ?? { movement: 1, attack: 0, defense: 1 };
     const isSettler = unitType === 'settler';
@@ -767,7 +767,7 @@ export class TurnManager {
     // only shield-based production triggers the Civ1 settler rule.
     const destroysCity = isSettler && population <= 1 && !isChieftain;
 
-    if (destroysCity) {
+    if (isSettler && population > 1) {
       // Civ1 consumes exactly one citizen when the settler completes.
       city.population = population - 1;
       city.foodNeeded = Math.max(20, city.population * 20);
@@ -821,9 +821,9 @@ export class TurnManager {
   }
 
   /** Apply the Civ1 size-1 settler exception and turn the new unit into NONE. */
-  private destroyCityForSettler(city: any, settler: any): void {
+  private destroyCityForSettler(city: City, settler: Unit): void {
     const cityId = city.id;
-    const cityUnits = this.gameEngine.units.filter((u: any) => u.homeCityId === cityId);
+    const cityUnits = this.gameEngine.units.filter((u) => u.homeCityId === cityId);
     for (const unit of cityUnits) {
       unit.homeCityId = null;
       unit.isNoneUnit = true;
@@ -831,7 +831,7 @@ export class TurnManager {
       unit.shieldSupport = 0;
     }
 
-    this.gameEngine.cities = this.gameEngine.cities.filter((c: any) => c.id !== cityId);
+    this.gameEngine.cities = this.gameEngine.cities.filter((c) => c.id !== cityId);
     this.gameEngine.governmentManager?.ensureCapital?.(city.civilizationId);
     this.gameEngine.onStateChange?.('CITY_DESTROYED', {
       city,
@@ -841,7 +841,7 @@ export class TurnManager {
     console.log(`[TurnManager] Settler completion destroyed size-1 city ${city.name}; settler is now NONE`);
   }
 
-  private addBuildingToCity(city: any, buildingType: string, isPurchased: boolean): void {
+  private addBuildingToCity(city: City, buildingType: string, isPurchased: boolean): void {
     if (!city.buildings) city.buildings = [];
     // Buildings are one-per-city in Civ1 — never add a duplicate (the AI
     // purchase + production paths could otherwise double-add the same item).
@@ -864,9 +864,9 @@ export class TurnManager {
     });
   }
 
-  private processCityGrowth(city: any): void {
+  private processCityGrowth(city: City): void {
     const settlerFoodSupport = (this.gameEngine.units ?? []).filter(
-      (unit: any) => unit.type === 'settler'
+      (unit) => unit.type === 'settler'
         && unit.homeCityId === city.id
         && !unit.isNoneUnit,
     ).length;
@@ -881,7 +881,7 @@ export class TurnManager {
     }
   }
 
-  private processCivilizationResources(civ: any): any {
+  private processCivilizationResources(civ: Civilization): { food: number; production: number; trade: number; science: number; gold: number } {
     try {
       if (civ?.resources && this.gameEngine.economicManager) {
         // Rate-based income (tax/science/luxury split) + upkeep + deficit
@@ -895,7 +895,7 @@ export class TurnManager {
     return null;
   }
 
-  private processCivilizationResearch(civ: any): void {
+  private processCivilizationResearch(civ: Civilization): void {
     try {
       if (!civ.currentResearch) return;
 
@@ -942,15 +942,15 @@ export class TurnManager {
           const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
           const strategy = aiState.strategyProfile ?? 'balanced_growth';
 
-          const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civ.id) ?? [];
+          const cities = this.gameEngine.cities?.filter((c) => c.civilizationId === civ.id) ?? [];
           const gameState = {
             currentYear: this.gameEngine.currentYear ?? -4000,
             roundNumber: this.roundNumber,
             numCities: cities.length,
             numEnemyCitiesKnown: 0,
             isAtWar: (civ.warWith?.size ?? 0) > 0,
-            hasLibrary: cities.some((c: any) => c.buildings?.some?.((b: any) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
-            totalScience: this.gameEngine.cities?.reduce((s: number, c: any) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
+            hasLibrary: cities.some((c) => c.buildings?.some?.((b) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
+            totalScience: this.gameEngine.cities?.reduce((s: number, c) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
           };
 
           const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
@@ -968,7 +968,7 @@ export class TurnManager {
   }
 
   /** Fallback when researchManager isn't available (defensive). */
-  private legacyAdvanceResearch(civ: any, tech: any, totalScience: number): string | null {
+  private legacyAdvanceResearch(civ: Civilization, tech: Technology, totalScience: number): string | null {
     civ.researchProgress = (civ.researchProgress || 0) + (totalScience || 0);
     const techCost = typeof tech === 'object' && tech.cost ? tech.cost : 0;
     if (civ.researchProgress >= techCost && techCost > 0) {
@@ -981,7 +981,7 @@ export class TurnManager {
   private async processAutomatedMovements(civilizationId: number): Promise<void> {
     const unitsWithPaths = Array.from(this.unitPaths.entries())
       .filter(([unitId]) => {
-        const unit = this.gameEngine.units.find((u: any) => u.id === unitId);
+        const unit = this.gameEngine.units.find((u) => u.id === unitId);
         return unit && unit.civilizationId === civilizationId;
       });
     
@@ -993,10 +993,10 @@ export class TurnManager {
       console.log(`[TurnManager] Found ${unitsWithPaths.length} units with GoTo paths`);
     
     // Check if this is a human player (for animated movement)
-    const civ = this.gameEngine.civilizations.find((c: any) => c.id === civilizationId);
+    const civ = this.gameEngine.civilizations.find((c) => c.id === civilizationId);
     const isHumanPlayer = civ?.isHuman || false;
     
-    const units = this.gameEngine.units.filter((u: any) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0);
+    const units = this.gameEngine.units.filter((u) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0);
     
     for (const unit of units) {
       const path = this.unitPaths.get(unit.id);
@@ -1064,8 +1064,8 @@ export class TurnManager {
   // --- Forced end for AI (timeout/error) ---
   private forceEndAITurn(civilizationId: number, reason: 'timeout' | 'error') {
     this.aiTurnInProgress = false;
-    this.gameEngine.units.filter((u: any) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0)
-      .forEach((u: any) => {
+    this.gameEngine.units.filter((u) => u.civilizationId === civilizationId && (u.movesRemaining || 0) > 0)
+      .forEach((u) => {
         u.movesRemaining = 0;
         u.areTurnsDone = true;
       });

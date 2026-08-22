@@ -10,7 +10,7 @@
  */
 
 import { getGovernment } from '../../data/GovernmentData';
-import type { Civilization, GameEngine } from '../../../types/game';
+import type { Civilization, GameEngine, City } from '../../../types/game';
 
 /** How many turns a revolution (anarchy) lasts before the new government applies. */
 export const ANARCHY_TURNS = 3;
@@ -120,7 +120,7 @@ export class GovernmentManager {
   // ------------------------------------------------------------------
 
   /** Make `city` the seat of government: set flags, move the Palace, update the civ ref. */
-  designateCapital(civId: number, city: any): void {
+  designateCapital(civId: number, city: City): void {
     const civ = this.gameEngine.civilizations?.[civId];
     if (!civ || !city || city.civilizationId !== civId) return;
 
@@ -152,12 +152,12 @@ export class GovernmentManager {
     const civ = this.gameEngine.civilizations?.[civId];
     if (!civ) return;
     const capital = civ.capital;
-    if (capital && (this.gameEngine.cities ?? []).some((c: any) => c.id === capital.id)) return;
+    if (capital && (this.gameEngine.cities ?? []).some((c: City) => c.id === capital.id)) return;
 
     const withPalace = (this.gameEngine.cities ?? []).find(
-      (c: any) => c.civilizationId === civId && Array.isArray(c.buildings) && c.buildings.includes('palace'),
+      (c: City) => c.civilizationId === civId && Array.isArray(c.buildings) && c.buildings.includes('palace'),
     );
-    const first = (this.gameEngine.cities ?? []).find((c: any) => c.civilizationId === civId);
+    const first = (this.gameEngine.cities ?? []).find((c: City) => c.civilizationId === civId);
     const replacement = withPalace ?? first;
     if (replacement) {
       this.designateCapital(civId, replacement);

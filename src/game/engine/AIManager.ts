@@ -29,6 +29,7 @@ import {
 } from './AIStrategy';
 import type { DiplomatAction } from './DiplomacyTypes';
 import type { Unit, City, GameEngine, Civilization } from '../../../types/game';
+import type { PlayerTurnStorage, MapTile } from './GameEngine';
 
 // How much better (in settlement-score points) the best location must be for a
 // settler to keep walking instead of founding at its current tile. Prevents
@@ -570,19 +571,19 @@ export class AIManager {
    * consumed (city founded), false otherwise (new target cached or no action).
    */
   private settlerReevaluateSettlement(
-    unit: any,
+    unit: Unit,
     _civName: string,
     _civilizationId: number,
     unreachableTarget: { col: number; row: number },
     aiState: AIState,
   ): boolean {
     // Block the unreachable target so we don't chase it again.
-    const blocked = (unit as any)._blockedSettlementTargets instanceof Set
-      ? (unit as any)._blockedSettlementTargets
+    const blocked = unit._blockedSettlementTargets instanceof Set
+      ? unit._blockedSettlementTargets
       : new Set<string>();
     blocked.add(`${unreachableTarget.col},${unreachableTarget.row}`);
-    (unit as any)._blockedSettlementTargets = blocked;
-    delete (unit as any)._lastSettlementTarget;
+    unit._blockedSettlementTargets = blocked;
+    delete unit._lastSettlementTarget;
 
     console.log(`[AI-SETTLER] Settler ${unit.id} blocked target (${unreachableTarget.col},${unreachableTarget.row}), re-evaluating`);
 
@@ -646,7 +647,7 @@ export class AIManager {
   /**
    * Choose a target for AI unit
    */
-  private chooseAITarget(unit: any): { col: number; row: number } | null {
+  private chooseAITarget(unit: Unit): { col: number; row: number } | null {
     if (!this.gameEngine.map || !this.gameEngine.squareGrid) return null;
 
     const storage = this.gameEngine.getPlayerStorage?.(unit.civilizationId);
@@ -1155,7 +1156,7 @@ export class AIManager {
    * knows about. Civs we are NOT at war with are preferred (a diplomat walking
    * into a war zone is wasted); among those, pick the nearest.
    */
-  private chooseDiplomatTarget(unit: any): { col: number; row: number } | null {
+  private chooseDiplomatTarget(unit: Unit): { col: number; row: number } | null {
     const civId = unit.civilizationId;
     const storage = this.gameEngine.getPlayerStorage?.(civId);
     const dm = this.gameEngine.diplomacyManager;
@@ -1209,14 +1210,14 @@ export class AIManager {
    * foreign civ — mirrors `processAIDiplomacy`'s decision logic (peace when
    * outmatched, alliance when friendly, tribute when dominant, else intel).
    */
-  private chooseDiplomatAction(unit: any, targetCivId: number, available: string[]): string {
+  private chooseDiplomatAction(unit: Unit, targetCivId: number, available: string[]): string {
     const civId = unit.civilizationId;
     const dm = this.gameEngine.diplomacyManager;
     const ownStrength = dm?.estimateMilitaryStrength?.(civId) ?? 0;
     const theirStrength = dm?.estimateMilitaryStrength?.(targetCivId) ?? 0;
     const attitude = dm?.getAttitude?.(civId, targetCivId) ?? 'neutral';
     const status = dm?.getStatus?.(civId, targetCivId) ?? 'peace';
-    const personality = (this.gameEngine.civilizations?.[civId] as any)?.personality
+    const personality = this.gameEngine.civilizations?.[civId]?.personality
       ?? { aggression: 5, diplomacy: 5, military: 5 };
     const has = (a: string) => available.includes(a);
 
@@ -1241,7 +1242,7 @@ export class AIManager {
   /**
    * The tribute an AI diplomat demands (same formula as processAIDiplomacy).
    */
-  private diplomatTributeDemand(unit: any, targetCivId: number): number {
+  private diplomatTributeDemand(unit: Unit, targetCivId: number): number {
     const dm = this.gameEngine.diplomacyManager;
     const ownStrength = dm?.estimateMilitaryStrength?.(unit.civilizationId) ?? 0;
     const theirStrength = dm?.estimateMilitaryStrength?.(targetCivId) ?? 0;
@@ -1253,7 +1254,7 @@ export class AIManager {
    * Human targets get an interactive offer (negotiation screen); AI targets
    * resolve through the normal proposal path.
    */
-  private executeAIDiplomatAction(unit: any, info: { targetCivId: number; actions: string[] }): void {
+  private executeAIDiplomatAction(unit: Unit, info: { targetCivId: number; actions: string[] }): void {
     const civId = unit.civilizationId;
     const targetCivId = info.targetCivId;
     const civ = this.gameEngine.civilizations?.[civId];
@@ -1292,7 +1293,7 @@ export class AIManager {
    * Priority: production (mines on hills/mountains) > food (irrigation near
    * fresh water on fertile tiles) > railroad > road.
    */
-  private chooseImprovementForSettler(unit: any): string | null {
+  private chooseImprovementForSettler(unit: Unit): string | null {
     const civId = unit.civilizationId;
     const tile = this.gameEngine.getTileAt(unit.col, unit.row);
     if (!tile) return null;
@@ -1311,7 +1312,7 @@ export class AIManager {
     // not funnel every spare settler into endless road building.
     const friendlyCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civId).length;
     const budget = Math.max(2, friendlyCities * 2);
-    const ownImprovements = (this.gameEngine.map?.tiles ?? []).filter((t: any) =>
+    const ownImprovements = (this.gameEngine.map?.tiles ?? []).filter((t: MapTile) =>
       !!t.improvement && ['road', 'railroad', 'mines', 'irrigation', 'fortress'].includes(t.improvement) &&
       this.gameEngine.cities.some((c: City) =>
         c.civilizationId === civId &&
@@ -1342,17 +1343,17 @@ export class AIManager {
    * Find best settlement location for a settler
    */
   private findBestSettlementForSettler(
-    unit: any,
+    unit: Unit,
     strategy: StrategyProfile = 'balanced_growth',
     replanDepth = 0,
   ): { col: number; row: number; score: number } | null {
     console.log(`[AI-SETTLER] Evaluating settlement locations for settler at (${unit.col}, ${unit.row})`);
 
     // Track position history to detect oscillation
-    if (!(unit as any)._positionHistory) {
-      (unit as any)._positionHistory = [];
+    if (!unit._positionHistory) {
+      unit._positionHistory = [];
     }
-    const history = (unit as any)._positionHistory;
+    const history = unit._positionHistory;
     const currentPos = `${unit.col},${unit.row}`;
 
     // Add current position to history
@@ -1610,8 +1611,8 @@ export class AIManager {
     return `${target.col},${target.row}`;
   }
 
-  private getBlockedSettlementTargets(unit: any): Set<string> {
-    const existing = (unit as any)._blockedSettlementTargets;
+  private getBlockedSettlementTargets(unit: Unit): Set<string> {
+    const existing = unit._blockedSettlementTargets;
     if (existing instanceof Set) return new Set(existing);
     if (Array.isArray(existing)) return new Set(existing);
     return new Set<string>();
@@ -1770,7 +1771,7 @@ export class AIManager {
    */
   private findCombatProbeTarget(
     unit: Unit,
-    _storage: any,
+    _storage: PlayerTurnStorage,
     distFn: (c1: number, r1: number, c2: number, r2: number) => number,
   ): { col: number; row: number } | null {
     const map = this.gameEngine.map;
@@ -1781,10 +1782,10 @@ export class AIManager {
     // of re-picking an exploration tile every turn — recomputing made units
     // zig-zag (and even double back) as the tiles they passed became explored
     // and the nearest frontier jumped sideways.
-    const locked = (unit as any)._probeTarget as { col: number; row: number } | undefined;
+    const locked = unit._probeTarget;
     if (locked) {
       if (locked.col === unit.col && locked.row === unit.row) {
-        delete (unit as any)._probeTarget; // reached the frontier tile
+        delete unit._probeTarget; // reached the frontier tile
       } else if (this.isProbeTargetValid(unit, locked)) {
         const lockedDist = distFn(unit.col, unit.row, locked.col, locked.row);
         if (lockedDist <= 24) {
@@ -1976,7 +1977,7 @@ export class AIManager {
   /**
    * Find exploration target for scouts within their zone
    */
-  private findScoutExplorationTarget(unit: any): any {
+  private findScoutExplorationTarget(unit: Unit): { col: number; row: number } | null {
     if (!this.gameEngine.map || !this.gameEngine.squareGrid) return null;
 
     // Get scout's zone
@@ -2188,7 +2189,7 @@ export class AIManager {
     return null;
   }
 
-  private updateOffensivePlan(civilizationId: number, storage: any, roundNumber: number): void {
+  private updateOffensivePlan(civilizationId: number, storage: PlayerTurnStorage, roundNumber: number): void {
     if (!storage) {
       return;
     }
@@ -2277,7 +2278,7 @@ export class AIManager {
   }
 
   /** Refresh (and cache) the civ's situational aggression posture. */
-  private getAggressionState(civilizationId: number, storage: any, roundNumber: number): AggressionState {
+  private getAggressionState(civilizationId: number, storage: PlayerTurnStorage, roundNumber: number): AggressionState {
     const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
     const cached = aiState.aggression;
     // Re-evaluate a few times per turn so captures/threats flip the posture
@@ -2301,7 +2302,7 @@ export class AIManager {
   }
 
   /** Situational aggression score from the current game snapshot. */
-  private evaluateAggression(civilizationId: number, gameState: any): AggressionAssessment {
+  private evaluateAggression(civilizationId: number, gameState: Record<string, unknown>): AggressionAssessment {
     const personality = this.gameEngine.civilizations?.[civilizationId]?.personality;
     const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
 
@@ -2329,7 +2330,7 @@ export class AIManager {
   }
 
   /** Flatten stored enemy intelligence into the known-target list for bulk planning. */
-  private collectKnownTargets(_civilizationId: number, storage: any, roundNumber: number): KnownTarget[] {
+  private collectKnownTargets(_civilizationId: number, storage: PlayerTurnStorage, roundNumber: number): KnownTarget[] {
     const targets: KnownTarget[] = [];
     if (!storage?.enemyLocations) return targets;
     for (const enemyList of storage.enemyLocations.values()) {
@@ -2351,7 +2352,7 @@ export class AIManager {
     return targets;
   }
 
-  private getOffensivePlanTarget(unit: Unit, storage: any): { col: number; row: number } | null {
+  private getOffensivePlanTarget(unit: Unit, storage: PlayerTurnStorage): { col: number; row: number } | null {
     const plan = storage?.turnData?.offensivePlan;
     if (!plan || !plan.target) {
       return null;
@@ -2429,7 +2430,7 @@ export class AIManager {
    */
   private getCityDefenseReserveTarget(
     unit: Unit,
-    storage: any,
+    storage: PlayerTurnStorage,
     roundNumber: number,
   ): { col: number; row: number } | null {
     if (!this.getCityDefenseReserveIds(unit.civilizationId).has(unit.id)) {
@@ -2483,7 +2484,7 @@ export class AIManager {
     return base * modifier;
   }
 
-  private findOffensiveAssignment(unit: Unit, storage: any, roundNumber: number): { col: number; row: number } | null {
+  private findOffensiveAssignment(unit: Unit, storage: PlayerTurnStorage, roundNumber: number): { col: number; row: number } | null {
     if (!storage || !storage.enemyLocations || storage.enemyLocations.size === 0) {
       return null;
     }
@@ -2535,7 +2536,7 @@ export class AIManager {
     return bestTarget ? { col: bestTarget.col, row: bestTarget.row } : null;
   }
 
-  private findDefensiveAssignment(unit: Unit, storage: any, roundNumber: number): { col: number; row: number } | null {
+  private findDefensiveAssignment(unit: Unit, storage: PlayerTurnStorage, roundNumber: number): { col: number; row: number } | null {
     const threatenedCities = this.identifyThreatenedCities(unit.civilizationId, storage, roundNumber);
     if (threatenedCities.length === 0) {
       return null;
@@ -2565,7 +2566,7 @@ export class AIManager {
     return { col: best.city.col, row: best.city.row };
   }
 
-  private identifyThreatenedCities(civilizationId: number, storage: any, roundNumber: number): Array<{ city: City; assessment: CityThreatAssessment }> {
+  private identifyThreatenedCities(civilizationId: number, storage: PlayerTurnStorage, roundNumber: number): Array<{ city: City; assessment: CityThreatAssessment }> {
     if (!this.gameEngine.squareGrid) {
       return [];
     }
@@ -2635,34 +2636,34 @@ export class AIManager {
     totalScience: number;
     hasWaterAccess: boolean;
   } {
-    const cities = this.gameEngine.cities?.filter((c: any) => c.civilizationId === civilizationId) || [];
+    const cities = this.gameEngine.cities?.filter((c: City) => c.civilizationId === civilizationId) || [];
     const civ = this.gameEngine.civilizations?.[civilizationId];
     const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
 
     let knownEnemyCities = 0;
     if (storage?.enemyLocations) {
       for (const enemies of storage.enemyLocations.values()) {
-        knownEnemyCities += enemies.filter((e: any) => e.type === 'city').length;
+        knownEnemyCities += enemies.filter((e: EnemyLocation) => e.type === 'city').length;
       }
     }
 
     const militaryUnits = this.gameEngine.units?.filter(
-      (u: any) => u.civilizationId === civilizationId && this.isCombatUnit(u as Unit)
+      (u: Unit) => u.civilizationId === civilizationId && this.isCombatUnit(u)
     ) ?? [];
     const civilianUnits = this.gameEngine.units?.filter(
-      (u: any) => u.civilizationId === civilizationId && !this.isCombatUnit(u as Unit)
+      (u: Unit) => u.civilizationId === civilizationId && !this.isCombatUnit(u)
     ) ?? [];
     const ownStrength = militaryUnits.reduce(
-      (sum: number, u: any) => sum + Math.max(1, u.attack || 0) + (u.defense || 0) * 0.5, 0
+      (sum: number, u: Unit) => sum + Math.max(1, u.attack || 0) + (u.defense || 0) * 0.5, 0
     );
 
     // Estimate average enemy military strength from known info
     const enemyUnits = this.gameEngine.units?.filter(
-      (u: any) => u.civilizationId !== civilizationId && this.isCombatUnit(u as Unit)
+      (u: Unit) => u.civilizationId !== civilizationId && this.isCombatUnit(u)
     ) ?? [];
-    const enemyCivIds = new Set(enemyUnits.map((u: any) => u.civilizationId));
+    const enemyCivIds = new Set(enemyUnits.map((u: Unit) => u.civilizationId));
     const avgEnemyStrength = enemyCivIds.size > 0
-      ? enemyUnits.reduce((sum: number, u: any) => sum + Math.max(1, u.attack || 0) + (u.defense || 0) * 0.5, 0) / enemyCivIds.size
+      ? enemyUnits.reduce((sum: number, u: Unit) => sum + Math.max(1, u.attack || 0) + (u.defense || 0) * 0.5, 0) / enemyCivIds.size
       : 0;
 
     // Count threatened cities
@@ -2673,8 +2674,8 @@ export class AIManager {
     ).length;
 
     // Check for library in any city
-    const hasLibrary = cities.some((c: any) => c.buildings?.includes('library'));
-    const totalScience = cities.reduce((sum: number, c: any) => sum + (c.science || 0), 0);
+    const hasLibrary = cities.some((c: City) => c.buildings?.includes('library'));
+    const totalScience = cities.reduce((sum: number, c: City) => sum + (c.science || 0), 0);
     const hasWaterAccess = cities.some((city: City) => this.cityHasDirectWaterAccess(city));
 
     return {
@@ -2682,7 +2683,7 @@ export class AIManager {
       roundNumber,
       numCities: cities.length,
       numOwnCities: cities.length,
-      totalPopulation: cities.reduce((sum: number, c: any) => sum + (c.population || 1), 0),
+      totalPopulation: cities.reduce((sum: number, c: City) => sum + (c.population || 1), 0),
       numMilitaryUnits: militaryUnits.length,
       numOwnMilitaryUnits: militaryUnits.length,
       numOwnCivilianUnits: civilianUnits.length,
@@ -2740,15 +2741,15 @@ export class AIManager {
   /** Resolve the owning civId from a scan result (unit or city) */
   private getOwnerCivId(scanResult: { type: 'unit' | 'city'; id: string }): number | undefined {
     if (scanResult.type === 'unit') {
-      return this.gameEngine.units?.find((u: any) => u.id === scanResult.id)?.civilizationId;
+      return this.gameEngine.units?.find((u: Unit) => u.id === scanResult.id)?.civilizationId;
     }
-    return this.gameEngine.cities?.find((c: any) => c.id === scanResult.id)?.civilizationId;
+    return this.gameEngine.cities?.find((c: City) => c.id === scanResult.id)?.civilizationId;
   }
 
   /** Get known enemy targets from player storage for army group formation */
   private getKnownEnemyTargets(
     _civilizationId: number,
-    storage: any
+    storage: PlayerTurnStorage
   ): Array<{ col: number; row: number; type: 'city' | 'unit'; estimatedStrength: number }> {
     const targets: Array<{ col: number; row: number; type: 'city' | 'unit'; estimatedStrength: number }> = [];
     if (!storage?.enemyLocations) return targets;
@@ -2797,7 +2798,7 @@ export class AIManager {
   // ──────────────────────────────────────────────────────────────────────
 
   /** Store a threat alert in player storage so other units can respond */
-  private broadcastThreatAlert(_civilizationId: number, col: number, row: number, enemyStrength: number, storage: any): void {
+  private broadcastThreatAlert(_civilizationId: number, col: number, row: number, enemyStrength: number, storage: PlayerTurnStorage): void {
     if (!storage) return;
     storage.turnData = storage.turnData || {};
     if (!storage.turnData.threatAlerts) {
@@ -2821,7 +2822,7 @@ export class AIManager {
   }
 
   /** Find the closest active threat alert this unit should respond to */
-  private getActiveAlertTarget(unit: any, storage: any): { col: number; row: number } | null {
+  private getActiveAlertTarget(unit: Unit, storage: PlayerTurnStorage): { col: number; row: number } | null {
     if (!storage?.turnData?.threatAlerts || !this.gameEngine.squareGrid) return null;
 
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;

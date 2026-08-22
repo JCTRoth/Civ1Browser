@@ -63,7 +63,7 @@ export class BarbarianManager {
   private chooseWeakestCity(): { col: number; row: number; defense: number } | null {
     const engine = this.gameEngine;
     const cities = (engine.cities ?? []).filter(
-      (c: any) => c.civilizationId >= 0 && c.civilizationId !== BARBARIAN_CIV_ID,
+      (c: City) => c.civilizationId >= 0 && c.civilizationId !== BARBARIAN_CIV_ID,
     );
     if (cities.length === 0) return null;
 
@@ -78,7 +78,7 @@ export class BarbarianManager {
   }
 
   /** Civ1-style city defense: population (×3 with walls) + nearby garrison. */
-  private estimateCityDefense(city: any): number {
+  private estimateCityDefense(city: City): number {
     const engine = this.gameEngine;
     let defense = Math.max(1, city.population ?? 1);
     const hasWalls =
@@ -167,7 +167,7 @@ export class BarbarianManager {
    *  - the FIRST unit produced after a capture is a SCOUT (finds the next
    *    city), then the city produces raiders every round.
    */
-  private manageCities(cities: any[]): void {
+  private manageCities(cities: City[]): void {
     const engine = this.gameEngine;
     for (const city of cities) {
       // Sell everything — raiders, not improvements.
@@ -202,15 +202,15 @@ export class BarbarianManager {
     }
   }
 
-  private scoutProduction(): any {
+  private scoutProduction(): { type: string; itemType: string; name: string; cost: number } {
     const props = UNIT_PROPS.scout ?? { cost: 15 };
     return { type: 'unit', itemType: 'scout', name: 'Scout', cost: props.cost ?? 15 };
   }
 
   /** The barbarian raider: a fast, strong attacker (chariot if present). */
-  private raiderProduction(): any {
+  private raiderProduction(): { type: string; itemType: string; name: string; cost: number } {
     const type = UNIT_PROPS.chariot ? 'chariot' : 'legion';
-    const props = (UNIT_PROPS as any)[type] ?? { name: type, cost: 40 };
+    const props = UNIT_PROPS[type] ?? { name: type, cost: 40 };
     return { type: 'unit', itemType: type, name: props.name ?? type, cost: props.cost ?? 40 };
   }
 }

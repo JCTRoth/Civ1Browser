@@ -7,6 +7,8 @@
  * explicitly here.
  */
 
+import type { City, ProductionItem } from '../../types/game';
+
 export interface CitySnapshot {
   id: string;
   name: string;
@@ -41,8 +43,7 @@ export interface CitySnapshot {
 }
 
 /** Convert a live City object into a plain JSON-safe snapshot. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function serializeCity(city: any): CitySnapshot {
+export function serializeCity(city: City): CitySnapshot {
   return {
     id: String(city?.id ?? ''),
     name: city?.name ?? '',
@@ -78,8 +79,7 @@ export function serializeCity(city: any): CitySnapshot {
 }
 
 /** Convert an array of live City objects into JSON-safe snapshots. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function serializeCities(cities: any[]): CitySnapshot[] {
+export function serializeCities(cities: City[]): CitySnapshot[] {
   return (cities ?? []).map((c) => serializeCity(c));
 }
 
@@ -110,16 +110,14 @@ export interface CompactCity {
 }
 
 /** Extract the item id from a queue/current-production entry (object or string). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function productionItemId(item: any): string {
+function productionItemId(item: string | ProductionItem | null | undefined): string {
   if (item == null) return '';
   if (typeof item === 'string') return item;
   return String(item.itemType ?? item.type ?? item.name ?? '');
 }
 
 /** Convert a live City object into a compact, analysis-focused snapshot. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function serializeCityCompact(city: any): CompactCity {
+export function serializeCityCompact(city: City): CompactCity {
   return {
     id: String(city?.id ?? ''),
     name: city?.name ?? '',

@@ -13,6 +13,7 @@ import {
   type BuildingPlan,
   canBuildBuilding,
 } from './AITypes';
+import type { City, Civilization } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
 // Building priority weights per strategy
@@ -60,8 +61,8 @@ export class AIBuildingStrategy {
    * @returns Sorted array of building plans (highest priority first)
    */
   static evaluateBuildings(
-    city: any,
-    civ: any,
+    city: City,
+    civ: Civilization,
     strategy: StrategyProfile,
     gameState: { currentYear: number; roundNumber: number; isBorderCity: boolean; isUnderThreat: boolean; numCities: number }
   ): BuildingPlan[] {
@@ -103,8 +104,8 @@ export class AIBuildingStrategy {
    */
   private static scoreBuilding(
     buildingType: string,
-    props: any,
-    city: any,
+    props: Record<string, unknown>,
+    city: City,
     personality: Personality,
     strategy: StrategyProfile,
     gameState: { currentYear: number; isBorderCity: boolean; isUnderThreat: boolean; numCities: number }
@@ -249,8 +250,8 @@ export class AIBuildingStrategy {
    * Only the top production city should consider wonders.
    */
   static evaluateWonders(
-    city: any,
-    _civ: any,
+    city: City,
+    _civ: Civilization,
     strategy: StrategyProfile,
     gameState: { currentYear: number; isUnderThreat: boolean; builtWonders: string[] }
   ): BuildingPlan[] {

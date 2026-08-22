@@ -79,8 +79,7 @@ class GameLogger {
    * emitted by the engine's untyped event system; typing every shape here
    * would be a large refactor, so the payload is deliberately `any`.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  record(event: string, data: any = {}): void {
+  record(event: string, data: Record<string, unknown> = {}): void {
     const message = this.formatMessage(event, data);
     if (message) {
       const detail: Record<string, unknown> = { data: this.sanitize(data) };
@@ -99,8 +98,7 @@ class GameLogger {
   }
 
   /** Human-readable message for known engine events. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private formatMessage(event: string, data: any): string | null {
+  private formatMessage(event: string, data: Record<string, unknown>): string | null {
     switch (event) {
       case 'TURN_START':
         return `▶ Turn start — civ ${data.civilizationId} (round ${data.roundNumber})`;
@@ -165,8 +163,7 @@ class GameLogger {
    * Keep detail payloads small & JSON-safe. Accepts any engine event payload
    * and returns a plain serialisable record.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private sanitize(data: any, depth = 0): any {
+  private sanitize(data: unknown, depth = 0): unknown {
     if (data == null) return data;
     if (typeof data !== 'object') return data;
     // Preserve the structured unit/combat fields needed by AI analysis. The

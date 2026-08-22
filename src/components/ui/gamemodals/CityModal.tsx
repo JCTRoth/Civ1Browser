@@ -6,15 +6,16 @@ import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
 import ProductionSelectionModal from './ProductionSelectionModal';
 import GameEngine from '@/game/engine/GameEngine';
+import type { City, Civilization, GameActions, ProductionItem } from '../../../../types/game';
 import '../../../styles/cityModal.css';
 
 interface CityModalProps {
   show: boolean;
   onHide: () => void;
-  selectedCity: any;
+  selectedCity: City;
   GameEngine: GameEngine;
-  actions: any;
-  currentPlayer: any;
+  actions: GameActions;
+  currentPlayer: Civilization;
   isPlayerCity: boolean;
 }
 
@@ -30,12 +31,12 @@ const CityModal: React.FC<CityModalProps> = ({
   const [selectedProductionKey, setSelectedProductionKey] = useState<string | null>(null);
   const [selectedQueueIndex, setSelectedQueueIndex] = useState<number | null>(null);
   const [showProductionModal, setShowProductionModal] = useState<boolean>(false);
-  const [autoProduction, setAutoProduction] = useState<boolean>((selectedCity as any)?.autoProduction || false);
+  const [autoProduction, setAutoProduction] = useState<boolean>(selectedCity?.autoProduction || false);
 
   // Sync local state when selectedCity changes
   useEffect(() => {
     if (!selectedCity) return;
-    setAutoProduction((selectedCity as any)?.autoProduction || false);
+    setAutoProduction(selectedCity?.autoProduction || false);
   }, [selectedCity]);
 
   if (!selectedCity) return null;
@@ -136,7 +137,7 @@ const CityModal: React.FC<CityModalProps> = ({
                               const progress = logic.getProductionProgressValue();
                               const remainingShields = Math.max(0, totalCost - progress);
                               const playerGold = currentPlayer?.resources?.gold ?? 0;
-                              const purchasedThisTurn = ((selectedCity as any).purchasedThisTurn?.length ?? 0) > 0;
+                              const purchasedThisTurn = (selectedCity.purchasedThisTurn?.length ?? 0) > 0;
                               const canBuy = remainingShields > 0 && playerGold >= remainingShields && !purchasedThisTurn;
                               return (
                                 <button
@@ -224,7 +225,7 @@ const CityModal: React.FC<CityModalProps> = ({
                       <div className="production-panel">
                         <h6>Production</h6>
                         {(() => {
-                          const purchasedThisTurn = (selectedCity as any).purchasedThisTurn || [];
+                          const purchasedThisTurn = selectedCity.purchasedThisTurn || [];
                           if (purchasedThisTurn.length > 0) {
                             return (
                               <div className="alert alert-warning small mb-2">
@@ -251,7 +252,7 @@ const CityModal: React.FC<CityModalProps> = ({
                         <h6>Queue</h6>
                         <div className="queue-box bg-dark border border-secondary rounded p-2" style={{maxHeight: '240px', overflowY: 'auto'}}>
                           {logic.hasQueueItems() ? (
-                            logic.getQueueItems().map((q: any, i: number) => (
+                            logic.getQueueItems().map((q: ProductionItem, i: number) => (
                               <div key={i} className={`queue-item p-2 mb-1 rounded ${selectedQueueIndex === i ? 'text-white' : 'text-white'}`} onClick={() => setSelectedQueueIndex(i)}>
                                 <div className="d-flex justify-content-between align-items-center gap-2">
                                   <div className="flex-grow-1">
@@ -537,7 +538,7 @@ const CityModal: React.FC<CityModalProps> = ({
         onHide={() => setShowProductionModal(false)}
         currentPlayer={currentPlayer}
         playerGold={currentPlayer?.resources?.gold ?? 0}
-        purchasedThisTurn={((selectedCity as any)?.purchasedThisTurn?.length ?? 0) > 0}
+        purchasedThisTurn={(selectedCity?.purchasedThisTurn?.length ?? 0) > 0}
         onSelectProduction={key => {
           // Always queue the selected item when picking from the modal
           handleQueueProduction(key);

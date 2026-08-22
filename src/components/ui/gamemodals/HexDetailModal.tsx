@@ -1,14 +1,15 @@
 import React from 'react';
 import { Modal, Button } from 'react-bootstrap';
 import { HexDetailModalLogic } from './HexDetailModalLogic';
+import type { Unit, City, MapState } from '../../../../types/game';
 
 interface HexDetailModalProps {
   show: boolean;
   onHide: () => void;
-  selectedHex: any;
-  map: any;
-  units: any[];
-  cities: any[];
+  selectedHex: { col: number; row: number };
+  map: MapState;
+  units: Unit[];
+  cities: City[];
 }
 
 const HexDetailModal: React.FC<HexDetailModalProps> = ({
