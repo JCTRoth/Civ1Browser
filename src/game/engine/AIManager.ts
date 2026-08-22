@@ -451,6 +451,17 @@ export class AIManager {
                 this.blacklistScoutTarget(unit, target.col, target.row);
                 console.log(`[AI] Move failed, skipping unit`);
                 this.gameEngine.log('ai', `Move failed — ${civ.name} ${unit.type}(${unit.id}) to (${target.col},${target.row})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'move_failed', targetCol: target.col, targetRow: target.row });
+                // Settler fallback: if a settler cannot reach its target, found a
+                // city at its current position instead of wandering forever.
+                if (unit.type === 'settler') {
+                  const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+                  const city = this.gameEngine.getCityAt(unit.col, unit.row);
+                  if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
+                    console.log(`[AI-SETTLER] Settler ${unit.id} cannot reach target — founding at current (${unit.col},${unit.row})`);
+                    this.gameEngine.foundCityWithSettler(unit.id);
+                    break;
+                  }
+                }
                 this.gameEngine.skipUnit(unit.id);
                 break;
               }
@@ -483,6 +494,16 @@ export class AIManager {
               if (!affordable) {
                console.log(`[AI] No affordable step for unit ${unit.id}, skipping`);
                 this.gameEngine.log('ai', `No affordable step — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_affordable_step' });
+                // Settler fallback: cannot move at all — found where we stand.
+                if (unit.type === 'settler') {
+                  const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+                  const city = this.gameEngine.getCityAt(unit.col, unit.row);
+                  if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
+                    console.log(`[AI-SETTLER] Settler ${unit.id} stuck — founding at current (${unit.col},${unit.row})`);
+                    this.gameEngine.foundCityWithSettler(unit.id);
+                    break;
+                  }
+                }
                this.gameEngine.skipUnit(unit.id);
                 break;
               }
@@ -494,6 +515,16 @@ export class AIManager {
               this.blacklistScoutTarget(unit, next.col, next.row);
              console.log(`[AI] Path step failed, skipping unit`);
               this.gameEngine.log('ai', `Path step failed — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'path_move_failed' });
+              // Settler fallback: first step of path failed — found at current tile.
+              if (unit.type === 'settler') {
+                const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+                const city = this.gameEngine.getCityAt(unit.col, unit.row);
+                if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
+                  console.log(`[AI-SETTLER] Settler ${unit.id} path blocked — founding at current (${unit.col},${unit.row})`);
+                  this.gameEngine.foundCityWithSettler(unit.id);
+                  break;
+                }
+              }
              this.gameEngine.skipUnit(unit.id);
               break;
             }
@@ -503,6 +534,16 @@ export class AIManager {
             this.blacklistScoutTarget(unit, target.col, target.row);
            console.log(`[AI] No path found to target, skipping unit`);
             this.gameEngine.log('ai', `No path — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_path' });
+            // Settler fallback: target completely unreachable — found where we are.
+            if (unit.type === 'settler') {
+              const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+              const city = this.gameEngine.getCityAt(unit.col, unit.row);
+              if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
+                console.log(`[AI-SETTLER] Settler ${unit.id} target unreachable — founding at current (${unit.col},${unit.row})`);
+                this.gameEngine.foundCityWithSettler(unit.id);
+                break;
+              }
+            }
            this.gameEngine.skipUnit(unit.id);
             break;
           }
