@@ -85,7 +85,7 @@ export interface ProgressionCivSnapshot {
   /** Unit counts by concrete unit type (e.g. { warrior: 2, scout: 1 }). */
   unitComposition?: Record<string, number>;
   personality: Record<string, number>;
-  priorities: Record<string, number>;
+  priorities?: Record<string, unknown>;
 }
 
 /**
@@ -126,7 +126,7 @@ export interface ProgressionCivDelta {
   strategy?: string;
   unitComposition?: Record<string, number>;
   personality?: Record<string, number>;
-  priorities?: Record<string, number>;
+  priorities?: Record<string, unknown>;
 }
 
 export interface ProgressionRound {

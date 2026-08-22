@@ -457,8 +457,6 @@ class GameProgression {
   }
 
   private buildRound(engine: GameEngine | null, round: number): ProgressionRound {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const engineAny = engine as any;
     const year = engine?.currentYear ?? 0;
     const civs: Record<string, ProgressionCivDelta> = {};
     const cities: City[] = engine?.getAllCities?.() ?? [];
@@ -487,14 +485,12 @@ class GameProgression {
       const currentResearch = researchRaw == null
         ? null
         : typeof researchRaw === 'object'
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ? String((researchRaw as any).id ?? (researchRaw as any).name ?? '')
+          ? String((researchRaw as { id?: string; name?: string }).id ?? (researchRaw as { id?: string; name?: string }).name ?? '')
           : String(researchRaw);
 
       // Real per-turn outputs / treasury live under `civ.resources` on the
       // engine's plain-object civs (there is no top-level `civ.gold`).
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resources: any = civ?.resources ?? {};
+      const resources = civ?.resources ?? { gold: 0, science: 0, trade: 0, food: 0, production: 0 };
 
       const full: ProgressionCivSnapshot = {
         id: civ?.id ?? Number(civId),
@@ -507,7 +503,7 @@ class GameProgression {
         gold: resources.gold ?? 0,
         goldPerTurn: civCities.reduce((sum, c) => sum + (c.tax ?? 0), 0),
         science: resources.science ?? 0,
-          trade: resources.trade ?? civCities.reduce((sum: number, c: any) => sum + (c.trade ?? 0), 0),
+          trade: resources.trade ?? civCities.reduce((sum, c) => sum + (c.tax ?? 0), 0),
         production: civCities.reduce((sum, c) => sum + (c.yields?.production ?? 0), 0),
         food: civCities.reduce((sum, c) => sum + (c.yields?.food ?? 0), 0),
         taxRate: civ?.taxRate ?? 0,
@@ -528,20 +524,20 @@ class GameProgression {
         researchProgress: civ?.researchProgress ?? 0,
         // Plain civs don't carry `warWith` — ask the diplomacy manager.
         warWith: [
-          ...(engineAny?.diplomacyManager?.getEnemies?.(civ?.id) ?? [...(civ?.warWith ?? [])]),
+          ...(engine?.diplomacyManager?.getEnemies?.(civ?.id ?? 0) ?? [...(civ?.warWith ?? [])]),
         ].map(String),
         wonders: civCities.reduce(
-          (sum: number, c: any) => sum + (Array.isArray(c?.wonders) ? c.wonders.length : 0),
+          (sum, c) => sum + (Array.isArray((c as unknown as Record<string, unknown>).wonders) ? ((c as unknown as Record<string, unknown>).wonders as unknown[]).length : 0),
           0,
         ),
         strategy: String(
           civ?.productionProfile ??
-          engineAny?.getPlayerStorage?.(civ?.id)?.turnData?.aiState?.strategyProfile ??
+          (engine?.getPlayerStorage?.(civ?.id ?? 0)?.turnData?.aiState as Record<string, unknown> | undefined)?.strategyProfile ??
           '',
         ),
         unitComposition,
         personality: { ...(civ?.personality ?? {}) },
-        priorities: { ...((civ as any)?.priorities ?? {}) },
+        priorities: { ...(civ?.priorities ?? {}) },
       };
 
       civs[civId] = computeCivDelta(full, this.lastCivState[civId]);

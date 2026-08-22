@@ -293,6 +293,8 @@ export interface Civilization {
     expansion?: number;
     science?: number;
   };
+  /** AI priorities / strategy state (set by AI systems at runtime). */
+  priorities?: Record<string, unknown>;
 }
 
 export interface UIState {
@@ -526,7 +528,7 @@ export interface GameEngine {
   loadGame(): Promise<boolean>;
   getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
   executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): { success: boolean; type?: string; report?: unknown; reason?: string; response?: unknown; message?: string };
-  diplomacyManager: { getStatus(civA: number, civB: number): { status: string }; declareWar(attacker: number, defender: number): void };
+  diplomacyManager: { getStatus(civA: number, civB: number): { status: string }; declareWar(attacker: number, defender: number): void; getEnemies(civId: number): number[] };
   /** Auto-production manager for AI/human city queues. */
   autoProduction: { processAutoProductionForCivilization(civId: number): void };
   /** Production manager for city build queues. */

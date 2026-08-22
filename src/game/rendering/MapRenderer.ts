@@ -1129,16 +1129,10 @@ export class MapRenderer {
         const tileIndex = this.getTileIndex(row, col, map.width);
         const tile = terrainGrid?.[row]?.[col];
 
-        // Civ1: villages (goody huts) are visible through the fog of war so
-        // the player can map out exploration routes before scouting a tile.
-        const authoritativeTile = map.tiles?.[tileIndex];
-
         // Check if tile is explored (either from terrain grid or map data)
         const isExplored = tile?.explored ?? map.revealed?.[tileIndex] ?? false;
         if (!isExplored) {
-          if (authoritativeTile?.village) {
-            this.drawVillageMarker(ctx, x, y, true); // ghost hut visible in fog
-          }
+          // Villages and all other elements remain hidden under fog of war.
           continue;
         }
 
@@ -1152,6 +1146,7 @@ export class MapRenderer {
 
         // === IMPROVEMENTS RENDERING (same pattern as units/cities) ===
         // Always read improvements from authoritative map.tiles, never from cached terrain grid
+        const authoritativeTile = map.tiles?.[tileIndex];
         if (authoritativeTile && tile) {
           const improvementTile: TerrainTileRenderInfo = {
             type: tile.type,
