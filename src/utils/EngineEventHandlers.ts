@@ -40,6 +40,9 @@ export class EngineEventRouter {
       case 'COMBAT_DEFEAT':
         this.onCombat(eventType, eventData);
         break;
+      case 'CITY_ATTACKED':
+        this.onCityAttacked(eventData);
+        break;
       case 'UNIT_PRODUCED':
       case 'UNIT_PURCHASED':
         this.onUnitCreated(eventData);
@@ -288,6 +291,40 @@ export class EngineEventRouter {
       // Remove the animation once it has fully played out, then re-check
       // auto-end-turn: combat may have been the last pending action, but the
       // turn must only end after the cloud animation is no longer on screen.
+      setTimeout(() => {
+        this.actions.removeCombatAnimation(id);
+        if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
+          this.gameEngine.checkAndEndTurnIfNoMoves();
+        }
+      }, animation.duration + 400);
+    }
+  }
+
+  private onCityAttacked(eventData: any) {
+    this.actions.updateUnits(this.gameEngine.getAllUnits());
+    this.actions.updateVisibility();
+    this.actions.updateCities(this.gameEngine.getAllCities());
+
+    // Show a 💥 combat cloud at the city tile (2 seconds, same as unit-vs-unit).
+    const city = eventData?.city;
+    const attacker = eventData?.attacker;
+    if (city) {
+      const id = `city-combat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const animation = {
+        id,
+        attackerId: attacker?.id ?? '',
+        defenderId: '', // cities don't move or get killed
+        attackerCol: attacker?.col ?? city.col,
+        attackerRow: attacker?.row ?? city.row,
+        defenderCol: city.col,
+        defenderRow: city.row,
+        attackerSurvived: true,
+        defenderSurvived: true,
+        startTime: performance.now(),
+        duration: 2000,
+        cityAttack: true, // flag so the renderer can draw 💥 instead of 🫯
+      };
+      this.actions.addCombatAnimation(animation);
       setTimeout(() => {
         this.actions.removeCombatAnimation(id);
         if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {

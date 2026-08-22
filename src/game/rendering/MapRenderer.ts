@@ -1333,7 +1333,9 @@ export class MapRenderer {
       ctx.font = `${size}px "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('🫯', x, y);
+      // 💥 for city attacks, 🫯 for unit-vs-unit combat.
+      const emoji = (anim as any).cityAttack ? '💥' : '🫯';
+      ctx.fillText(emoji, x, y);
 
       ctx.restore();
     }
