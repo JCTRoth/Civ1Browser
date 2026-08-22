@@ -533,7 +533,11 @@ export class EconomicManager {
   // ------------------------------------------------------------------
 
   unitUpkeep(civId: number): number {
-    const units = this.gameEngine?.units?.filter((u: Unit) => u.civilizationId === civId) ?? [];
+    const units = this.gameEngine?.units?.filter((u: Unit) =>
+      u.civilizationId === civId
+      && !(u as any).isDefeated
+      && ((u as any).health == null || (u as any).health > 0),
+    ) ?? [];
     const cityCount = (this.gameEngine?.cities ?? []).filter((c: City) => c.civilizationId === civId).length;
     // Free unit support: each city supports one unit free; extra units cost
     // 1 gold/turn each. Keeps a small standing army sustainable while still
@@ -563,9 +567,16 @@ export class EconomicManager {
    * (scouts, warriors) survive a bankruptcy while expensive ones go first.
    * Exploration units (scouts) are kept absolutely last — they're the civ's
    * eyes on the map and nearly free to run, so they're never the first to go.
+   * Units that are already defeated (health ≤ 0) are never disbanded — they
+   * are awaiting removal after their death animation and should not be
+   * counted in upkeep.
    */
   private disbandUnitsToCoverDeficit(civId: number, deficit: number): number {
-    const units = (this.gameEngine?.units ?? []).filter((u: Unit) => u.civilizationId === civId);
+    const units = (this.gameEngine?.units ?? []).filter((u: Unit) =>
+      u.civilizationId === civId
+      && !(u as any).isDefeated
+      && ((u as any).health == null || (u as any).health > 0),
+    );
     const costOf = (u: Unit): number => UNIT_PROPS[u?.type]?.cost ?? 0;
     const isScout = (u: Unit): number => (u?.type === 'scout' ? 1 : 0);
     units.sort((a: Unit, b: Unit) =>

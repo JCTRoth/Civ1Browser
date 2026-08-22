@@ -389,7 +389,12 @@ export class AutoProduction {
     //     total troop count). Exploration ranks below defense (steps 1–2) and
     //     offensive reinforcement (step 5) but above buildings/wonders.
     const plannedScouts = plannedTypes.filter((t: string) => t === 'scout').length;
-    if (this.needsScout(city.civilizationId, plannedScouts) && city.population >= 2) {
+    // On small maps (AI_VS_AI_SMALL) cities may never reach pop 2 — require
+    // only pop 1 there so scouts are still built. On larger maps keep pop 2
+    // so the city grows a little before diverting shields to exploration.
+    const isSmallMap = this.gameEngine?.gameSettings?.mapType === 'AI_VS_AI_SMALL';
+    const scoutPopThreshold = isSmallMap ? 1 : 2;
+    if (this.needsScout(city.civilizationId, plannedScouts) && city.population >= scoutPopThreshold) {
       const scoutProps = UNIT_PROPS.scout;
       console.log(`[AutoProduction] Building scout for map exploration (${this.countTotalTroops(city.civilizationId)} troops)`);
       return {
