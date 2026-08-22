@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import type { GameResult } from '../../../types/game';
 import '@/styles/gameResultOverlay.css';
 
@@ -8,9 +8,6 @@ type GameResultOverlayProps = {
   onRestart: () => void;
   onQuit: () => void;
 };
-
-const VICTORY_AUTO_DISMISS_MS = 60_000;
-const CONFETTI_DURATION_MS = 15_000;
 
 const GameResultOverlay: React.FC<GameResultOverlayProps> = ({
   result,
@@ -34,65 +31,6 @@ const GameResultOverlay: React.FC<GameResultOverlayProps> = ({
     }
     return 'Your empire has crumbled. Only stories of your once great cities remain.';
   }, [result]);
-
-  useEffect(() => {
-    if (!isVictory) {
-      return;
-    }
-
-    let isCancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const runConfetti = async () => {
-      try {
-        const module = await import('canvas-confetti');
-        const confetti = module.default;
-        const endTime = Date.now() + CONFETTI_DURATION_MS;
-
-        const fire = () => {
-          if (isCancelled) {
-            return;
-          }
-          confetti({
-            particleCount: 180,
-            spread: 100,
-            angle: 60,
-            origin: { x: Math.random() * 0.6 + 0.2, y: Math.random() * 0.2 + 0.2 },
-            colors: ['#ffd700', '#ffffff', '#ff4500', '#87ceeb']
-          });
-
-          if (Date.now() < endTime) {
-            timer = setTimeout(fire, 700 + Math.random() * 300);
-          }
-        };
-
-        fire();
-      } catch (error) {
-        console.warn('[GameResultOverlay] Confetti failed to initialize', error);
-      }
-    };
-
-    runConfetti();
-
-    return () => {
-      isCancelled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [isVictory]);
-
-  useEffect(() => {
-    if (!isVictory || !result) {
-      return;
-    }
-    const timeout = setTimeout(() => {
-      onClose();
-    }, VICTORY_AUTO_DISMISS_MS);
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [isVictory, onClose, result]);
 
   if (!result) {
     return null;

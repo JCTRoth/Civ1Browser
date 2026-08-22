@@ -9,6 +9,7 @@ import GameSetupModal from './components/ui/GameSetupModal';
 import EndTurnConfirmModal from './components/ui/EndTurnConfirmModal';
 import GameModals from './components/ui/GameModals';
 import GameResultOverlay from './components/ui/GameResultOverlay';
+import VictoryFireworks from './components/ui/VictoryFireworks';
 import PauseScreen from './components/ui/PauseScreen';
 import TopBar from './components/ui/TopBar';
 import MobileBottomBar from './components/ui/MobileBottomBar';
@@ -1120,6 +1121,9 @@ function App() {
         onRestart={handleResultRestart}
         onQuit={handleResultQuit}
       />
+
+      {/* Fireworks for victory — rendered above the overlay so they're visible */}
+      <VictoryFireworks show={gameResult?.outcome === 'victory'} />
     </div>
   );
 }

@@ -14,6 +14,20 @@
   font-family: 'Orbitron', 'Segoe UI', sans-serif;
 }
 
+/* Victory: darker, more opaque backdrop for dramatic effect */
+.game-result-overlay.victory {
+  background: rgba(5, 5, 10, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+/* Confetti canvas rendered by canvas-confetti sits above the overlay
+   backdrop so the fireworks are visible on top of the darkened board. */
+.game-result-overlay .confetti-canvas,
+.game-result-overlay ~ canvas {
+  z-index: 99999 !important;
+  pointer-events: none;
+}
+
 .game-result-panel {
   max-width: 520px;
   width: 100%;
