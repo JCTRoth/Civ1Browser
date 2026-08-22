@@ -13,7 +13,7 @@ interface CityModalProps {
   show: boolean;
   onHide: () => void;
   selectedCity: City;
-  GameEngine: GameEngine;
+  gameEngine: GameEngine;
   actions: GameActions;
   currentPlayer: Civilization;
   isPlayerCity: boolean;
@@ -23,7 +23,7 @@ const CityModal: React.FC<CityModalProps> = ({
   show,
   onHide,
   selectedCity,
-  GameEngine: gameEngine,
+  gameEngine,
   actions,
   currentPlayer,
   isPlayerCity
@@ -47,7 +47,7 @@ const CityModal: React.FC<CityModalProps> = ({
     // Check if it's a unit
     const unitDef = UNIT_PROPS[itemType];
     if (unitDef) {
-      const item = {
+      const item: ProductionItem = {
         type: 'unit',
         itemType,
         name: unitDef.name,
@@ -60,7 +60,7 @@ const CityModal: React.FC<CityModalProps> = ({
     // Check if it's a building
     const buildingDef = BUILDING_PROPS[itemType];
     if (buildingDef) {
-      const item = {
+      const item: ProductionItem = {
         type: 'building',
         itemType,
         name: buildingDef.name,
@@ -88,7 +88,7 @@ const CityModal: React.FC<CityModalProps> = ({
             <i className="bi bi-building"></i> {selectedCity.name}
             {isPlayerCity && (
               <span className="ms-3 fs-6 fw-normal">
-                <i className="bi bi-coin text-warning"></i> {currentPlayer?.resources?.gold ?? 0} gold
+                <i className="bi bi-coin text-warning"></i> {currentPlayer?.resources?.gold ?? 0} Gold
               </span>
             )}
           </Modal.Title>
@@ -150,8 +150,8 @@ const CityModal: React.FC<CityModalProps> = ({
                                       : remainingShields <= 0
                                         ? 'Production complete'
                                         : playerGold < remainingShields
-                                          ? `Need ${remainingShields} gold (have ${playerGold})`
-                                          : `Buy remaining for ${remainingShields} gold`
+                                          ? `Need ${remainingShields} Gold (have ${playerGold})`
+                                          : `Buy remaining for ${remainingShields} Gold`
                                   }
                                   onClick={() => {
                                     if (gameEngine && typeof gameEngine.purchaseCityProduction === 'function') {
@@ -160,13 +160,13 @@ const CityModal: React.FC<CityModalProps> = ({
                                       if (actions?.addNotification) {
                                         actions.addNotification({
                                           type: 'success',
-                                          message: `Purchased ${logic.getCurrentProductionName()} for ${remainingShields} gold!`
+                                          message: `Purchased ${logic.getCurrentProductionName()} for ${remainingShields} Gold!`
                                         });
                                       }
                                     }
                                   }}
                                 >
-                                  <i className="bi bi-coin"></i> Buy ({remainingShields}g)
+                                  🪙{remainingShields}
                                 </button>
                               );
                             })()}
@@ -431,7 +431,7 @@ const CityModal: React.FC<CityModalProps> = ({
                       {/* Taxes Section */}
                       <div className="resource-section">
                         <h6 className="resource-title">
-                          <i className="bi bi-coin"></i> Taxes
+                           Taxes🪙🪙🪙
                         </h6>
                         <div className="resource-values">
                           <div className="resource-line">
@@ -552,7 +552,7 @@ const CityModal: React.FC<CityModalProps> = ({
             if (actions?.addNotification) {
               actions.addNotification({
                 type: 'success',
-                message: `Purchased ${item.name} for ${item.cost} gold!`
+                message: `Purchased ${item.name} for ${item.cost} Gold!`
               });
             }
           }

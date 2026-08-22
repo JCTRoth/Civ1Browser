@@ -1,12 +1,13 @@
 import React from 'react';
 import { Modal, Button, Tab, Tabs } from 'react-bootstrap';
 import { UNIT_PROPS, BUILDING_PROPS } from '../../../utils/Constants';
+import type { ProductionItem } from '../../../../types/game';
 
 interface ProductionSelectionModalProps {
   show: boolean;
   onHide: () => void;
   onSelectProduction: (key: string) => void;
-  onPurchase?: (key: string, item: { type: string; itemType: string; name: string; cost: number }) => void;
+  onPurchase?: (key: string, item: ProductionItem) => void;
   /** The owning civilization (must expose `technologies` as an array of tech ids). */
   currentPlayer?: { technologies?: Array<string | Set<string>> | Set<string> } | null;
   /** Player's current gold balance. */
@@ -59,12 +60,13 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
     if (!onPurchase) return;
     const props = type === 'unit' ? UNIT_PROPS[key] : BUILDING_PROPS[key];
     if (!props) return;
-    onPurchase(key, {
+    const item: ProductionItem = {
       type,
       itemType: key,
       name: props.name,
       cost: props.cost,
-    });
+    };
+    onPurchase(key, item);
     onHide();
   };
 
@@ -77,7 +79,7 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
           Select Production
           {onPurchase && (
             <span className="ms-3 fs-6 fw-normal">
-              <i className="bi bi-coin text-warning"></i> {playerGold} gold
+              <i className="bi bi-coin text-warning"></i> {playerGold} Gold
             </span>
           )}
         </Modal.Title>
@@ -134,12 +136,12 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                                   purchasedThisTurn
                                     ? 'Already purchased this turn'
                                     : !affordable
-                                      ? `Need ${unit.cost} gold (have ${playerGold})`
-                                      : `Buy now for ${unit.cost} gold`
+                                      ? `Need ${unit.cost} Gold (have ${playerGold})`
+                                      : `Buy now for ${unit.cost} Gold`
                                 }
                                 onClick={() => handleBuy(key, 'unit')}
                               >
-                                <i className="bi bi-coin"></i> Buy ({unit.cost}g)
+                                {unit.cost}🪙
                               </Button>
                             )}
                           </div>
@@ -196,12 +198,12 @@ const ProductionSelectionModal: React.FC<ProductionSelectionModalProps> = ({
                                   purchasedThisTurn
                                     ? 'Already purchased this turn'
                                     : !affordable
-                                      ? `Need ${building.cost} gold (have ${playerGold})`
-                                      : `Buy now for ${building.cost} gold`
+                                      ? `Need ${building.cost} Gold (have ${playerGold})`
+                                      : `Buy now for ${building.cost} Gold`
                                 }
                                 onClick={() => handleBuy(key, 'building')}
                               >
-                                <i className="bi bi-coin"></i> Buy ({building.cost}g)
+                                🪙{building.cost}
                               </Button>
                             )}
                           </div>

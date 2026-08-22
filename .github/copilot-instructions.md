@@ -1,4 +1,4 @@
-When ever possible use specific types instead of 'any'
+AVOID TO USE `any` TYPE IN TYPESCRIPT USE SPECIFIC TYPES INSTEAD
 Put interfaces and types in the `types/` folder, and import them from there
 Always define function parameter with types and return types
 Keep TSX components purely presentational (JSX only)

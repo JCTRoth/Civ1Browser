@@ -150,7 +150,7 @@ export class CityModalLogic {
       return false;
     }
     
-    const item = { itemType };
+    const item: ProductionItem = { type: 'unit', itemType, name: itemType, cost: 0 };
     const cost = ModalUtils.getProductionCost(item);
     const playerGold = this.currentPlayer?.resources?.gold || 0;
     return playerGold >= cost;

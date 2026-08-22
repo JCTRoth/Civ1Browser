@@ -49,6 +49,7 @@ export interface MapState {
   tiles: Tile[];
   visibility: boolean[];
   revealed: boolean[];
+  getTile?(col: number, row: number): Tile | undefined;
 }
 
 interface Tile {
@@ -528,15 +529,27 @@ export interface GameEngine {
   loadGame(): Promise<boolean>;
   getDiplomatActions(diplomatId: string): { targetCivId: number; actions: string[] } | null;
   executeDiplomatAction(diplomatId: string, action: string, targetCivId: number): { success: boolean; type?: string; report?: unknown; reason?: string; response?: unknown; message?: string };
-  diplomacyManager: { getStatus(civA: number, civB: number): { status: string }; declareWar(attacker: number, defender: number): void; getEnemies(civId: number): number[] };
+  diplomacyManager: {
+    getStatus(civA: number, civB: number): string;
+    declareWar(attacker: number, defender: number): void;
+    getEnemies(civId: number): number[];
+    acceptOffer(proposal: { fromCivId: number; toCivId: number; action: string; goldAmount?: number }): { accepted: boolean; reason?: string; goldTransferred?: number };
+    processProposal(proposal: { fromCivId: number; toCivId: number; action: string; gold?: number; [key: string]: unknown }): { accepted?: boolean; counterProposal?: { fromCivId: number; toCivId: number; action: string; goldAmount?: number }; reason?: string; goldTransferred?: number };
+    cancelTreaty(civA: number, civB: number, treaty: string): void;
+    getAttitude(civA: number, civB: number): string;
+    getRelation(civA: number, civB: number): { status: string; reputationModifier?: number; since?: number; treatiesBrokenByA?: number; treatiesBrokenByB?: number };
+    getActiveTreaties(civA: number, civB: number): string[];
+    getEventLog(): Array<{ type: string; fromCivId: number; toCivId: number; goldAmount?: number; details?: string }>;
+    estimateMilitaryStrength(civId: number): number;
+  };
   /** Auto-production manager for AI/human city queues. */
   autoProduction: { processAutoProductionForCivilization(civId: number): void };
   /** Production manager for city build queues. */
   productionManager: { setCityProduction(cityId: string, item: ProductionItem, queue?: boolean): { success: boolean; reason?: string; city?: City }; purchaseCityProduction(cityId: string, item: ProductionItem, civId?: number): { success: boolean; reason?: string }; removeCurrentProduction(cityId: string): { success: boolean; reason?: string; removed?: ProductionItem }; removeCityQueueItem(cityId: string, index: number): { success: boolean; reason?: string; removed?: ProductionItem }; moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number): { success: boolean; reason?: string; moved?: ProductionItem } };
   /** Economic manager for tax/science/luxury rates and upkeep. */
-  economicManager: { setGovernment(civId: number, government: string): void };
+  economicManager: { setGovernment(civId: number, government: string): void; calculateCityTrade?(city: City): number };
   /** Civ I–style research manager (tech cost, beaker modifiers, turn caps). */
-  researchManager: { processTurn(): void };
+  researchManager: { processTurn(): void; effectiveTechCost?(civ: Civilization, techId: string | Technology): number; estimatedTurns?(civ: Civilization, techId: string | Technology): number };
   /** Per-civilization persistent turn storage (AI state, explored tiles…). */
   getPlayerStorage(civilizationId: number): { turnData: Record<string, unknown>; visibility: boolean[]; explored: boolean[] };
   /** Square grid backing the map (null until a game is initialized). */
