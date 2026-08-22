@@ -451,16 +451,9 @@ export class AIManager {
                 this.blacklistScoutTarget(unit, target.col, target.row);
                 console.log(`[AI] Move failed, skipping unit`);
                 this.gameEngine.log('ai', `Move failed — ${civ.name} ${unit.type}(${unit.id}) to (${target.col},${target.row})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'move_failed', targetCol: target.col, targetRow: target.row });
-                // Settler fallback: if a settler cannot reach its target, found a
-                // city at its current position instead of wandering forever.
+                // Settler fallback: block unreachable target and re-evaluate.
                 if (unit.type === 'settler') {
-                  const tile = this.gameEngine.getTileAt(unit.col, unit.row);
-                  const city = this.gameEngine.getCityAt(unit.col, unit.row);
-                  if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
-                    console.log(`[AI-SETTLER] Settler ${unit.id} cannot reach target — founding at current (${unit.col},${unit.row})`);
-                    this.gameEngine.foundCityWithSettler(unit.id);
-                    break;
-                  }
+                  if (this.settlerReevaluateSettlement(unit, civ.name, civilizationId, target, aiState)) break;
                 }
                 this.gameEngine.skipUnit(unit.id);
                 break;
@@ -494,15 +487,9 @@ export class AIManager {
               if (!affordable) {
                console.log(`[AI] No affordable step for unit ${unit.id}, skipping`);
                 this.gameEngine.log('ai', `No affordable step — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_affordable_step' });
-                // Settler fallback: cannot move at all — found where we stand.
+                // Settler fallback: block unreachable target and re-evaluate.
                 if (unit.type === 'settler') {
-                  const tile = this.gameEngine.getTileAt(unit.col, unit.row);
-                  const city = this.gameEngine.getCityAt(unit.col, unit.row);
-                  if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
-                    console.log(`[AI-SETTLER] Settler ${unit.id} stuck — founding at current (${unit.col},${unit.row})`);
-                    this.gameEngine.foundCityWithSettler(unit.id);
-                    break;
-                  }
+                  if (this.settlerReevaluateSettlement(unit, civ.name, civilizationId, target, aiState)) break;
                 }
                this.gameEngine.skipUnit(unit.id);
                 break;
@@ -515,15 +502,9 @@ export class AIManager {
               this.blacklistScoutTarget(unit, next.col, next.row);
              console.log(`[AI] Path step failed, skipping unit`);
               this.gameEngine.log('ai', `Path step failed — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'path_move_failed' });
-              // Settler fallback: first step of path failed — found at current tile.
+              // Settler fallback: block unreachable target and re-evaluate.
               if (unit.type === 'settler') {
-                const tile = this.gameEngine.getTileAt(unit.col, unit.row);
-                const city = this.gameEngine.getCityAt(unit.col, unit.row);
-                if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
-                  console.log(`[AI-SETTLER] Settler ${unit.id} path blocked — founding at current (${unit.col},${unit.row})`);
-                  this.gameEngine.foundCityWithSettler(unit.id);
-                  break;
-                }
+                if (this.settlerReevaluateSettlement(unit, civ.name, civilizationId, target, aiState)) break;
               }
              this.gameEngine.skipUnit(unit.id);
               break;
@@ -534,15 +515,9 @@ export class AIManager {
             this.blacklistScoutTarget(unit, target.col, target.row);
            console.log(`[AI] No path found to target, skipping unit`);
             this.gameEngine.log('ai', `No path — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_path' });
-            // Settler fallback: target completely unreachable — found where we are.
+            // Settler fallback: block unreachable target and re-evaluate.
             if (unit.type === 'settler') {
-              const tile = this.gameEngine.getTileAt(unit.col, unit.row);
-              const city = this.gameEngine.getCityAt(unit.col, unit.row);
-              if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
-                console.log(`[AI-SETTLER] Settler ${unit.id} target unreachable — founding at current (${unit.col},${unit.row})`);
-                this.gameEngine.foundCityWithSettler(unit.id);
-                break;
-              }
+              if (this.settlerReevaluateSettlement(unit, civ.name, civilizationId, target, aiState)) break;
             }
            this.gameEngine.skipUnit(unit.id);
             break;
@@ -586,6 +561,59 @@ export class AIManager {
    * cheapest affordable neighbor that reduces (or best limits) the distance to
    * the target. Returns null when the unit is genuinely boxed in.
    */
+  /**
+   * Settler fallback: when a settler cannot reach its settlement target, block
+   * that target and re-evaluate the best reachable location.  If the search
+   * finds a new walkable spot the settler heads there next turn; if nothing
+   * better exists, it founds at the current tile (the settlement evaluator's
+   * own "good enough" logic decides).  Returns true if the settler was
+   * consumed (city founded), false otherwise (new target cached or no action).
+   */
+  private settlerReevaluateSettlement(
+    unit: any,
+    _civName: string,
+    _civilizationId: number,
+    unreachableTarget: { col: number; row: number },
+    aiState: AIState,
+  ): boolean {
+    // Block the unreachable target so we don't chase it again.
+    const blocked = (unit as any)._blockedSettlementTargets instanceof Set
+      ? (unit as any)._blockedSettlementTargets
+      : new Set<string>();
+    blocked.add(`${unreachableTarget.col},${unreachableTarget.row}`);
+    (unit as any)._blockedSettlementTargets = blocked;
+    delete (unit as any)._lastSettlementTarget;
+
+    console.log(`[AI-SETTLER] Settler ${unit.id} blocked target (${unreachableTarget.col},${unreachableTarget.row}), re-evaluating`);
+
+    // Re-run the settlement search — it will find the next best reachable
+    // spot (or found at current tile if nothing is better).
+    let settlement: { col: number; row: number; score: number } | null = null;
+    try {
+      settlement = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
+    } catch (error) {
+      console.error('[AI-SETTLER] Error re-evaluating settlement:', error);
+    }
+    if (!this.gameEngine.units.includes(unit)) return true; // consumed by founding
+    (unit as any)._aiSettlement = settlement;
+
+    // If findBestSettlementForSettler already founded at the current tile, the
+    // settler is gone — signal the caller to break.
+    if (!settlement) {
+      const tile = this.gameEngine.getTileAt(unit.col, unit.row);
+      const city = this.gameEngine.getCityAt(unit.col, unit.row);
+      if (tile && tile.type !== 'ocean' && tile.type !== 'mountains' && !city) {
+        console.log(`[AI-SETTLER] Settler ${unit.id} re-evaluation found no better spot — founding at current (${unit.col},${unit.row})`);
+        this.gameEngine.foundCityWithSettler(unit.id);
+        return true;
+      }
+    }
+
+    // If a new settlement target was picked, the main loop will move the
+    // settler toward it on the next iteration.
+    return false;
+  }
+
   private findAffordableStep(
     unit: { col: number; row: number; movesRemaining?: number; civilizationId?: number },
     target: { col: number; row: number },
