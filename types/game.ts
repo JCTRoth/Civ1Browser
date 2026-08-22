@@ -50,6 +50,9 @@ export interface MapState {
   visibility: boolean[];
   revealed: boolean[];
   getTile?(col: number, row: number): Tile | undefined;
+  getUnitAt?(col: number, row: number): unknown;
+  grid?: { getNeighbors(col: number, row: number): Array<{ col: number; row: number }> };
+  unitManager?: { addUnit(unit: unknown): void; getUnit(id: string): unknown; removeUnit(id: string): boolean };
 }
 
 interface Tile {
@@ -237,6 +240,10 @@ export interface City {
   queueProduction?: (item: ProductionItem) => void;
   /** Method to set production (if available on city instance). */
   setProduction?: (item: ProductionItem) => void;
+  /** Set of unit IDs supported by this city (used by City.ts legacy class). */
+  supportedUnitIds?: Set<string>;
+  /** Max population cap (used by City.ts legacy class). */
+  maxPopulation?: number;
 }
 
 /**
@@ -478,7 +485,7 @@ export interface GameEngine {
   civilizations: Civilization[];
   technologies: Technology[];
   onStateChange: ((eventType: string, eventData?: Record<string, unknown>) => void) | null;
-  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined } | null;
+  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined; executePathWithAnimation?(unitId: string, delayMs: number): Promise<{ success: boolean; stepsCompleted: number }> } | null;
   /** Log a game event with category, message, and optional detail object. */
   log(category: string, message: string, detail?: Record<string, unknown>): void;
   newGame(): void;
@@ -541,15 +548,16 @@ export interface GameEngine {
     getActiveTreaties(civA: number, civB: number): string[];
     getEventLog(): Array<{ type: string; fromCivId: number; toCivId: number; goldAmount?: number; details?: string }>;
     estimateMilitaryStrength(civId: number): number;
+    processTurn(roundNumber: number): void;
   };
   /** Auto-production manager for AI/human city queues. */
   autoProduction: { processAutoProductionForCivilization(civId: number): void };
   /** Production manager for city build queues. */
   productionManager: { setCityProduction(cityId: string, item: ProductionItem, queue?: boolean): { success: boolean; reason?: string; city?: City }; purchaseCityProduction(cityId: string, item: ProductionItem, civId?: number): { success: boolean; reason?: string }; removeCurrentProduction(cityId: string): { success: boolean; reason?: string; removed?: ProductionItem }; removeCityQueueItem(cityId: string, index: number): { success: boolean; reason?: string; removed?: ProductionItem }; moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number): { success: boolean; reason?: string; moved?: ProductionItem } };
   /** Economic manager for tax/science/luxury rates and upkeep. */
-  economicManager: { setGovernment(civId: number, government: string): void; calculateCityTrade?(city: City): number };
+  economicManager: { setGovernment(civId: number, government: string): void; calculateCityTrade?(city: City): number; processTurn?(civ: Civilization): { upkeep: number; deficit: number; disbanded: number }; recomputeCityYields?(city: City): void; applyCityOutputs?(city: City, civ: Civilization): void };
   /** Civ I–style research manager (tech cost, beaker modifiers, turn caps). */
-  researchManager: { processTurn(): void; effectiveTechCost?(civ: Civilization, techId: string | Technology): number; estimatedTurns?(civ: Civilization, techId: string | Technology, perTurnScience: number): number };
+  researchManager: { processTurn(): void; effectiveTechCost?(civ: Civilization, techId: string | Technology): number; estimatedTurns?(civ: Civilization, techId: string | Technology, perTurnScience: number): number; advanceResearch?(civ: Civilization, techId: string, totalScience: number): string | null };
   /** Per-civilization persistent turn storage (AI state, explored tiles…). */
   getPlayerStorage(civilizationId: number): { turnData: Record<string, unknown>; visibility: boolean[]; explored: boolean[] };
   /** Square grid backing the map (null until a game is initialized). */
@@ -599,12 +607,4 @@ export interface GameEngine {
   scrapObsoleteCityWalls?(civId: number): void;
   /** Update technology availability based on researched techs. */
   updateTechnologyAvailability?(): void;
-  /** Economic manager with full methods. */
-  economicManager: { setGovernment(civId: number, government: string): void; processTurn?(civ: Civilization): { upkeep: number; deficit: number; disbanded: number }; recomputeCityYields?(city: City): void; applyCityOutputs?(city: City, civ: Civilization): void };
-  /** Research manager with full methods. */
-  researchManager: { processTurn(): void; advanceResearch?(civ: Civilization, techId: string, totalScience: number): string | null };
-  /** Diplomacy manager with full methods. */
-  diplomacyManager: { getStatus(civA: number, civB: number): { status: string }; declareWar(attacker: number, defender: number): void; processTurn(roundNumber: number): void };
-  /** GoTo manager with full methods. */
-  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined; executePathWithAnimation?(unitId: string, delayMs: number): Promise<boolean> } | null;
 }
