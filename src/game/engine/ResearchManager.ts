@@ -1,4 +1,5 @@
-import type { GameEngine, Technology, Civilization } from '../../../types/game';
+import type { Technology, Civilization } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 /**
  * Civ I–style research model.

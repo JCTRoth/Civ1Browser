@@ -4,7 +4,8 @@
 
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
-import type { City, Civilization, GameEngine } from '../../../types/game';
+import type { City, Civilization } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 /** A production item that can be queued in a city's build queue. */
 interface ProductionItem {

@@ -21,7 +21,8 @@ import type {
   DiplomatAction,
   TreatyType,
 } from './DiplomacyTypes';
-import type { GameEngine, Unit, City } from '../../../types/game';
+import type { Unit, City } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 // ---------------------------------------------------------------------------
 // Constants

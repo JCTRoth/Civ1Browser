@@ -23,7 +23,8 @@ export enum TurnPhase {
 import { AIResearch } from './AIResearch';
 import { createDefaultAIState } from './AITypes';
 import { serializeCities } from '../../utils/CitySnapshots';
-import type { City, Civilization, GameEngine, Unit } from '../../../types/game';
+import type { City, Civilization, Unit } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 export class TurnManager {
   private gameEngine: GameEngine;

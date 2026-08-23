@@ -21,7 +21,8 @@ import { CityUtils } from '../../utils/CityUtils';
 import { UNIT_PROPS } from '../../utils/Constants';
 import { TERRAIN_PROPERTIES, TERRAIN_TYPES, SPECIAL_RESOURCES } from '../../data/TerrainConstants';
 import { IMPROVEMENT_PROPERTIES } from '../../data/TileImprovementConstants';
-import type { City, Civilization, GameEngine, Unit } from '../../../types/game';
+import type { City, Civilization, Unit } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 /** Minimal shape of a map tile as read by the economy (terrain + resource + improvement). */
 interface EconomyTile {

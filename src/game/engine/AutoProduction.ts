@@ -15,7 +15,8 @@ import {
 } from './AIStrategy';
 import { canBuildUnit, type StrategyProfile, type AIState, createDefaultAIState, type BuildingPlan } from './AITypes';
 import { AIBuildingStrategy } from './AIBuildingStrategy';
-import type { City, Civilization, GameEngine, Unit } from '../../../types/game';
+import type { City, Civilization, Unit } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 /** A production item pushed onto a city's build queue. */
 interface ProductionItem {

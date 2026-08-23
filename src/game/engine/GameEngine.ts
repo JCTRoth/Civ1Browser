@@ -157,21 +157,19 @@ export default class GameEngine {
     
     // Callbacks for React state updates
     this.onStateChange = null;
-    // Cast this to GameEngine interface for constructor calls
-    const self = this as unknown as import('../../../types/game').GameEngine;
-    this.productionManager = new ProductionManager(self);
-    this.autoProduction = new AutoProduction(self);
-    this.economicManager = new EconomicManager(self);
-    this.governmentManager = new GovernmentManager(self);
-    this.researchManager = new ResearchManager(self);
-    this.roundManager = new TurnManager(self);
-    this.goToManager = new GoToManager(self, this.roundManager);
+    this.productionManager = new ProductionManager(this);
+    this.autoProduction = new AutoProduction(this);
+    this.economicManager = new EconomicManager(this);
+    this.governmentManager = new GovernmentManager(this);
+    this.researchManager = new ResearchManager(this);
+    this.roundManager = new TurnManager(this);
+    this.goToManager = new GoToManager(this, this.roundManager);
     this.playerStorage = new Map();
     this.scoutMemory = new ScoutMemory(); // Phase 3.1: Initialize scout memory
-    this.aiManager = new AIManager(self);
-    this.barbarianManager = new BarbarianManager(self);
-    this.unitTurnQueue = new UnitTurnQueue(self); // Initialize unit turn queue
-    this.diplomacyManager = new DiplomacyManager(self);
+    this.aiManager = new AIManager(this);
+    this.barbarianManager = new BarbarianManager(this);
+    this.unitTurnQueue = new UnitTurnQueue(this); // Initialize unit turn queue
+    this.diplomacyManager = new DiplomacyManager(this);
     this.devMode = false;
     this.victoryManager = new VictoryManager(this);
     this.isGameOver = false;

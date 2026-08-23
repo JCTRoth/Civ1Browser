@@ -10,7 +10,8 @@
  */
 
 import { getGovernment } from '../../data/GovernmentData';
-import type { Civilization, GameEngine, City } from '../../../types/game';
+import type { Civilization, City } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 /** How many turns a revolution (anarchy) lasts before the new government applies. */
 export const ANARCHY_TURNS = 3;

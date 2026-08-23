@@ -1,6 +1,6 @@
 import { Unit } from '../../../types/game';
 import { Pathfinding } from './Pathfinding';
-import type { GameEngine } from '../../../types/game';
+import GameEngine from './GameEngine';
 import type { TurnManager } from './TurnManager';
 
 /**

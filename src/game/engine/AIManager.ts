@@ -28,8 +28,8 @@ import {
   type CityThreatAssessment
 } from './AIStrategy';
 import type { DiplomatAction } from './DiplomacyTypes';
-import type { Unit, City, GameEngine, EnemyLocation } from '../../../types/game';
-import type { PlayerTurnStorage, MapTile } from './GameEngine';
+import type { Unit, City, EnemyLocation } from '../../../types/game';
+import GameEngine, { type PlayerTurnStorage, type MapTile } from './GameEngine';
 
 // How much better (in settlement-score points) the best location must be for a
 // settler to keep walking instead of founding at its current tile. Prevents
