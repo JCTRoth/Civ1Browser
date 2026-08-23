@@ -4,7 +4,7 @@ import { useGameStore } from '@/stores/GameStore';
 import { gameLogger } from '@/utils/GameLogger';
 import { getGovernment } from '@/data/GovernmentData';
 import { CITY_CENTER_COMMERCE } from '@/game/engine/EconomicManager';
-import type { GameEngine } from '../../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 import '../../../styles/ratesModal.css';
 
 type RateKey = 'tax' | 'science' | 'luxury';

@@ -1,5 +1,5 @@
-import { Unit } from '../../../types/game';
-import type { GameEngine, GameActions } from '../../../types/game';
+import { Unit, type GameActions } from '../../../types/game';
+import GameEngine from './GameEngine';
 
 /**
  * KeyboardHandler - Manages keyboard input for unit actions

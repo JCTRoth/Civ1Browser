@@ -20,7 +20,7 @@ import LeaderPortrait from './LeaderPortrait';
 import { LEADER_PORTRAITS, MOOD_COLORS } from '@/data/LeaderPortraits';
 import type { City, Civilization } from '../../../types/game';
 import GameEngine from '@/game/engine/GameEngine';
-import type { DiplomatAction } from '@/game/engine/DiplomacyTypes';
+import type { DiplomatAction, TreatyType } from '@/game/engine/DiplomacyTypes';
 
 const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   // console.log('[GameModals] Component rendering, gameEngine present:', !!gameEngine);
@@ -623,7 +623,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
             : `${civilizations[targetId]?.name} refused the pact.`);
           break;
         case 'cancel_treaty': {
-          const treaty = extra?.treaty;
+          const treaty = extra?.treaty as TreatyType | undefined;
           if (treaty) {
             dm.cancelTreaty(playerId, targetId, treaty);
             addDiploLog(`You cancelled ${TREATY_LABELS[treaty]?.label || treaty} with ${civilizations[targetId]?.name}.`);
@@ -632,8 +632,8 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         }
         case 'accept_counter': {
           if (counterProposal) {
-            const cpResult = dm.processProposal(counterProposal);
-            const cpAction = counterProposal.action.replace(/_/g, ' ');
+            const cpResult = dm.processProposal(counterProposal as any);
+            const cpAction = (counterProposal as any).action.replace(/_/g, ' ');
             addDiploLog(cpResult.accepted
               ? `You accepted their counter-proposal: ${cpAction}.`
               : `Counter-proposal could not be executed.`);
@@ -1373,7 +1373,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
 
   // Helper function to check if a city is coastal (has water tiles adjacent or on its position)
   const checkIfCityIsCoastal = useCallback((city: City | null | undefined, gameEngine: GameEngine | null | undefined): boolean => {
-    if (!gameEngine || !gameEngine.map || !gameEngine.map.getTile) return false;
+    if (!gameEngine || !city) return false;
     
     const directions = [
       { col: 0, row: 0 }, // city tile itself
@@ -1383,7 +1383,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     ];
     
     for (const dir of directions) {
-      const tile = gameEngine.map.getTile(city.col + dir.col, city.row + dir.row);
+      const tile = gameEngine.getTileAt(city.col + dir.col, city.row + dir.row);
       if (tile && tile.terrain === 'ocean') {
         return true;
       }

@@ -1,4 +1,5 @@
 import type { Unit, City } from '../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 
 type MapTile = { terrain?: string; type?: string; resource?: string; improvement?: string | Record<string, unknown>; village?: boolean; visible?: boolean; explored?: boolean; col?: number; row?: number };
 
@@ -15,5 +16,5 @@ export interface UnitActionsModalProps {
   contextMenu: ContextMenuData | null;
   onExecuteAction: (action: string, data?: Record<string, unknown>) => void;
   onClose: () => void;
-  gameEngine?: import('../../../types/game').GameEngine;
+  gameEngine?: GameEngine;
 }

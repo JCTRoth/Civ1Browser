@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { MapRenderer } from '@/game/rendering/MapRenderer';
-import type { GameEngine } from '../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 import '../../styles/miniMap.css';
 
 // Declare window properties

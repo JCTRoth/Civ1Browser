@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useGameStore } from '../stores/GameStore';
-import type { GameEngine as GameEngineType } from '../../types/game';
 import GameEngine from '../game/engine/GameEngine';
 import { EngineEventRouter } from '../utils/EngineEventHandlers';
 import { gameLogger } from '../utils/GameLogger';
@@ -17,15 +16,15 @@ export const useGameEngine = (gameEngine: GameEngine | null) => {
 
     // Keep the logger's context (round/player) in sync with the live engine.
     gameLogger.setContext(() => ({
-      round: (gameEngine as any).currentTurn ?? 0,
-      player: (gameEngine as any).activePlayer ?? 0,
+      round: gameEngine.currentTurn ?? 0,
+      player: gameEngine.activePlayer ?? 0,
     }));
 
     // Set up state change callback via router, tapping every event into the
     // game log first so moves/combat/turns are recorded in detail, into the
     // progression tracker so one snapshot is kept per round, and into
     // auto-production so it can react to war/capture/completions immediately.
-    const router = new EngineEventRouter(gameEngine as GameEngine);
+    const router = new EngineEventRouter(gameEngine);
     gameEngine.onStateChange = (eventType, eventData) => {
       gameLogger.record(eventType, eventData);
       gameProgression.recordIfNewRound(gameEngine);
@@ -55,8 +54,8 @@ export const useGameEngine = (gameEngine: GameEngine | null) => {
       
       // Register human player if their turn has started but wasn't registered
       // (This happens because startTurn is called before the event router is connected)
-      const tm = (gameEngine as any).turnManager || (gameEngine as any).roundManager;
-      const activePlayer = (gameEngine as any).activePlayer;
+      const tm = gameEngine.turnManager || gameEngine.roundManager;
+      const activePlayer = gameEngine.activePlayer;
       const activeCiv = gameEngine.civilizations?.[activePlayer];
       if (activeCiv?.isHuman && tm && typeof tm.registerPlayer === 'function') {
         console.log('[useGameEngine] Registering human player for initial turn', activePlayer);

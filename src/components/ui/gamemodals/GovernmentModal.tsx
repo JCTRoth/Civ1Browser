@@ -4,7 +4,7 @@ import { useGameStore } from '@/stores/GameStore';
 import { gameLogger } from '@/utils/GameLogger';
 import { getGovernment, GOVERNMENTS } from '@/data/GovernmentData';
 import { ANARCHY_TURNS } from '@/game/engine/GovernmentManager';
-import type { GameEngine } from '../../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 import '../../../styles/governmentModal.css';
 
 interface GovernmentModalProps {

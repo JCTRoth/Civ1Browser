@@ -9,16 +9,11 @@ import GameEngine from '@/game/engine/GameEngine';
 import type { City, Civilization, GameActions, ProductionItem } from '../../../../types/game';
 import '../../../styles/cityModal.css';
 
-// Use the concrete GameEngine class directly rather than the interface,
-// since the concrete class has some return-type differences (e.g.
-// foundCity().currentProduction is string, not ProductionItem).
-type GameEngineInstance = InstanceType<typeof GameEngine>;
-
 interface CityModalProps {
   show: boolean;
   onHide: () => void;
   selectedCity: City;
-  gameEngine: GameEngineInstance;
+  gameEngine: GameEngine;
   actions: GameActions;
   currentPlayer: Civilization;
   isPlayerCity: boolean;

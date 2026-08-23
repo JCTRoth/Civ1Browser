@@ -1,22 +1,22 @@
-import type { Unit, City, GameEngine, ProductionItem } from '../../../types/game';
+import type { Unit, City, ProductionItem } from '../../../types/game';
+import GameEngine from './GameEngine';
 import { UNIT_PROPS } from '@/utils/Constants';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 
 /**
- * Barbarian AI — a dedicated, aggressive controller for the phantom
- * barbarian civ (id −1). Barbarians are NOT a normal civilization: they have
- * no entry in `civilizations[]` (no diplomacy, no victory, no research), they
- * simply spawn from villages or captured cities and raid the real civs.
+ * Barbarian AI — "Forge of War" aggressive controller for the phantom
+ * barbarian civ (id −1). Barbarians form war bands that scout together,
+ * evaluate city strength, and attack when the horde can overwhelm the
+ * defenders.
  *
- * Behaviour (runs once per round, hooked into the turn cycle):
- *  - Every barbarian unit hunts: it attacks adjacent enemies, assaults
- *    adjacent enemy cities, and otherwise marches toward an enemy city.
- *  - When the horde is large (> 3 units) AND the weakest enemy city's
- *    defense is expected to be weaker than the horde's strength, the AI is
- *    MUCH more aggressive: ALL troops converge on the weakest city.
- *  - Cities the barbarians capture become troop pumps: all buildings are
- *    sold off, the FIRST produced unit is a SCOUT (to find the next target),
- *    and then the city produces raiders every round.
+ * Behaviour (runs once per round):
+ *  1. Activate all barbarian units (reset move budget).
+ *  2. Evaluate targets: find the weakest enemy city and compare its
+ *     defense to the horde's total strength.
+ *  3. If horde strength ≥ 1.5× city defense → full assault (all converge).
+ *  4. Otherwise → scout outward to find cities, avoid strong ones.
+ *  5. Captured cities become troop pumps: sell buildings, produce scouts
+ *     first, then raiders.
  */
 export class BarbarianManager {
   constructor(private readonly gameEngine: GameEngine) {}
@@ -28,24 +28,34 @@ export class BarbarianManager {
     const barbarianCities = (engine.cities ?? []).filter((c) => c.civilizationId === BARBARIAN_CIV_ID);
     if (units.length === 0 && barbarianCities.length === 0) return;
 
-    // Global read of the battlefield.
-    const weakest = this.chooseWeakestCity();
-    const hordeStrength = units.reduce(
-      (sum, u) => sum + Math.max(0, u.attack ?? 0) + (u.defense ?? 0) * 0.5,
-      0,
-    );
-    const muchAggression = units.length > 3 && weakest !== null && hordeStrength > weakest.defense;
-
-    // Move & fight with every unit.
+    // Activate all units (reset move budget).
     for (const unit of units) {
       this.activateUnit(unit);
-      const target = muchAggression
-        ? { col: weakest!.col, row: weakest!.row }          // all troops → weakest city
-        : this.nearestEnemyCity(unit) ?? this.nearestEnemyUnit(unit); // else nearest raid
-      this.act(unit, target);
     }
 
-    // Captured cities: sell everything, produce a scout first, then raiders.
+    // Global battlefield assessment.
+    const weakest = this.chooseWeakestCity();
+    const hordeStrength = this.totalHordeStrength(units);
+
+    // War band decision: attack or scout?
+    // "Forge of War" threshold: need 1.5× city defense to assault.
+    const ASSAULT_MULTIPLIER = 1.5;
+    const shouldAssault = units.length >= 2 && weakest !== null
+      && hordeStrength >= weakest.defense * ASSAULT_MULTIPLIER;
+
+    if (shouldAssault) {
+      // FORGE OF WAR: all troops converge on the weakest city.
+      console.log(`[BARB] 🔥 FORGE OF WAR — ${units.length} barbarians (str ${hordeStrength.toFixed(1)}) assault ${weakest!.defName ?? 'city'} (def ${weakest!.defense.toFixed(1)})`);
+      this.assaultCity(units, weakest!);
+    } else {
+      // Scout phase: each unit independently scouts for enemy cities/units.
+      for (const unit of units) {
+        const target = this.nearestEnemyCity(unit) ?? this.nearestEnemyUnit(unit);
+        this.act(unit, target);
+      }
+    }
+
+    // Captured cities: sell everything, produce scouts then raiders.
     this.manageCities(barbarianCities);
   }
 
@@ -60,7 +70,7 @@ export class BarbarianManager {
   }
 
   /** The weakest enemy city (lowest estimated defense). */
-  private chooseWeakestCity(): { col: number; row: number; defense: number } | null {
+  private chooseWeakestCity(): { col: number; row: number; defense: number; defName?: string } | null {
     const engine = this.gameEngine;
     const cities = (engine.cities ?? []).filter(
       (c: City) => c.civilizationId >= 0 && c.civilizationId !== BARBARIAN_CIV_ID,
@@ -71,13 +81,36 @@ export class BarbarianManager {
     for (const city of cities) {
       const defense = this.estimateCityDefense(city);
       if (!weakest || defense < weakest.defense) {
-        weakest = { col: city.col, row: city.row, defense };
+        weakest = { col: city.col, row: city.row, defense, defName: city.name };
       }
     }
     return weakest;
   }
 
   /** Civ1-style city defense: population (×3 with walls) + nearby garrison. */
+  /** Total offensive strength of all barbarian units. */
+  private totalHordeStrength(units: Unit[]): number {
+    return units.reduce(
+      (sum, u) => sum + Math.max(0.5, u.attack ?? 0.5) + (u.defense ?? 0) * 0.3,
+      0,
+    );
+  }
+
+  /**
+   * Full assault: all barbarians converge on the target city.
+   * Units march in formation — closest units move first for a natural battle line.
+   */
+  private assaultCity(units: Unit[], target: { col: number; row: number; defense: number }): void {
+    const sorted = [...units].sort((a, b) => {
+      const da = this.gameEngine.squareGrid?.squareDistance?.(a.col, a.row, target.col, target.row) ?? Infinity;
+      const db = this.gameEngine.squareGrid?.squareDistance?.(b.col, b.row, target.col, target.row) ?? Infinity;
+      return da - db;
+    });
+    for (const unit of sorted) {
+      this.act(unit, target);
+    }
+  }
+
   private estimateCityDefense(city: City): number {
     const engine = this.gameEngine;
     let defense = Math.max(1, city.population ?? 1);
@@ -122,13 +155,13 @@ export class BarbarianManager {
   /** One unit's turn: attack adjacent threats, otherwise step toward target. */
   private act(unit: Unit, target: { col: number; row: number } | null): void {
     const engine = this.gameEngine;
-    if ((unit.movesRemaining ?? 0) <= 0 || (unit as any).isDefeated) return;
+    if ((unit.movesRemaining ?? 0) <= 0 || unit.isDefeated) return;
     const neighbors = engine.squareGrid?.getNeighbors?.(unit.col, unit.row) ?? [];
 
     // 1. Attack an adjacent enemy unit.
     for (const n of neighbors) {
       const enemy = engine.getUnitAt?.(n.col, n.row);
-      if (enemy && enemy.civilizationId !== BARBARIAN_CIV_ID) {
+      if (enemy && enemy.civilizationId !== BARBARIAN_CIV_ID && !(enemy as any).isDefeated) {
         console.log(`[BARB] ${unit.type} attacks enemy ${enemy.type} at (${n.col},${n.row})`);
         engine.combatUnit?.(unit, enemy);
         return; // spent the move either way
