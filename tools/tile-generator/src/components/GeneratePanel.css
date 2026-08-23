@@ -340,3 +340,150 @@
   color: var(--muted);
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
+
+/* Edit-model badge in picker */
+.model-item-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: rgba(88, 166, 255, 0.12);
+  border-radius: 3px;
+  vertical-align: 1px;
+}
+
+/* Source image controls */
+.source-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.source-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.source-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.source-name {
+  font-size: 12px;
+  color: var(--text);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-empty {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.source-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.source-upload-label {
+  position: relative;
+  cursor: pointer;
+}
+
+.source-upload-label input[type="file"] {
+  display: none;
+}
+
+/* Strength slider */
+.strength-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.strength-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.strength-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  min-width: 34px;
+  text-align: right;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Source picker */
+.source-group {
+  margin-bottom: 6px;
+}
+
+.source-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  padding: 8px 10px 4px;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  text-align: left;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.source-item:hover {
+  background: var(--panel2);
+}
+
+.source-item img {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.source-item span {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-item em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--green);
+  margin-left: 4px;
+}
+

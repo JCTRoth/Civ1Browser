@@ -85,7 +85,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  min-height: 300px;
+  flex-shrink: 0;
 }
 
 .group-header {
@@ -179,6 +179,28 @@
   padding: 12px 14px;
   overflow-x: auto;
   align-items: flex-start;
+}
+
+/* Always-visible horizontal scroll bar for each texture group */
+.variants-strip::-webkit-scrollbar {
+  height: 8px;
+}
+.variants-strip::-webkit-scrollbar-track {
+  background: var(--panel2);
+  border-top: 1px solid var(--border);
+  border-radius: 4px;
+}
+.variants-strip::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+  border: 1px solid var(--panel2);
+}
+.variants-strip::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+.variants-strip {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) var(--panel2);
 }
 
 /* Variant cards */
@@ -336,6 +358,27 @@
 }
 
 .btn-use-game:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-source {
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(120, 200, 120, 0.1);
+  border: 1px solid var(--green, #6bbf6b);
+  border-radius: 5px;
+  color: var(--green, #6bbf6b);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-source:hover:not(:disabled) {
+  background: rgba(120, 200, 120, 0.2);
+}
+
+.btn-source:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

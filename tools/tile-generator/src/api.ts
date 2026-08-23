@@ -14,6 +14,8 @@ export async function generate(params: {
   tileName: string;
   width: number;
   height: number;
+  imageUrl?: string | null;
+  strength?: number | null;
 }): Promise<GenerateResult> {
   const res = await fetch(`${BASE}/generate`, {
     method: 'POST',

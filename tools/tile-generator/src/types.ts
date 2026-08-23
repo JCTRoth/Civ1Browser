@@ -25,6 +25,8 @@ export interface FalModel {
   name: string;
   description: string;
   status: string;
+  category?: string;
+  isEdit?: boolean;
   pricing: null | { cost: string; unit: string; type: string };
 }
 

@@ -323,14 +323,19 @@ const server = createServer(async (req, res) => {
       return json(res, { error: 'Invalid JSON' }, 400);
     }
 
-    const { model, prompt, tileName, width, height, useInGame } = params;
+    const { model, prompt, tileName, width, height, useInGame, imageUrl, strength } = params;
     if (!prompt || !tileName) return json(res, { error: 'Missing prompt or tileName' }, 400);
 
     const w = width || 512;
     const h = height || 512;
 
     try {
-      const result = await callFalAI(model, prompt, w, h);
+      // Resolve the source image (if any) to a data URI fal.ai can read.
+      const resolvedImageUrl = imageUrl ? resolveSourceToDataUri(imageUrl) : null;
+      if (imageUrl && !resolvedImageUrl) {
+        return json(res, { error: 'Source image not found or unreadable' }, 404);
+      }
+      const result = await callFalAI(model, prompt, w, h, resolvedImageUrl, strength);
       if (!result.imageUrl) {
         return json(res, { error: 'No image returned from fal.ai' }, 500);
       }
@@ -619,15 +624,19 @@ const server = createServer(async (req, res) => {
       if (!resp.ok) throw new Error(`HTTP ${resp.status} from fal.ai`);
       const data = await resp.json();
       const t2i = (data.models || [])
-        .filter(m => m.metadata?.category === 'text-to-image')
+        .filter(m => ['text-to-image', 'image-to-image'].includes(m.metadata?.category))
         .map(m => {
           const eid = m.endpoint_id;
           let dn = m.metadata.display_name
             .replace(/ Text To Image$/, '')
-            .replace(/ API$/, '');
+            .replace(/ Image To Image$/, '')
+            .replace(/ API$/, '')
+            .replace(/ Edit$/, '');
           return {
             id: eid,
             name: dn,
+            category: m.metadata?.category || 'image-to-image',
+            isEdit: m.metadata?.category === 'image-to-image',
             description: (m.metadata.description || '').split('\n')[0].slice(0, 200),
             status: m.metadata?.status || 'unknown',
             pricing: null,
@@ -644,6 +653,8 @@ const server = createServer(async (req, res) => {
         'fal-ai/flux/schnell',
         'fal-ai/flux/dev',
         'fal-ai/stable-diffusion-v3.5',
+        'fal-ai/flux-2/turbo/edit',
+        'fal-ai/nano-banana-2/edit',
       ];
       const existingIds = new Set(t2i.map(m => m.id));
       for (const id of QUICK_SELECT_IDS) {
@@ -652,7 +663,11 @@ const server = createServer(async (req, res) => {
           t2i.push({
             id,
             name,
-            description: 'Quick-select model (not listed as text-to-image by fal.ai API)',
+            category: id.includes('/edit') ? 'image-to-image' : 'text-to-image',
+            isEdit: id.includes('/edit'),
+            description: id.includes('/edit')
+              ? 'Image-to-image / variation (quick-select)'
+              : 'Quick-select model (not listed as text-to-image by fal.ai API)',
             status: 'unknown',
             pricing: null,
           });
@@ -850,9 +865,9 @@ function computeLocalEstimate(priceInfo, unitQuantity) {
   res.end('Not found');
 });
 
-async function callFalAI(model, prompt, width, height) {
+async function callFalAI(model, prompt, width, height, imageUrl = null, strength = null) {
   const falModel = model || 'fal-ai/fast-sdxl';
-  console.log(`[fal.ai] Generating with model "${falModel}": "${prompt.slice(0, 80)}..."`);
+  console.log(`[fal.ai] Generating with model "${falModel}"${imageUrl ? ' (image-to-image)' : ''}: "${prompt.slice(0, 80)}..."`);
 
   // Helper: safely fetch and parse JSON with better error messages
   async function fetchJSON(url, opts) {
@@ -875,11 +890,7 @@ async function callFalAI(model, prompt, width, height) {
       'Authorization': `Key ${FAL_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      prompt,
-      image_size: { width, height },
-      num_inference_steps: falModel.includes('schnell') ? 4 : (falModel.includes('flux-2') || falModel.includes('flux.2')) ? 8 : 28,
-    }),
+    body: JSON.stringify(buildGenerateBody(falModel, prompt, width, height, imageUrl, strength)),
   });
 
   const requestId = submitData.request_id;
@@ -931,6 +942,83 @@ async function callFalAI(model, prompt, width, height) {
   }
 
   throw new Error('fal.ai generation timed out (120s)');
+}
+
+/**
+ * Build the fal.ai request body, selecting the image-input field that a given
+ * model family expects:
+ *  - Nano Banana / Gemini edit endpoints are prompt+images only; they reject
+ *    diffusion params like num_inference_steps / image_size.
+ *  - Classic `.../image-to-image` endpoints use a single `image_url` plus an
+ *    optional `strength` that controls variation intensity.
+ *  - Everything else (FLUX.2 edit, FLUX.1 dev, kontext, etc.) uses an
+ *    `image_urls` array.
+ */
+function buildGenerateBody(model, prompt, width, height, imageUrl, strength) {
+  if (model.includes('nano-banana') || model.includes('gemini')) {
+    const body = { prompt };
+    if (imageUrl) body.image_urls = [imageUrl];
+    return body;
+  }
+
+  const numSteps = model.includes('schnell') ? 4
+    : (model.includes('flux-2') || model.includes('flux.2')) ? 8 : 28;
+
+  const body = {
+    prompt,
+    image_size: { width, height },
+    num_inference_steps: numSteps,
+  };
+
+  if (imageUrl) {
+    if (model.includes('/image-to-image')) {
+      body.image_url = imageUrl;
+      // strength = how far the variation drifts from the source (0 = unchanged)
+      if (strength != null) body.strength = strength;
+    } else {
+      body.image_urls = [imageUrl];
+    }
+  }
+
+  return body;
+}
+
+/**
+ * Resolve a source-image reference into a base64 data URI that fal.ai accepts.
+ * Accepts:
+ *  - an existing `data:` URI (e.g. a client-side file upload), used as-is;
+ *  - a server texture path like `/api/textures/foo.png` or `/api/game-tiles/foo.png`;
+ *  - a bare filename, searched in TEXTURES_DIR then OUTPUT_DIR.
+ * Returns null if the file cannot be found.
+ */
+function resolveSourceToDataUri(ref) {
+  if (!ref) return null;
+  if (typeof ref === 'string' && ref.startsWith('data:')) return ref;
+
+  const pathOnly = String(ref).split('?')[0];
+  let filePath = null;
+
+  if (pathOnly.startsWith('/api/textures/')) {
+    const fname = decodeURIComponent(pathOnly.slice('/api/textures/'.length));
+    const cand = join(TEXTURES_DIR, fname);
+    if (existsSync(cand)) filePath = cand;
+  } else if (pathOnly.startsWith('/api/game-tiles/') || pathOnly.startsWith('/api/tiles/')) {
+    const prefix = pathOnly.startsWith('/api/game-tiles/') ? '/api/game-tiles/' : '/api/tiles/';
+    const fname = decodeURIComponent(pathOnly.slice(prefix.length));
+    const cand = join(OUTPUT_DIR, fname);
+    if (existsSync(cand)) filePath = cand;
+  } else {
+    const fname = decodeURIComponent(pathOnly.replace(/^\/+/, ''));
+    for (const dir of [TEXTURES_DIR, OUTPUT_DIR]) {
+      const cand = join(dir, fname);
+      if (existsSync(cand)) { filePath = cand; break; }
+    }
+  }
+
+  if (!filePath) return null;
+  const buf = readFileSync(filePath);
+  const mime = (buf[0] === 0xFF && buf[1] === 0xD8) ? 'image/jpeg' : 'image/png';
+  return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
 async function callFalBgRemove(imageDataUri, model = 'fal-ai/imageutils/rembg') {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import * as api from '../api';
 import type { GameTile, TextureGroup, TextureVariant } from '../types';
+import ConfirmDialog from './ConfirmDialog';
 import './TextureGallery.css';
 
 interface PreviewState {
@@ -10,9 +11,10 @@ interface PreviewState {
 
 interface Props {
   refreshKey: number;
+  onUseAsSource?: (source: { path: string; name: string }) => void;
 }
 
-export default function TextureGallery({ refreshKey }: Props) {
+export default function TextureGallery({ refreshKey, onUseAsSource }: Props) {
   const [groups, setGroups] = useState<TextureGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -92,6 +94,7 @@ export default function TextureGallery({ refreshKey }: Props) {
                 selected={selected}
                 onToggleSelect={toggleSelect}
                 onClearSelection={clearSelection}
+                onUseAsSource={onUseAsSource}
               />
             ))}
           </>
@@ -109,6 +112,7 @@ export default function TextureGallery({ refreshKey }: Props) {
                 selected={selected}
                 onToggleSelect={toggleSelect}
                 onClearSelection={clearSelection}
+                onUseAsSource={onUseAsSource}
               />
             ))}
           </>
@@ -144,6 +148,7 @@ function GroupRow({
   selected,
   onToggleSelect,
   onClearSelection,
+  onUseAsSource,
 }: {
   group: TextureGroup;
   onRefresh: () => void;
@@ -151,6 +156,7 @@ function GroupRow({
   selected: Set<string>;
   onToggleSelect: (filename: string) => void;
   onClearSelection: () => void;
+  onUseAsSource?: (source: { path: string; name: string }) => void;
 }) {
   const groupSelected = group.variants.filter(v => selected.has(v.filename));
   const hasSelection = groupSelected.length > 0;
@@ -216,7 +222,7 @@ function GroupRow({
       <div className="variants-strip">
         {/* Current in-game tiles */}
         {group.inGameTiles.map(tile => (
-          <InGameCard key={tile.filename} tile={tile} onRefresh={onRefresh} onPreview={onPreview} />
+          <InGameCard key={tile.filename} tile={tile} onRefresh={onRefresh} onPreview={onPreview} onUseAsSource={onUseAsSource} />
         ))}
 
         {/* Generated variants */}
@@ -229,6 +235,7 @@ function GroupRow({
             livePath={group.inGame?.path}
             isSelected={selected.has(v.filename)}
             onToggleSelect={() => onToggleSelect(v.filename)}
+            onUseAsSource={onUseAsSource}
           />
         ))}
       </div>
@@ -240,10 +247,12 @@ function InGameCard({
   tile,
   onRefresh,
   onPreview,
+  onUseAsSource,
 }: {
   tile: GameTile;
   onRefresh: () => void;
   onPreview: (state: PreviewState) => void;
+  onUseAsSource?: (source: { path: string; name: string }) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -272,6 +281,14 @@ function InGameCard({
       </div>
       <div className="card-actions">
         <button
+          className="btn-source"
+          disabled={busy}
+          onClick={() => onUseAsSource?.({ path: tile.path, name: tile.filename })}
+          title="Use as source image for variations"
+        >
+          ⤴ Source
+        </button>
+        <button
           className="btn-remove-game"
           disabled={busy}
           onClick={handleRemove}
@@ -291,6 +308,7 @@ function VariantCard({
   livePath,
   isSelected,
   onToggleSelect,
+  onUseAsSource,
 }: {
   variant: TextureVariant;
   onRefresh: () => void;
@@ -298,10 +316,12 @@ function VariantCard({
   livePath?: string;
   isSelected: boolean;
   onToggleSelect: () => void;
+  onUseAsSource?: (source: { path: string; name: string }) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [bgModelOpen, setBgModelOpen] = useState(false);
   const [bgModel, setBgModel] = useState('fal-ai/imageutils/rembg');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function handleUseInGame() {
     setBusy('use');
@@ -324,8 +344,12 @@ function VariantCard({
     }
   }
 
-  async function handleDelete() {
-    if (!window.confirm(`Delete ${variant.filename}?`)) return;
+  function handleDelete() {
+    setConfirmDelete(true);
+  }
+
+  async function handleConfirmDelete() {
+    setConfirmDelete(false);
     setBusy('del');
     try {
       await api.deleteTexture(variant.filename);
@@ -352,6 +376,14 @@ function VariantCard({
         <span className="card-size">{formatSize(variant.size)}</span>
       </div>
       <div className="card-actions">
+        <button
+          className="btn-source"
+          disabled={isBusy}
+          onClick={() => onUseAsSource?.({ path: variant.path, name: variant.filename })}
+          title="Use as source image for variations"
+        >
+          ⤴ Source
+        </button>
         <button
           className="btn-use-game"
           disabled={isBusy}
@@ -396,6 +428,16 @@ function VariantCard({
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete variant"
+        message={`Are you sure you want to delete ${variant.filename}? This cannot be undone.`}
+        confirmLabel="Delete"
+        danger
+        busy={busy === 'del'}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

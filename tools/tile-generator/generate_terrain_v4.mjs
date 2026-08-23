@@ -34,7 +34,7 @@ const FEATURE_SPRITES_RAW = [
   {
     name: 'terrain_forest_feature_raw',
     saveName: 'terrain_forest_feature',
-    prompt: 'isolated terrain feature sprite for 2D strategy game tile, cluster of 3-4 round deciduous tree canopies viewed from directly above (90-degree bird\'s-eye top-down view), flat circular leafy canopy tops fill the lower 70 percent of the image, tree trunks and ground completely hidden, rich deep green hand-painted canopies with subtle leaf clusters and soft warm highlights, classic Civilization 2 or Wesnoth strategy game art style, clean solid pale neutral background for easy background removal, portrait 256x384, no side view, no ground, no drop shadows',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, a dense thick forest grove with many overlapping rounded deciduous tree canopies packed tightly together viewed from directly above (90-degree bird\'s-eye top-down view), the entire lower 70 percent of the image filled with interlocking circular leafy canopy tops, no gaps showing the ground or trunks, rich deep green hand-painted canopies with varied leaf clusters and soft warm highlights, classic Civilization 2 or Wesnoth strategy game art style, clean solid pale neutral background for easy background removal, portrait 256x384, no side view, no ground, no trunks, no drop shadows',
     w: 256, h: 384,
   },
   {
@@ -46,7 +46,7 @@ const FEATURE_SPRITES_RAW = [
   {
     name: 'terrain_hills_feature_raw',
     saveName: 'terrain_hills_feature',
-    prompt: 'isolated terrain feature sprite for 2D strategy game tile, a single rounded grassy hill mound viewed from a steep top-down angle, mostly flat oval grassy top with warm green grass and subtle darker shading around the rounded rim to suggest gentle elevation, compact oval shape seen from above, feature sits in the lower 70 percent of the image, no trees no rocks, classic Civilization 2 or Wesnoth strategy game art style, hand-painted, clean solid pale neutral background for easy background removal, portrait 256x384',
+    prompt: 'isolated terrain feature sprite for 2D strategy game tile, a single large rounded grassy hill seen from directly above (90-degree top-down view), gently rounded smooth grassy crown with muted earthy olive-green grass, soft lighter yellow-green highlight on the top of the mound and soft darker green shading around the outer rim and in the shallow dips, subtle short grass tuft texture scattered across the surface, the hill fills the entire lower 90 percent of the image edge to edge and is cut off by the bottom edge so it touches the bottom border with no gap below it, the feature fills a square tile footprint (flat square view, not a diamond or isometric shape), no trees no rocks no paths, classic Civilization 2 or Wesnoth strategy game art style, hand-painted, clean solid pale neutral background for easy background removal, portrait 256x384',
     w: 256, h: 384,
   },
   {

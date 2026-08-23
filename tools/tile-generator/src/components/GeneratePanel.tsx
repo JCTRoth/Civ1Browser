@@ -1,20 +1,41 @@
 import { useState, useEffect, useRef } from 'react';
 import * as api from '../api';
 import { TERRAIN_PRESETS, FEATURE_PRESETS } from '../presets';
-import type { FalModel } from '../types';
+import type { FalModel, TextureGroup } from '../types';
 import './GeneratePanel.css';
 
 const DEFAULT_MODEL = 'fal-ai/flux-2/turbo';
+const QUICK_MODEL_IDS = [
+  'fal-ai/flux-2/turbo',
+  'fal-ai/flux/schnell',
+  'fal-ai/flux/dev',
+  'fal-ai/fast-sdxl',
+  'fal-ai/flux-2/turbo/edit',
+  'fal-ai/nano-banana-2/edit',
+  'fal-ai/flux/dev/image-to-image',
+];
 const BG_MODELS = [
   { id: 'fal-ai/imageutils/rembg', label: 'rembg — Fast & Cheap ⚡' },
   { id: 'fal-ai/bria/background/remove', label: 'BRIA — Higher Quality' },
 ];
 
-interface Props {
-  onGenerated: () => void;
+/** Heuristic: is this an image-to-image / edit endpoint that needs a source? */
+function isEditModel(model: string): boolean {
+  return (
+    model.includes('/edit') ||
+    model.includes('/image-to-image') ||
+    model.includes('nano-banana') ||
+    model.includes('kontext')
+  );
 }
 
-export default function GeneratePanel({ onGenerated }: Props) {
+interface Props {
+  onGenerated: () => void;
+  pendingSource?: { path: string; name: string } | null;
+  onPendingSourceConsumed?: () => void;
+}
+
+export default function GeneratePanel({ onGenerated, pendingSource, onPendingSourceConsumed }: Props) {
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [models, setModels] = useState<FalModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -32,6 +53,13 @@ export default function GeneratePanel({ onGenerated }: Props) {
   const [estimate, setEstimate] = useState<string>('—');
   const [activeTerrainPreset, setActiveTerrainPreset] = useState<string | null>(null);
   const [activeFeaturePreset, setActiveFeaturePreset] = useState<string | null>(null);
+  // Image-to-image / variation controls
+  const [sourceImage, setSourceImage] = useState<string | null>(null);
+  const [sourceName, setSourceName] = useState('');
+  const [strength, setStrength] = useState(0.6);
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [textures, setTextures] = useState<TextureGroup[]>([]);
+  const [loadingTextures, setLoadingTextures] = useState(false);
   const estimateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch models when picker opens
@@ -59,6 +87,17 @@ export default function GeneratePanel({ onGenerated }: Props) {
     return () => { if (estimateTimer.current) clearTimeout(estimateTimer.current); };
   }, [model, width, height]);
 
+  // Consume a "Use as Source" selection from the gallery.
+  useEffect(() => {
+    if (!pendingSource) return;
+    setSourceImage(pendingSource.path);
+    setSourceName(pendingSource.name);
+    // Make sure we're using an image-to-image model so the source is used.
+    setModel(prev => (isEditModel(prev) ? prev : 'fal-ai/flux-2/turbo/edit'));
+    setStatus({ text: `Source set: ${pendingSource.name} — choose an edit model or vary the prompt.`, type: 'idle' });
+    onPendingSourceConsumed?.();
+  }, [pendingSource, onPendingSourceConsumed]);
+
   function applyTerrainPreset(key: string) {
     const p = TERRAIN_PRESETS[key];
     setPrompt(p.prompt);
@@ -79,9 +118,51 @@ export default function GeneratePanel({ onGenerated }: Props) {
     setActiveTerrainPreset(null);
   }
 
+  async function openSourcePicker() {
+    setShowSourcePicker(true);
+    if (textures.length > 0) return;
+    setLoadingTextures(true);
+    try {
+      const groups = await api.fetchTextures();
+      setTextures(groups);
+    } catch {
+      // ignore; the picker will just show an empty/error state
+    } finally {
+      setLoadingTextures(false);
+    }
+  }
+
+  function pickSource(path: string, name: string) {
+    setSourceImage(path);
+    setSourceName(name);
+    setShowSourcePicker(false);
+  }
+
+  function clearSource() {
+    setSourceImage(null);
+    setSourceName('');
+  }
+
+  function handleSourceUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setSourceImage(String(reader.result));
+      setSourceName(file.name);
+      // Clear the input value so the same file can be re-picked later.
+      e.target.value = '';
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function handleGenerate() {
     if (!prompt.trim() || !tileName.trim()) {
       setStatus({ text: 'Enter a prompt and tile name.', type: 'error' });
+      return;
+    }
+    if (isEditModel(model) && !sourceImage) {
+      setStatus({ text: 'Image-to-image model selected — pick or upload a source image.', type: 'error' });
       return;
     }
     setGenerating(true);
@@ -93,7 +174,15 @@ export default function GeneratePanel({ onGenerated }: Props) {
         if (count > 1) {
           setStatus({ text: `Generating variation ${i + 1}/${count}…`, type: 'idle' });
         }
-        const result = await api.generate({ model, prompt, tileName: tileName.trim(), width, height });
+        const result = await api.generate({
+          model,
+          prompt,
+          tileName: tileName.trim(),
+          width,
+          height,
+          imageUrl: sourceImage,
+          strength: isEditModel(model) ? strength : null,
+        });
         if (!result.ok) {
           setStatus({ text: result.error ?? 'Generation failed', type: 'error' });
           return;
@@ -140,10 +229,13 @@ export default function GeneratePanel({ onGenerated }: Props) {
             onChange={e => setModel(e.target.value)}
           >
             <option value="fal-ai/flux-2/turbo">Flux 2 Turbo ⚡</option>
+            <option value="fal-ai/flux-2/turbo/edit">Flux 2 Turbo Edit ✏️</option>
+            <option value="fal-ai/nano-banana-2/edit">Nano Banana 2 Edit 🍌</option>
+            <option value="fal-ai/flux/dev/image-to-image">Flux Dev Img2Img 🔁</option>
             <option value="fal-ai/flux/schnell">Flux Schnell</option>
             <option value="fal-ai/flux/dev">Flux Dev</option>
             <option value="fal-ai/fast-sdxl">Fast SDXL</option>
-            {!['fal-ai/flux-2/turbo','fal-ai/flux/schnell','fal-ai/flux/dev','fal-ai/fast-sdxl'].includes(model) && (
+            {!QUICK_MODEL_IDS.includes(model) && (
               <option value={model}>{model}</option>
             )}
           </select>
@@ -247,6 +339,49 @@ export default function GeneratePanel({ onGenerated }: Props) {
         </div>
       </section>
 
+      {/* Source image + strength — only for image-to-image / edit models */}
+      {isEditModel(model) && (
+        <>
+          <section className="gen-section">
+            <h3>Source Image</h3>
+            {sourceImage ? (
+              <div className="source-preview">
+                <img src={sourceImage} alt="Source" className="source-thumb" />
+                <div className="source-meta">
+                  <span className="source-name" title={sourceName}>{sourceName || 'source'}</span>
+                  <button className="btn-secondary" onClick={clearSource}>Clear</button>
+                </div>
+              </div>
+            ) : (
+              <p className="source-empty">No source selected — pick an existing texture or upload one.</p>
+            )}
+            <div className="source-actions">
+              <button className="btn-secondary" onClick={openSourcePicker}>Pick texture…</button>
+              <label className="btn-secondary source-upload-label">
+                Upload…
+                <input type="file" accept="image/*" onChange={handleSourceUpload} />
+              </label>
+            </div>
+          </section>
+
+          <section className="gen-section">
+            <h3>Strength</h3>
+            <div className="strength-row">
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={strength}
+                onChange={e => setStrength(Number(e.target.value))}
+              />
+              <span className="strength-value">{strength.toFixed(2)}</span>
+            </div>
+            <p className="field-hint">Higher = more variation from the source. Lower = closer to the original.</p>
+          </section>
+        </>
+      )}
+
       {/* Remove BG */}
       <section className="gen-section">
         <label className="checkbox-row">
@@ -276,8 +411,8 @@ export default function GeneratePanel({ onGenerated }: Props) {
 
       {/* Model picker dialog */}
       {showModelPicker && (
-        <div className="modal-overlay" onClick={() => setShowModelPicker(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-overlay">
+          <div className="modal">
             <div className="modal-header">
               <span>Choose Model</span>
               <button className="modal-close" onClick={() => setShowModelPicker(false)}>✕</button>
@@ -299,9 +434,55 @@ export default function GeneratePanel({ onGenerated }: Props) {
                   className={`model-item${model === m.id ? ' active' : ''}`}
                   onClick={() => { setModel(m.id); setShowModelPicker(false); }}
                 >
-                  <span className="model-item-name">{m.name}</span>
+                  <span className="model-item-name">
+                    {m.name}
+                    {m.isEdit && <span className="model-item-badge">edit</span>}
+                  </span>
                   <span className="model-item-id">{m.id}</span>
                 </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Source image picker dialog */}
+      {showSourcePicker && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <span>Choose Source Texture</span>
+              <button className="modal-close" onClick={() => setShowSourcePicker(false)}>✕</button>
+            </div>
+            <div className="modal-list">
+              {loadingTextures && <p className="modal-loading">Loading textures…</p>}
+              {!loadingTextures && textures.length === 0 && (
+                <p className="modal-loading">No textures found. Generate some first, or upload a file.</p>
+              )}
+              {textures.map(group => (
+                <div key={group.name} className="source-group">
+                  <div className="source-group-title">{group.name}</div>
+                  {group.variants.map(v => (
+                    <button
+                      key={v.filename}
+                      className="source-item"
+                      onClick={() => pickSource(v.path, v.filename)}
+                    >
+                      <img src={v.path} alt={v.filename} loading="lazy" />
+                      <span>{v.filename}</span>
+                    </button>
+                  ))}
+                  {group.inGameTiles.map(t => (
+                    <button
+                      key={t.filename}
+                      className="source-item"
+                      onClick={() => pickSource(t.path, t.filename)}
+                    >
+                      <img src={t.path} alt={t.filename} loading="lazy" />
+                      <span>{t.filename} <em>in game</em></span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </div>
