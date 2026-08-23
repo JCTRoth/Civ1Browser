@@ -1255,8 +1255,11 @@ export class MapRenderer {
 
   /**
    * Determine how a unit should render given the active combat animations.
-   * During an animation window both participants are hidden; afterwards the
-   * survivor fades back in while the destroyed unit stays hidden.
+   *
+   * Timeline:
+   *   0 … duration     → both units VISIBLE; 💥 cloud blinks at defender tile
+   *   duration … duration+deathBlink → survivor shown; dead unit blinks fast
+   *   duration+deathBlink … ∞       → dead unit hidden forever
    */
   private getCombatRenderState(
     unit: Unit,
@@ -1273,32 +1276,39 @@ export class MapRenderer {
       if (!isAttacker && !isDefender) continue;
 
       const elapsed = now - anim.startTime;
-      if (elapsed < anim.duration) {
-        // Both units hidden while the cloud is visible.
-        return { hidden: true, alpha: 0 };
-      }
-
       const survived = isAttacker ? anim.attackerSurvived : anim.defenderSurvived;
-      if (!survived) {
-        // Destroyed unit: never shown again.
-        return { hidden: true, alpha: 0 };
-      }
 
-      // Fade the survivor back in over 400ms after the cloud disappears.
-      const fadeEnd = anim.duration + 400;
-      if (elapsed >= fadeEnd) {
+      if (elapsed < anim.duration) {
+        // During the cloud phase: BOTH units are visible so the player
+        // can see the attacker and defender. The 💥 cloud is drawn on top
+        // at reduced opacity by drawCombatClouds().
         return { hidden: false, alpha: 1 };
       }
-      const fadeProgress = (elapsed - anim.duration) / 400;
-      return { hidden: false, alpha: Math.max(0, Math.min(1, fadeProgress)) };
+
+      if (survived) {
+        // Survivor: fully visible, no fade needed.
+        return { hidden: false, alpha: 1 };
+      }
+
+      // Destroyed unit: blink rapidly for deathBlinkDuration, then vanish.
+      const blinkElapsed = elapsed - anim.duration;
+      const blinkDuration = anim.deathBlinkDuration ?? 2000;
+      if (blinkElapsed >= blinkDuration) {
+        return { hidden: true, alpha: 0 };
+      }
+      // Fast blink: ~150ms on / ~150ms off
+      const blinkCycle = 150;
+      const visible = Math.floor(blinkElapsed / blinkCycle) % 2 === 0;
+      return { hidden: !visible, alpha: visible ? 1 : 0 };
     }
 
     return { hidden: false, alpha: 1 };
   }
 
   /**
-   * Draw a cloud emoji (🫯, Noto Color Emoji) at each active combat's defender
-   * tile while its animation is running.
+   * Draw a blinking 💥 cloud emoji at each active combat's defender tile
+   * while its cloud phase is running. The cloud blinks on/off every ~200ms
+   * so the fight feels dynamic.
    */
   private drawCombatClouds(
     ctx: CanvasRenderingContext2D,
@@ -1319,18 +1329,21 @@ export class MapRenderer {
         continue;
       }
 
-      // Fade the cloud in quickly and keep it at 40% opacity (60% transparent)
-      // so the combat doesn't fully obscure the units underneath.
-      const fadeIn = Math.min(0.4, (elapsed / 150) * 0.4);
+      // Blink the cloud: visible for 200ms, invisible for 200ms.
+      const blinkCycle = 200;
+      const visible = Math.floor(elapsed / blinkCycle) % 2 === 0;
+      if (!visible) continue;
+
+      // Fade in quickly on first appearance, cap at 60% opacity.
+      const fadeIn = Math.min(0.6, (elapsed / 150) * 0.6);
       ctx.save();
       ctx.globalAlpha = fadeIn;
 
-      const size = Math.round(this.tileSize * cameraZoom * 1.6);
+      const size = Math.round(this.tileSize * cameraZoom * 1.8);
       ctx.font = `${size}px "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      // 💥 for city attacks, 🫯 for unit-vs-unit combat.
-      const emoji = (anim as any).cityAttack ? '💥' : '🫯';
+      const emoji = anim.cityAttack ? '💥' : '💥';
       ctx.fillText(emoji, x, y);
 
       ctx.restore();
@@ -2054,10 +2067,10 @@ export class MapRenderer {
       ctx.fillText(sleepIcon, centerX, centerY + 22);
     }
 
-    // Draw black X on defeated units (shown for 5 seconds before removal)
+    // Draw black X on defeated units (blinks with the unit during combat
+    // animation; invisible once the unit is hidden after the death blink).
     if ((unit as any).isDefeated) {
       ctx.save();
-      ctx.globalAlpha = 1.0; // Make X fully visible
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';

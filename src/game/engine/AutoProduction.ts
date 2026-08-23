@@ -327,6 +327,14 @@ export class AutoProduction {
             (civCities.length < 3 && expansion.earlyBonus ? 1 : 0),
         );
     if (!needsHappiness && city.population >= 1) {
+      // Don't produce more settlers when the treasury is deeply negative —
+      // each new settler adds upkeep the civ can't afford, triggering mass
+      // unit disbanding.  Only allow settlers when gold is non-negative or
+      // the deficit is small (< 1 turn of upkeep).
+      const gold = this.gameEngine.civilizations?.[city.civilizationId]?.resources?.gold ?? 0;
+      const upkeep = this.gameEngine.economicManager?.totalUpkeep?.(city.civilizationId) ?? 0;
+      const goldCrisis = gold < -upkeep;
+
       // Count queued settlers across ALL cities so the cap is enforced
       // globally — without this, three cities each queueing a settler all
       // pass the per-city check and the civ overshoots the cap.
@@ -344,7 +352,11 @@ export class AutoProduction {
         (u: Unit) => u.civilizationId === city.civilizationId && u.type === 'settler'
       ).length + queuedSettlers;
 
-      if (settlerCount < desiredSettlers) {
+      // In a gold crisis, allow at most the minimum settler count (1);
+      // otherwise the full desired count.
+      const effectiveDesired = goldCrisis ? expansion.minSettlers : desiredSettlers;
+
+      if (settlerCount < effectiveDesired) {
         console.log(`[AutoProduction] Civilization has ${settlerCount} settler(s) (unit list + queued across all cities), building another (target ${desiredSettlers}, profile ${strategy})`);
         return {
           type: 'unit',

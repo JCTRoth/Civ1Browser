@@ -717,22 +717,21 @@ export class TurnManager {
   private calculateCityShieldSupport(city: City): number {
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
     const government = String(civ?.government ?? 'despotism').toLowerCase();
-    const allowanceByGovernment: Record<string, number> = {
-      anarchy: 0,
-      despotism: 3,
-      monarchy: 3,
-      communism: 3,
-      republic: 1,
-      democracy: 0,
-    };
-    const freeUnits = Math.min(
-      Math.max(0, Number(city.population ?? 0)),
-      allowanceByGovernment[government] ?? allowanceByGovernment.despotism,
-    );
-    const supportedUnits = (this.gameEngine.units ?? []).filter(
-      (unit) => unit.homeCityId === city.id && !unit.isNoneUnit,
-    ).length;
-    return Math.max(0, supportedUnits - freeUnits);
+    
+    // Civ1: only settlers cost shields in Republic and Democracy.
+    // In Republic: 1 shield per settler. In Democracy: 1 shield per settler.
+    // All other governments: settlers cost 0 shields.
+    if (government === 'republic' || government === 'democracy') {
+      const settlerCount = (this.gameEngine.units ?? []).filter(
+        (unit) => unit.type === 'settler'
+          && unit.homeCityId === city.id
+          && !unit.isNoneUnit,
+      ).length;
+      return settlerCount; // 1 shield per settler
+    }
+    
+    // Despotism/Monarchy/Communism/Anarchy: no shield support for settlers.
+    return 0;
   }
 
   private completeProduction(city: City): void {
@@ -865,12 +864,18 @@ export class TurnManager {
   }
 
   private processCityGrowth(city: City): void {
+    const civ = this.gameEngine.civilizations?.[city.civilizationId];
+    const government = String(civ?.government ?? 'despotism').toLowerCase();
+    
+    // Civ1: each settler attached to a city consumes food per turn.
+    // Democracy is special: settlers cost 2 food instead of 1.
+    const settlerFoodPerTurn = government === 'democracy' ? 2 : 1;
     const settlerFoodSupport = (this.gameEngine.units ?? []).filter(
       (unit) => unit.type === 'settler'
         && unit.homeCityId === city.id
         && !unit.isNoneUnit,
-    ).length;
-    // Settlers consume one food from their home city's food box each turn.
+    ).length * settlerFoodPerTurn;
+    // Settlers consume food from their home city's food box each turn.
     city.foodStored = Math.max(0, (city.foodStored ?? 0) + (city.yields?.food ?? 0) - settlerFoodSupport);
     
     if (city.foodStored >= city.foodNeeded) {
@@ -1001,6 +1006,19 @@ export class TurnManager {
     for (const unit of units) {
       const path = this.unitPaths.get(unit.id);
       if (!path || path.length === 0) continue;
+      
+      // Safety: skip path entries the unit already passed (stale GoTo from
+      // a previous turn where the AI moved the unit mid-turn).  Without
+      // this the scout walks backward to its old position first, consuming
+      // moves and oscillating every turn.
+      while (path.length > 1 &&
+             path[0].col === unit.col && path[0].row === unit.row) {
+        path.shift(); // already here — skip to the next step
+      }
+      if (path.length === 0) {
+        this.clearUnitPath(unit.id);
+        continue;
+      }
       
       console.log(`[TurnManager] ➡️ Unit ${unit.id} (${unit.type}) has GoTo path with ${path.length} steps, ${unit.movesRemaining} moves remaining`);
       

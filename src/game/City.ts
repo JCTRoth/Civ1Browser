@@ -596,9 +596,9 @@ export class City {
         // Remove from old home city
         if (unit.homeCityId) {
             // Find old home city in civilization's cities
-            const oldHomeCity = this.civilization.cities.find((city: City) => city.id === unit.homeCityId);
-            if (oldHomeCity && oldHomeCity !== this) {
-                oldHomeCity.supportedUnitIds.delete(unitId);
+            const oldHomeCity = this.civilization.cities.find(city => city.id === unit.homeCityId);
+            if (oldHomeCity && oldHomeCity !== this as unknown) {
+                (oldHomeCity as unknown as { supportedUnitIds: Set<string> }).supportedUnitIds.delete(unitId);
             }
         }
 

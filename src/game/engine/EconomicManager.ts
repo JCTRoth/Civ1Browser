@@ -776,8 +776,11 @@ export class EconomicManager {
     );
 
     // ── Move gradually toward the target (never jump 0↔100 between turns,
-    //    which is what made the old policy oscillate). ──
-    const MAX_DELTA = 10;
+    //    which is what made the old policy oscillate).  When the treasury is
+    //    deeply negative, allow a larger jump so the AI can recover before
+    //    units get disbanded for bankruptcy. ──
+    const crisis = gold < -upkeep;
+    const MAX_DELTA = crisis ? 30 : 10;
     const newTax = targetTax >= rates.tax
       ? Math.min(targetTax, rates.tax + MAX_DELTA)
       : Math.max(targetTax, rates.tax - MAX_DELTA);

@@ -1838,9 +1838,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       last = currentTime;
       renderStaticContent();
 
-      // Stop once every animation has fully finished (duration + fade).
+      // Stop once every animation has fully finished (cloud + death blink).
       const now = performance.now();
-      const anyActive = (combatAnimations ?? []).some(a => now - a.startTime < a.duration + 400);
+      const anyActive = (combatAnimations ?? []).some(a => {
+        const totalDuration = a.duration + ((a as any).deathBlinkDuration ?? 1000);
+        return now - a.startTime < totalDuration;
+      });
       if (!anyActive) {
         cancelAnimationFrame(raf);
       }

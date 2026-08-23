@@ -3,7 +3,8 @@
 import { ModalUtils } from './ModalUtils';
 import { UNIT_PROPS } from '@/utils/Constants';
 import {CityUtils} from "@/utils/CityUtils";
-import type { City, Civilization, GameEngine, ProductionItem } from '../../../../types/game';
+import type { City, Civilization, ProductionItem } from '../../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 
 export class CityModalLogic {
   private readonly city: City;
@@ -125,7 +126,8 @@ export class CityModalLogic {
   }
 
   private checkIfCityIsCoastal(): boolean {
-    if (!this.gameEngine || !this.gameEngine.map || !this.gameEngine.map.getTile) return false;
+    const map = this.gameEngine.map as unknown as { getTile?(col: number, row: number): { terrain: string } | undefined };
+    if (!this.gameEngine || !map || !map.getTile) return false;
     
     const directions = [
       { col: 0, row: 0 }, // city tile itself
@@ -135,7 +137,7 @@ export class CityModalLogic {
     ];
     
     for (const dir of directions) {
-      const tile = this.gameEngine.map.getTile(this.city.col + dir.col, this.city.row + dir.row);
+      const tile = map.getTile(this.city.col + dir.col, this.city.row + dir.row);
       if (tile && tile.terrain === 'ocean') {
         return true;
       }

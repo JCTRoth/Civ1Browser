@@ -2,6 +2,26 @@
 
 export type VictoryReason = 'elimination' | 'moonshot' | 'domination';
 
+export interface EnemyLocation {
+  col: number;
+  row: number;
+  type: 'unit' | 'city';
+  id: string;
+  discoveredRound: number;
+  lastSeenRound: number;
+}
+
+export interface PlayerTurnStorage {
+  civilizationId: number;
+  visibility: boolean[];
+  explored: boolean[];
+  lastKnownUnits: Map<string, Unit>;
+  lastKnownCities: Map<string, City>;
+  enemyLocations: Map<number, EnemyLocation[]>;
+  scoutZones: Array<{ minCol: number; maxCol: number; minRow: number; maxRow: number }>;
+  turnData: Record<string, unknown>;
+}
+
 export class GameResult {
   outcome: 'victory' | 'defeat';
   civilizationId: number;
@@ -182,6 +202,10 @@ export interface Unit {
   _exploreBearing?: { dx: number; dy: number };
   _blockedScoutTargets?: Set<string>;
   _aiCommittedTarget?: { target: { col: number; row: number }; round: number };
+  /** Scout: found an enemy city — return to friendly city to report. */
+  enemyFound?: boolean;
+  /** Scout: coordinates of the last enemy discovered. */
+  enemyLocation?: { col: number; row: number };
 }
 
 export interface City {
@@ -244,6 +268,14 @@ export interface City {
   supportedUnitIds?: Set<string>;
   /** Max population cap (used by City.ts legacy class). */
   maxPopulation?: number;
+  /** Civilization object (used by City.ts legacy class). */
+  civilization?: unknown;
+  /** Trade output (used by City.ts legacy class). */
+  trade?: number;
+  /** Food storage amount (used by City.ts legacy class). */
+  foodStorage?: number;
+  /** Max food storage (used by City.ts legacy class). */
+  maxFoodStorage?: number;
 }
 
 /**
@@ -300,6 +332,7 @@ export interface Civilization {
     aggression?: number;
     expansion?: number;
     science?: number;
+    diplomacy?: number;
   };
   /** AI priorities / strategy state (set by AI systems at runtime). */
   priorities?: Record<string, unknown>;
@@ -422,8 +455,12 @@ export interface CombatAnimation {
   defenderSurvived: boolean;
   /** performance.now() timestamp when the animation started. */
   startTime: number;
-  /** Cloud duration in ms (units stay hidden this long). */
+  /** Cloud duration in ms (units stay visible, cloud blinks). */
   duration: number;
+  /** How long the dead unit blinks after the cloud disappears (ms). */
+  deathBlinkDuration: number;
+  /** Whether this is a city attack (draws 💥 instead of 🫯). */
+  cityAttack?: boolean;
 }
 
 export interface GameActions {
@@ -485,7 +522,7 @@ export interface GameEngine {
   civilizations: Civilization[];
   technologies: Technology[];
   onStateChange: ((eventType: string, eventData?: Record<string, unknown>) => void) | null;
-  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined; executePathWithAnimation?(unitId: string, delayMs: number): Promise<{ success: boolean; stepsCompleted: number }> } | null;
+  goToManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getUnitPath(unitId: string): Array<{ col: number; row: number }> | undefined; clearUnitPath(unitId: string): void; executePathWithAnimation?(unitId: string, delayMs: number): Promise<{ success: boolean; stepsCompleted: number }> } | null;
   /** Log a game event with category, message, and optional detail object. */
   log(category: string, message: string, detail?: Record<string, unknown>): void;
   newGame(): void;
@@ -548,6 +585,10 @@ export interface GameEngine {
     getActiveTreaties(civA: number, civB: number): string[];
     getEventLog(): Array<{ type: string; fromCivId: number; toCivId: number; goldAmount?: number; details?: string }>;
     estimateMilitaryStrength(civId: number): number;
+    isAtWar(civA: number, civB: number): boolean;
+    processAIDiplomacy(civId: number): void;
+    presentOffer(fromCivId: number, toCivId: number, action: string, gold: number, message: string): void;
+    reset(): void;
     processTurn(roundNumber: number): void;
   };
   /** Auto-production manager for AI/human city queues. */
@@ -555,17 +596,50 @@ export interface GameEngine {
   /** Production manager for city build queues. */
   productionManager: { setCityProduction(cityId: string, item: ProductionItem, queue?: boolean): { success: boolean; reason?: string; city?: City }; purchaseCityProduction(cityId: string, item: ProductionItem, civId?: number): { success: boolean; reason?: string }; removeCurrentProduction(cityId: string): { success: boolean; reason?: string; removed?: ProductionItem }; removeCityQueueItem(cityId: string, index: number): { success: boolean; reason?: string; removed?: ProductionItem }; moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number): { success: boolean; reason?: string; moved?: ProductionItem } };
   /** Economic manager for tax/science/luxury rates and upkeep. */
-  economicManager: { setGovernment(civId: number, government: string): void; calculateCityTrade?(city: City): number; processTurn?(civ: Civilization): { upkeep: number; deficit: number; disbanded: number }; recomputeCityYields?(city: City): void; applyCityOutputs?(city: City, civ: Civilization): void };
+  economicManager: { setGovernment(civId: number, government: string): void; calculateCityTrade?(city: City): number; processTurn?(civ: Civilization): { upkeep: number; deficit: number; disbanded: number }; recomputeCityYields?(city: City): void; applyCityOutputs?(city: City, civ: Civilization): void; totalUpkeep?(civId: number): number };
   /** Civ I–style research manager (tech cost, beaker modifiers, turn caps). */
   researchManager: { processTurn(): void; effectiveTechCost?(civ: Civilization, techId: string | Technology): number; estimatedTurns?(civ: Civilization, techId: string | Technology, perTurnScience: number): number; advanceResearch?(civ: Civilization, techId: string, totalScience: number): string | null };
   /** Per-civilization persistent turn storage (AI state, explored tiles…). */
-  getPlayerStorage(civilizationId: number): { turnData: Record<string, unknown>; visibility: boolean[]; explored: boolean[] };
+  getPlayerStorage(civilizationId: number): PlayerTurnStorage;
   /** Square grid backing the map (null until a game is initialized). */
-  squareGrid: { isValidSquare(col: number, row: number): boolean; squareDistance(col1: number, row1: number, col2: number, row2: number): number } | null;
+  squareGrid: {
+    isValidSquare(col: number, row: number): boolean;
+    squareDistance(col1: number, row1: number, col2: number, row2: number): number;
+    findPath(fromCol: number, fromRow: number, toCol: number, toRow: number, obstacles?: Set<string>, passabilityFn?: (col: number, row: number) => boolean): Array<{ col: number; row: number }>;
+    getNeighbors(col: number, row: number): Array<{ col: number; row: number }>;
+  } | null;
   /** Get the map tile at a grid position (null when out of bounds). */
-  getTileAt(col: number, row: number): { terrain: string; type?: string; resource?: string; improvement?: string; village?: boolean } | null;
+  getTileAt(col: number, row: number): Tile | null;
+  /** Get the unit at a grid position (null if empty). */
+  getUnitAt(col: number, row: number): Unit | null;
+  /** Get the city at a grid position (null if empty). */
+  getCityAt(col: number, row: number): City | null;
+  /** Whether a tile has been permanently explored by a player. */
+  isExploredByPlayer(civId: number, col: number, row: number): boolean;
+  /** Whether a tile is currently visible (in fog of war) for a player. */
+  isVisibleToPlayer(civId: number, col: number, row: number): boolean;
+  /** Whether a tile is passable by ground units. */
+  isTilePassable(col: number, row: number): boolean;
+  /** Returns a passability filter function for pathfinding. */
+  getPassabilityFilter(): (col: number, row: number) => boolean;
+  /** Resolve combat between two units. */
+  combatUnit(attacker: Unit, defender: Unit): void;
+  /** Whether a unit can afford to move (enough movement points). */
+  canUnitAffordMove(unit: Unit, moveCost: number): boolean;
+  /** Whether a settler can join an adjacent city. */
+  canJoinCity(unitId: string): boolean;
+  /** Async sleep for AI delays. */
+  sleep(ms: number): Promise<void>;
+  /** Measure execution time of a function (debug). */
+  measurePerformance<T>(label: string, fn: () => T): T;
+  /** Record an enemy location for AI intelligence. */
+  recordEnemyLocation(civId: number, enemy: EnemyLocation): void;
+  /** Assign exploration zones to scouts. */
+  assignScoutZones(civId: number): void;
+  /** Check if a tile is within a scout's assigned zone. */
+  isInScoutZone(civId: number, scoutIdx: number, col: number, row: number): boolean;
   /** Turn/phase manager. */
-  roundManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getPhase(): string | null; getCurrentPlayer(): number | null; getRoundNumber(): number; isAITurnInProgress(): boolean };
+  roundManager: { setUnitPath(unitId: string, path: Array<{ col: number; row: number }>): void; getPhase(): string; getCurrentPlayer(): number | null; getRoundNumber(): number; isAITurnInProgress(): boolean; clearUnitPath(unitId: string): void; getAllUnitPaths(): Map<string, Array<{ col: number; row: number }>> };
   /** Current in-game year (negative = BC). */
   currentYear: number;
   /** Current game settings (difficulty, map type, civilizations…). */
@@ -592,13 +666,13 @@ export interface GameEngine {
   /** Unit turn queue for managing unit order. */
   unitTurnQueue?: { initializeQueue(civId: number): void; clearQueue(civId: number): void };
   /** Scout memory for persistence across turns. */
-  scoutMemory?: { setCurrentRound(round: number): void };
+  scoutMemory?: { setCurrentRound(round: number): void; getNearestStaleTarget?(fromCol: number, fromRow: number, seekerCivId: number, maxAge?: number): EnemyLocation | null };
   /** Barbarian manager for aggressive AI. */
   barbarianManager?: { processBarbarians(): void };
   /** Victory manager for end-game detection. */
   victoryManager?: { evaluateEndOfTurn(): boolean };
   /** Government manager for revolution and capital. */
-  governmentManager?: { processTurn(civ: Civilization): void; ensureCapital?(civId: number): void; designateCapital?(civId: number, city: City): void };
+  governmentManager?: { processTurn(civ: Civilization): void; ensureCapital?(civId: number): void; designateCapital?(civId: number, city: City): void; isInRevolution(civ: Civilization): boolean; bestGovernmentForCiv(civ: Civilization): string | null };
   /** Called when a scout is created. */
   onScoutCreated?(unit: Unit): void;
   /** Process AI turn for a civilization. */

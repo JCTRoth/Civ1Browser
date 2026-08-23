@@ -28,7 +28,7 @@ import {
   type CityThreatAssessment
 } from './AIStrategy';
 import type { DiplomatAction } from './DiplomacyTypes';
-import type { Unit, City, GameEngine, Civilization } from '../../../types/game';
+import type { Unit, City, GameEngine, EnemyLocation } from '../../../types/game';
 import type { PlayerTurnStorage, MapTile } from './GameEngine';
 
 // How much better (in settlement-score points) the best location must be for a
@@ -119,15 +119,15 @@ export class AIManager {
 
     if (storage) {
       if (!storage.turnData) storage.turnData = {};
-      if (!storage.turnData.aiState) {
-        storage.turnData.aiState = createDefaultAIState();
+      if (!(storage.turnData as Record<string, unknown>).aiState) {
+        (storage.turnData as Record<string, unknown>).aiState = createDefaultAIState();
         // Seed the research strategy from the civ's fixed production profile so
         // the AI researches in the same direction it produces.
-        storage.turnData.aiState.strategyProfile =
+        ((storage.turnData as Record<string, unknown>).aiState as AIState).strategyProfile =
           this.gameEngine.civilizations?.[civilizationId]?.productionProfile ?? 'balanced_growth';
       }
     }
-    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+    const aiState: AIState = (storage?.turnData?.aiState as AIState) ?? createDefaultAIState();
 
     // ─── Phase 1: Strategy evaluation ──────────────────────────────────
     const gameState = this.buildGameState(civilizationId);
@@ -188,7 +188,7 @@ export class AIManager {
     // this is the "rush": war is started deliberately instead of waiting for
     // first contact, and the bulk army then presses the city.
     if (aggressionState.posture === 'aggressive' && this.gameEngine.diplomacyManager) {
-      const plan = storage?.turnData?.offensivePlan;
+      const plan = storage?.turnData?.offensivePlan as { targetCivId?: number } | undefined | null;
       const targetCivId = plan?.targetCivId;
       if (typeof targetCivId === 'number' && targetCivId !== civilizationId) {
         const dm = this.gameEngine.diplomacyManager;
@@ -477,15 +477,6 @@ export class AIManager {
             : new Set<string>();
           const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, obstacles, this.gameEngine.getPassabilityFilter?.());
           if (path.length > 1) {
-            // Store the full path as a GoTo so the TurnManager walks the
-            // scout toward the target over multiple turns. This avoids the
-            // old pattern where the AI picked a distant target, took one
-            // step, got skipped, and re-picked a new target next turn
-            // (causing the "insufficient_moves" oscillation).
-            if (unit.type === 'scout' && this.gameEngine.roundManager) {
-              this.gameEngine.roundManager.setUnitPath(unit.id, path);
-              console.log(`[AI-SCOUT] Set GoTo path for ${unit.id} with ${path.length} steps toward (${target.col},${target.row})`);
-            }
             let next = path[1];
             console.log(`[AI] Path found, next step to (${next.col},${next.row}), path length: ${path.length}`);
             const tt = this.gameEngine.getTileAt(next.col, next.row);
@@ -511,12 +502,21 @@ export class AIManager {
                this.gameEngine.skipUnit(unit.id);
                 break;
               }
+              // Deviating from the A* path — the stored GoTo is no longer valid.
+              if (unit.type === 'scout' && this.gameEngine.roundManager) {
+                this.gameEngine.roundManager.clearUnitPath(unit.id);
+              }
               next = affordable;
             }
             const r = this.gameEngine.moveUnit(unit.id, next.col, next.row);
             if (!r || !r.success) {
               // A scout blocked on this step should not repeat it next turn.
               this.blacklistScoutTarget(unit, next.col, next.row);
+              // Clear any stale GoTo path so processAutomatedMovements
+              // doesn't try to walk the scout backward next turn.
+              if (unit.type === 'scout' && this.gameEngine.roundManager) {
+                this.gameEngine.roundManager.clearUnitPath(unit.id);
+              }
              console.log(`[AI] Path step failed, skipping unit`);
               this.gameEngine.log('ai', `Path step failed — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'path_move_failed' });
               // Settler fallback: block unreachable target and re-evaluate.
@@ -525,6 +525,13 @@ export class AIManager {
               }
              this.gameEngine.skipUnit(unit.id);
               break;
+            }
+            // Store remaining GoTo path (skip start pos + just-taken step)
+            // so processAutomatedMovements continues forward next turn
+            // instead of walking the scout back to its old position.
+            if (unit.type === 'scout' && this.gameEngine.roundManager && path.length > 2) {
+              this.gameEngine.roundManager.setUnitPath(unit.id, path.slice(2));
+              console.log(`[AI-SCOUT] Stored remaining GoTo path for ${unit.id}: ${path.length - 2} steps toward (${target.col},${target.row})`);
             }
             this.gameEngine.log('ai', `Move — ${civ.name} ${unit.type}(${unit.id}) → (${next.col},${next.row}) toward (${target.col},${target.row})`, { civilizationId, action: 'move', unitId: unit.id, unitType: unit.type, targetCol: target.col, targetRow: target.row });
           } else {
@@ -667,7 +674,7 @@ export class AIManager {
     if (!this.gameEngine.map || !this.gameEngine.squareGrid) return null;
 
     const storage = this.gameEngine.getPlayerStorage?.(unit.civilizationId);
-    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+    const aiState: AIState = (storage?.turnData?.aiState as AIState) ?? createDefaultAIState();
 
     // ── Retreat check for combat units ──
     if (this.isCombatUnit(unit)) {
@@ -713,9 +720,9 @@ export class AIManager {
       for (const e of scannedEnemies) {
         if (typeof this.gameEngine.recordEnemyLocation === 'function') {
           this.gameEngine.recordEnemyLocation(unit.civilizationId, {
-            col: e.col, row: e.row, distance: e.distance,
+            col: e.col, row: e.row,
             targetType: e.type, targetId: e.id, priority: e.type === 'city' ? 2 : 1,
-          });
+          } as unknown as EnemyLocation);
         }
       }
       // Respond only to civs we are at war with.
@@ -741,7 +748,7 @@ export class AIManager {
         const intercept = findInterceptPosition(
           unit.col, unit.row, closest.col, closest.row,
           (c, r) => this.gameEngine.squareGrid!.getNeighbors(c, r),
-          (c, r) => this.gameEngine.getTileAt(c, r),
+          (c, r) => this.gameEngine.getTileAt(c, r) as { type: string; explored?: boolean; resource?: string | null; fortress?: boolean; river?: boolean; passable?: boolean } | null | undefined,
           (c, r) => this.gameEngine.getUnitAt(c, r),
           distFn
         );
@@ -987,7 +994,7 @@ export class AIManager {
 
           if (!alreadyKnown) {
             // Store enemy location in player storage for civilization-wide decision making
-            this.gameEngine.recordEnemyLocation(unit.civilizationId, enemyResult);
+            this.gameEngine.recordEnemyLocation(unit.civilizationId, enemyResult as unknown as EnemyLocation);
 
             // Civ1: a scout that spots a lone enemy UNIT keeps exploring — the
             // army handles units. Only an enemy CITY is valuable enough to
@@ -1074,7 +1081,7 @@ export class AIManager {
       unit.col,
       unit.row,
       (col, row) => this.gameEngine.squareGrid!.getNeighbors(col, row),
-      (col, row) => this.gameEngine.getTileAt(col, row),
+      (col, row) => this.gameEngine.getTileAt(col, row) as { type: string; explored?: boolean; resource?: string | null; fortress?: boolean; river?: boolean; passable?: boolean } | null | undefined,
       (col, row) => this.gameEngine.isTilePassable?.(col, row) ?? true,
       (col, row) => typeof this.gameEngine.isExploredByPlayer === 'function'
         ? this.gameEngine.isExploredByPlayer(unit.civilizationId, col, row)
@@ -1115,11 +1122,10 @@ export class AIManager {
       unit.col,
       unit.row,
       neighbors,
-      (col, row) => this.gameEngine.getTileAt(col, row),
+      (col, row) => this.gameEngine.getTileAt(col, row) as { type: string; explored?: boolean; resource?: string | null; fortress?: boolean; river?: boolean; passable?: boolean } | null | undefined,
       (col, row) => this.gameEngine.getUnitAt(col, row),
       (col, row) => this.gameEngine.squareGrid!.isValidSquare(col, row)
     );
-
     if (terrainAnalysis.passableMoves.length > 0) {
       console.log(`[AI] Terrain analysis: ${terrainAnalysis.passableMoves.length} passable tiles, min cost: ${terrainAnalysis.minCost}, avg cost: ${terrainAnalysis.averageCost.toFixed(1)}`);
 
@@ -1716,8 +1722,7 @@ export class AIManager {
       } else {
         const neighbors = this.gameEngine.squareGrid.getNeighbors(city.col, city.row);
         const passable = neighbors.find((n: { col: number; row: number }) => {
-          const tile = this.gameEngine.getTileAt?.(n.col, n.row);
-          return tile && tile.passable !== false && !this.gameEngine.getUnitAt?.(n.col, n.row);
+          return this.gameEngine.isTilePassable?.(n.col, n.row) !== false && !this.gameEngine.getUnitAt?.(n.col, n.row);
         });
         if (passable) bestTarget = { col: passable.col, row: passable.row };
       }
@@ -2318,7 +2323,7 @@ export class AIManager {
   }
 
   /** Situational aggression score from the current game snapshot. */
-  private evaluateAggression(civilizationId: number, gameState: Record<string, unknown>): AggressionAssessment {
+  private evaluateAggression(civilizationId: number, gameState: { ownMilitaryStrength: number; averageEnemyStrength: number; criticalThreatsCount: number; threatenedCitiesCount: number; numOwnCities: number; isAtWar: boolean; currentYear: number }): AggressionAssessment {
     const personality = this.gameEngine.civilizations?.[civilizationId]?.personality;
     const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
 
@@ -2659,7 +2664,7 @@ export class AIManager {
     let knownEnemyCities = 0;
     if (storage?.enemyLocations) {
       for (const enemies of storage.enemyLocations.values()) {
-        knownEnemyCities += enemies.filter((e: EnemyLocation) => e.type === 'city').length;
+        knownEnemyCities += enemies.filter((e) => e.type === 'city').length;
       }
     }
 
