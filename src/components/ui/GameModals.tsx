@@ -18,7 +18,8 @@ import '../../styles/gameModals.css';
 import '../../styles/diplomacyModal.css';
 import LeaderPortrait from './LeaderPortrait';
 import { LEADER_PORTRAITS, MOOD_COLORS } from '@/data/LeaderPortraits';
-import type { City, Civilization, GameEngine } from '../../../types/game';
+import type { City, Civilization } from '../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 import type { DiplomatAction } from '@/game/engine/DiplomacyTypes';
 
 const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {

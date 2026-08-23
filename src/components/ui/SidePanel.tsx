@@ -6,7 +6,8 @@ import { TERRAIN_PROPERTIES } from '@/data/TerrainConstants';
 import MiniMap from './MiniMap';
 import { getTechIcon } from '@/data/TechnologyIcons';
 import '../../styles/sidePanel.css';
-import type { GameEngine, City, Civilization } from '../../../types/game';
+import type { City, Civilization } from '../../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 
 // New side panel matching the provided mockup image
 //

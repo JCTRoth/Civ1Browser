@@ -1,4 +1,4 @@
-import type { Unit, City, GameEngine } from '../../../types/game';
+import type { Unit, City, GameEngine, ProductionItem } from '../../../types/game';
 import { UNIT_PROPS } from '@/utils/Constants';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 
@@ -202,13 +202,13 @@ export class BarbarianManager {
     }
   }
 
-  private scoutProduction(): { type: string; itemType: string; name: string; cost: number } {
+  private scoutProduction(): ProductionItem {
     const props = UNIT_PROPS.scout ?? { cost: 15 };
     return { type: 'unit', itemType: 'scout', name: 'Scout', cost: props.cost ?? 15 };
   }
 
   /** The barbarian raider: a fast, strong attacker (chariot if present). */
-  private raiderProduction(): { type: string; itemType: string; name: string; cost: number } {
+  private raiderProduction(): ProductionItem {
     const type = UNIT_PROPS.chariot ? 'chariot' : 'legion';
     const props = UNIT_PROPS[type] ?? { name: type, cost: 40 };
     return { type: 'unit', itemType: type, name: props.name ?? type, cost: props.cost ?? 40 };

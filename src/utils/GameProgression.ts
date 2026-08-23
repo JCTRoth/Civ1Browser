@@ -36,7 +36,8 @@ import type {
   CompactUnit,
   ProgressionWorldSnapshot,
 } from '../../types/progression';
-import type { GameEngine, City, Unit, Civilization } from '../../types/game';
+import type { City, Unit, Civilization } from '../../types/game';
+import GameEngine from '@/game/engine/GameEngine';
 
 /** Change this one value to alter how often full world snapshots are emitted. */
 export const PROGRESSION_SNAPSHOT_INTERVAL = 20;

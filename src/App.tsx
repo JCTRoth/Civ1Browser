@@ -33,8 +33,8 @@ function App() {
   const gameResult = useGameStore(state => state.gameState.gameResult);
   const setCamera = useGameStore(state => state.actions.updateCamera);
   const uiState = useGameStore(state => state.uiState);
-  const [gameEngine, setGameEngine] = useState(null);
-  const [error, setError] = useState(null);
+  const [gameEngine, setGameEngine] = useState<GameEngine | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [activeMenu, setActiveMenu] = useState<GameMenuName | null>(null);
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [showHexDetail, setShowHexDetail] = useState(false);
@@ -44,8 +44,8 @@ function App() {
   const [confirmNewGame, setConfirmNewGame] = useState(false);
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [isEndTurnAutomatic, setIsEndTurnAutomatic] = useState(false);
-  const [detailHex, setDetailHex] = useState(null);
-  const [terrainData, setTerrainData] = useState(null);
+  const [detailHex, setDetailHex] = useState<{ col: number; row: number } | null>(null);
+  const [terrainData, setTerrainData] = useState<any>(null);
 
   // Turn flash effect on top bar - direct DOM manipulation for reliability
   const turnFlashTrigger = useGameStore(state => state.uiState.turnFlashTrigger);
@@ -649,8 +649,8 @@ function App() {
               setCamera({ y: camera.y - 50 });
             } else {
               // Arrow Keys: Move cursor
-              if (gameEngine && gameEngine.moveCursor) {
-                gameEngine.moveCursor(0, -1);
+              if (gameEngine && (gameEngine as any).moveCursor) {
+                (gameEngine as any).moveCursor(0, -1);
               }
             }
             break;
@@ -658,8 +658,8 @@ function App() {
             if (shiftKey) {
               setCamera({ y: camera.y + 50 });
             } else {
-              if (gameEngine && gameEngine.moveCursor) {
-                gameEngine.moveCursor(0, 1);
+              if (gameEngine && (gameEngine as any).moveCursor) {
+                (gameEngine as any).moveCursor(0, 1);
               }
             }
             break;
@@ -667,8 +667,8 @@ function App() {
             if (shiftKey) {
               setCamera({ x: camera.x - 50 });
             } else {
-              if (gameEngine && gameEngine.moveCursor) {
-                gameEngine.moveCursor(-1, 0);
+              if (gameEngine && (gameEngine as any).moveCursor) {
+                (gameEngine as any).moveCursor(-1, 0);
               }
             }
             break;
@@ -676,8 +676,8 @@ function App() {
             if (shiftKey) {
               setCamera({ x: camera.x + 50 });
             } else {
-              if (gameEngine && gameEngine.moveCursor) {
-                gameEngine.moveCursor(1, 0);
+              if (gameEngine && (gameEngine as any).moveCursor) {
+                (gameEngine as any).moveCursor(1, 0);
               }
             }
             break;
@@ -893,8 +893,8 @@ function App() {
             break;
           case 'z':
             // Undo last action
-            if (gameEngine && gameEngine.undoLastAction) {
-              gameEngine.undoLastAction();
+            if (gameEngine && (gameEngine as any).undoLastAction) {
+              (gameEngine as any).undoLastAction();
             }
             break;
           case 'p':

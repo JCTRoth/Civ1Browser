@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useGameStore } from '../stores/GameStore';
-import type { GameEngine } from '../../types/game';
+import type { GameEngine as GameEngineType } from '../../types/game';
+import GameEngine from '../game/engine/GameEngine';
 import { EngineEventRouter } from '../utils/EngineEventHandlers';
 import { gameLogger } from '../utils/GameLogger';
 import { gameProgression } from '../utils/GameProgression';
