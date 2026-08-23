@@ -58,6 +58,11 @@ export class ScoutMemory {
       };
       civDiscoveries.push(record);
       console.log(`[SCOUT-MEMORY] New discovery: ${location.type} at (${location.col}, ${location.row})`);
+      // Prune old discoveries to prevent unbounded growth (keep last 50)
+      if (civDiscoveries.length > 50) {
+        civDiscoveries.sort((a, b) => b.lastSeenRound - a.lastSeenRound);
+        civDiscoveries.length = 50;
+      }
     }
   }
   

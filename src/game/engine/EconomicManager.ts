@@ -780,7 +780,10 @@ export class EconomicManager {
     //    deeply negative, allow a larger jump so the AI can recover before
     //    units get disbanded for bankruptcy. ──
     const crisis = gold < -upkeep;
-    const MAX_DELTA = crisis ? 30 : 10;
+    const deepCrisis = gold < -upkeep * 2;
+    // In deep crisis, jump straight to the target to prevent mass disbanding.
+    // In mild crisis, ramp up quickly. Otherwise, gradual adjustment.
+    const MAX_DELTA = deepCrisis ? 100 : crisis ? 50 : 10;
     const newTax = targetTax >= rates.tax
       ? Math.min(targetTax, rates.tax + MAX_DELTA)
       : Math.max(targetTax, rates.tax - MAX_DELTA);

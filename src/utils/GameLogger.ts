@@ -69,6 +69,10 @@ class GameLogger {
       detail,
     };
     this.pending.push(entry);
+    // Cap the pending buffer to prevent unbounded growth when server is unreachable
+    if (this.pending.length > 500) {
+      this.pending.splice(0, this.pending.length - 500);
+    }
     this.scheduleFlush();
     return entry;
   }

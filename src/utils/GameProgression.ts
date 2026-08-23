@@ -303,6 +303,10 @@ class GameProgression {
     if (round === this.lastRecordedRound) return;
     this.lastRecordedRound = round;
     this.snapshots.push(this.buildRound(engine, round));
+    // Keep only the last 200 snapshots to prevent unbounded memory growth
+    if (this.snapshots.length > 200) {
+      this.snapshots.splice(0, this.snapshots.length - 200);
+    }
   }
 
   getSnapshotCount(): number {

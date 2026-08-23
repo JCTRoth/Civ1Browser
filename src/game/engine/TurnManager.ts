@@ -50,6 +50,17 @@ export class TurnManager {
   isProcessingGoTo(): boolean { return this.isProcessingGoToPaths; }
   isAITurnInProgress(): boolean { return this.aiTurnInProgress; }
 
+  /** Reset all turn manager state for a new game. */
+  reset(): void {
+    this.unitPaths.clear();
+    this.currentPlayer = null;
+    this.currentPhase = null;
+    this.playerRegistered = false;
+    this.roundNumber = 0;
+    this.aiTurnInProgress = false;
+    this.isProcessingGoToPaths = false;
+  }
+
   // --- Event helper ---
   private emit(eventType: string, data: Record<string, unknown> = {}) {
     if (this.gameEngine && typeof this.gameEngine.onStateChange === 'function') {

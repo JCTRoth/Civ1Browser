@@ -533,6 +533,11 @@ export default class GameEngine {
       existing.lastSeenRound = round;
     } else {
       list.push(location);
+      // Prune old enemy locations (keep last 30 per enemy civ)
+      if (list.length > 30) {
+        list.sort((a, b) => b.lastSeenRound - a.lastSeenRound);
+        list.length = 30;
+      }
       storage.enemyLocations.set(enemyCivId, list);
     }
 
@@ -3239,6 +3244,14 @@ export default class GameEngine {
     if (this.storeActions?.resetFogOfWar) {
       this.storeActions.resetFogOfWar();
     }
+
+    // Reset subsystem state
+    this.scoutMemory.clear();
+    this.scoutMemory.setCurrentRound(0);
+    this.diplomacyManager.reset();
+    this.autoProduction?.reset?.();
+    this.barbarianManager?.reset?.();
+    this.roundManager?.reset?.();
     
     // Regenerate world
     await this.generateWorld();
@@ -3276,6 +3289,22 @@ export default class GameEngine {
     if (actions?.resetFogOfWar) {
       actions.resetFogOfWar();
     }
+
+    // Reset all game state arrays
+    this.units = [];
+    this.cities = [];
+    this.civilizations = [];
+    this.technologies = [];
+    this.currentTurn = 1;
+    this.activePlayer = 0;
+
+    // Reset subsystem state
+    this.scoutMemory.clear();
+    this.scoutMemory.setCurrentRound(0);
+    this.diplomacyManager.reset();
+    this.autoProduction?.reset?.();
+    this.barbarianManager?.reset?.();
+    this.roundManager?.reset?.();
 
     await this.initialize({ ...this.gameSettings });
 

@@ -1830,6 +1830,21 @@ export class MapRenderer {
     ctx.font = `${Math.max(8, 10 * cameraZoom)}px monospace`;
     ctx.fillStyle = '#000';
     ctx.fillText(city.name, centerX, centerY + 24 * cameraZoom);
+
+    // Show city population size as a number badge on the city tile
+    const pop = city.population || 1;
+    const popRadius = Math.max(6, 8 * cameraZoom);
+    const popX = centerX + size / 2 - 2;
+    const popY = centerY - size / 2 + 2;
+    ctx.beginPath();
+    ctx.fillStyle = '#000';
+    ctx.arc(popX, popY, popRadius, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = '#FFF';
+    ctx.font = `bold ${Math.max(7, 9 * cameraZoom)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(pop), popX, popY + 0.5);
     
     // Show HP bar if city has taken damage or has more than 1 HP
     const cityHP = (city as any).hitPoints || (city as any).population || 1;
@@ -2065,6 +2080,40 @@ export class MapRenderer {
       ctx.textBaseline = 'middle';
       ctx.fillStyle = this.isLightColor(civColor) ? '#111' : '#FFF';
       ctx.fillText(sleepIcon, centerX, centerY + 22);
+    }
+
+    // Show health indicator as a small bar below the unit circle
+    const unitHealth = unit.health ?? 100;
+    if (unitHealth < 100) {
+      const hpBarWidth = innerRadius * 1.6;
+      const hpBarHeight = Math.max(3, 3 * zoomFactor);
+      const hpBarX = centerX - hpBarWidth / 2;
+      const hpBarY = centerY + innerRadius + 2 * zoomFactor;
+      const hpPercent = Math.max(0, Math.min(1, unitHealth / 100));
+
+      // Background
+      ctx.fillStyle = '#333';
+      ctx.fillRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+
+      // HP fill (red → yellow → green)
+      ctx.fillStyle = hpPercent < 0.33 ? '#FF3333' : hpPercent < 0.66 ? '#FFD700' : '#33CC33';
+      ctx.fillRect(hpBarX, hpBarY, hpBarWidth * hpPercent, hpBarHeight);
+
+      // Border
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(hpBarX, hpBarY, hpBarWidth, hpBarHeight);
+
+      // Percentage text
+      const pctText = `${Math.round(unitHealth)}%`;
+      ctx.fillStyle = '#FFF';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.font = `bold ${Math.max(6, 7 * zoomFactor)}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.strokeText(pctText, centerX, hpBarY + hpBarHeight + 1);
+      ctx.fillText(pctText, centerX, hpBarY + hpBarHeight + 1);
     }
 
     // Draw black X on defeated units (blinks with the unit during combat
