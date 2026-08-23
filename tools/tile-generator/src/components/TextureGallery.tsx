@@ -171,7 +171,6 @@ function GroupRow({
 
   async function handleRemoveAllFromGame() {
     if (group.inGameTiles.length === 0) return;
-    if (!window.confirm(`Remove ${group.inGameTiles.length} in-game tile(s) of ${group.name}?`)) return;
     setRemovingAll(true);
     try {
       await api.removeFromGame(group.inGameTiles.map(t => t.filename));
@@ -249,7 +248,6 @@ function InGameCard({
   const [busy, setBusy] = useState(false);
 
   async function handleRemove() {
-    if (!window.confirm(`Remove ${tile.filename} from game?`)) return;
     setBusy(true);
     try {
       await api.removeFromGame(tile.filename);

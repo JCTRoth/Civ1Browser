@@ -48,6 +48,58 @@ function nextVariantN(groupName) {
   return max + 1;
 }
 
+/**
+ * Return the next in-game variant number for a group, independent of the
+ * tile-generator numbering. In-game tiles always start at _1 and count up,
+ * so adding the same image twice yields two separate game tiles (_1, _2, …)
+ * with no gaps. Legacy base files without a _N suffix (e.g. terrain_x.png)
+ * are not counted — they are a separate primary tile.
+ */
+function nextGameN(groupName) {
+  if (!existsSync(OUTPUT_DIR)) return 1;
+  const files = readdirSync(OUTPUT_DIR);
+  let max = 0;
+  for (const f of files) {
+    const p = parseTextureName(f);
+    if (p && p.group === groupName) max = Math.max(max, p.n);
+  }
+  return max + 1;
+}
+
+/**
+ * Compact a group's in-game numbered tiles so they are contiguous from _1.
+ * Removing terrain_forest_feature_1 must leave _1,_2,_3 — never a gap like
+ * _2,_3,_4. Legacy base files without a _N suffix are never touched. Returns
+ * the list of renames performed ({ from, to }).
+ */
+function renumberGroup(groupName) {
+  if (!existsSync(OUTPUT_DIR)) return [];
+  const files = readdirSync(OUTPUT_DIR);
+  const members = [];
+  for (const f of files) {
+    const p = parseTextureName(f);
+    if (p && p.group === groupName) members.push(p.n);
+  }
+  members.sort((a, b) => a - b);
+
+  // The k-th smallest current number becomes k+1. Processing in ascending
+  // order is safe: the target slot is never occupied when it is written.
+  const renames = [];
+  for (let i = 0; i < members.length; i++) {
+    const current = members[i];
+    const target = i + 1;
+    if (current === target) continue;
+    const from = join(OUTPUT_DIR, `${groupName}_${current}.png`);
+    const to = join(OUTPUT_DIR, `${groupName}_${target}.png`);
+    if (existsSync(from) && !existsSync(to)) {
+      renameSync(from, to);
+      renames.push({ from: `${groupName}_${current}.png`, to: `${groupName}_${target}.png` });
+      console.log(`[renumber] ${groupName}_${current}.png → ${groupName}_${target}.png`);
+    }
+  }
+  return renames;
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -473,8 +525,12 @@ const server = createServer(async (req, res) => {
         continue;
       }
 
-      // Keep the _N suffix in the target name
-      const targetName = safeFilename;
+      // Game-side numbering is independent of the tile-generator numbering.
+      // The in-game tile always gets the group's next number starting at _1,
+      // so adding the same image twice adds the same image twice to the game
+      // (they can be removed manually later) and gaps are avoided.
+      const gameN = nextGameN(parsed.group);
+      const targetName = `${parsed.group}_${gameN}.png`;
       const destPath = join(OUTPUT_DIR, targetName);
       if (!destPath.startsWith(OUTPUT_DIR)) {
         results.push({ filename, ok: false, error: 'Forbidden' });
@@ -482,12 +538,23 @@ const server = createServer(async (req, res) => {
       }
 
       copyFileSync(srcPath, destPath);
-      console.log(`[use-in-game] ${safeFilename} → game tiles/${targetName}`);
+      console.log(`[use-in-game] ${safeFilename} → game tiles/${targetName} (game #${gameN})`);
       results.push({ filename, ok: true, targetName });
     }
 
+    // Compact affected groups so in-game numbering stays contiguous from _1.
+    // Self-heals any pre-existing gap (e.g. _2,_3,_4 after _1 was removed).
+    const addedGroups = new Set();
+    for (const r of results) {
+      if (!r.ok || !r.targetName) continue;
+      const p = parseTextureName(r.targetName.replace(/\.png$/i, ''));
+      if (p) addedGroups.add(p.group);
+    }
+    const renames = [];
+    for (const group of addedGroups) renames.push(...renumberGroup(group));
+
     const allOk = results.every(r => r.ok);
-    return json(res, { ok: allOk, results });
+    return json(res, { ok: allOk, results, renames });
   }
 
   // ─── API: remove texture variant(s) from game ────────────────────────
@@ -501,8 +568,11 @@ const server = createServer(async (req, res) => {
     if (filenames.length === 0) return json(res, { error: 'Missing filename(s)' }, 400);
 
     const results = [];
+    const affectedGroups = new Set();
     for (const filename of filenames) {
       const safeFilename = filename.replace(/[^a-z0-9_.-]/gi, '_');
+      const parsed = parseTextureName(safeFilename.replace(/\.png$/i, ''));
+      if (parsed) affectedGroups.add(parsed.group);
       const targetPath = join(OUTPUT_DIR, safeFilename);
       if (!targetPath.startsWith(OUTPUT_DIR)) {
         results.push({ filename, ok: false, error: 'Forbidden' });
@@ -521,8 +591,14 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Re-number remaining tiles of affected groups so they stay contiguous
+    // from _1 (removing terrain_forest_feature_1 must leave _1,_2,_3 — never
+    // a gap like _2,_3,_4). Renames are returned so clients can reflect them.
+    const renames = [];
+    for (const group of affectedGroups) renames.push(...renumberGroup(group));
+
     const allOk = results.every(r => r.ok);
-    return json(res, { ok: allOk, results });
+    return json(res, { ok: allOk, results, renames });
   }
 
   // ─── API: serve current in-game tile ─────────────────────────────────
