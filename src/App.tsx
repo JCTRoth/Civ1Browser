@@ -207,6 +207,27 @@ function App() {
     handleGameStart(quickSettings);
   }, [gameEngine, showGameSetup, handleGameStart]);
 
+  // End the human turn and, when it was auto-triggered, surface a recap of
+  // what the engine auto-resolved (e.g. "2 units skipped"). Shared by the
+  // confirmation-modal path and the immediate "skip confirmation" path so the
+  // recap is always shown.
+  const endTurnAndRecap = useCallback((automatic: boolean) => {
+    if (!gameEngine) {
+      console.warn('[App] Cannot process turn - gameEngine is null');
+      return;
+    }
+    // Read the auto-end summary *before* ending the turn — the turn-processing
+    // pipeline may trigger further checks that overwrite it.
+    if (automatic && typeof gameEngine.lastAutoEndSummary === 'string') {
+      const summary = gameEngine.lastAutoEndSummary;
+      if (summary) {
+        actions.addNotification({ type: 'info', message: `Auto-end: ${summary}` });
+      }
+    }
+    console.log('[App] Processing turn via gameEngine.processTurn()');
+    gameEngine.processTurn();
+  }, [actions, gameEngine]);
+
   // Handle end turn confirmation
   const handleEndTurnConfirm = useCallback(() => {
     console.log('[App] End turn confirmed');
@@ -215,21 +236,38 @@ function App() {
     setIsEndTurnAutomatic(false);
 
     // Always process the turn when confirmed
-    if (gameEngine) {
-      console.log('[App] Processing turn via gameEngine.processTurn()');
-      gameEngine.processTurn();
-      // Feedback & transparency: after an auto-ended turn, show a brief recap
-      // of what was automatically resolved (e.g. "2 units skipped").
-      if (wasAutomatic && typeof (gameEngine as any).lastAutoEndSummary === 'string') {
-        const summary = (gameEngine as any).lastAutoEndSummary as string;
-        if (summary) {
-          actions.addNotification({ type: 'info', message: `Auto-end: ${summary}` });
-        }
-      }
-    } else {
-      console.warn('[App] Cannot process turn - gameEngine is null');
+    endTurnAndRecap(wasAutomatic);
+  }, [endTurnAndRecap, isEndTurnAutomatic]);
+
+  // Shared end-turn decision. `automatic` is true when the engine routed an
+  // end-turn request to the App (via `showEndTurnConfirmation`) vs. the player
+  // pressing End Turn directly.
+  //
+  // `autoEndTurn` is the ONLY thing that causes a turn to end on its own — it
+  // gates whether an engine-triggered request auto-ends the turn. When it is
+  // OFF, an engine-triggered event is just an "all your units have moved"
+  // prompt: it never auto-ends the turn, even if the confirmation is set to
+  // skip (the player ends manually instead).
+  //
+  // `skipEndTurnConfirmation` only controls whether the confirmation modal is
+  // shown when a turn IS ending — it never triggers ending on its own.
+  const processEndTurn = useCallback((automatic: boolean) => {
+    setIsEndTurnAutomatic(automatic);
+    const currentSettings = useGameStore.getState().settings;
+    const skip = currentSettings.skipEndTurnConfirmation;
+
+    if (!skip) {
+      // Show the confirmation modal (manual end turn or auto-triggered prompt).
+      setShowEndTurnConfirm(true);
+    } else if (currentSettings.autoEndTurn || !automatic) {
+      // End immediately: a manual End-Turn press, or a genuine auto-end
+      // (autoEndTurn enabled + engine detected all units are done).
+      console.log('[App] Skipping end turn confirmation modal due to user preference');
+      endTurnAndRecap(automatic);
     }
-  }, [actions, gameEngine, isEndTurnAutomatic]);
+    // else: engine-triggered prompt with autoEndTurn OFF + skip ON → do nothing.
+    // The player ends the turn manually, so auto-end never fires unintentionally.
+  }, [endTurnAndRecap]);
 
   // Initialize game engine
   useEffect(() => {
@@ -239,22 +277,7 @@ function App() {
     // Listen for end turn confirmation requests (automatic from engine)
     const handleShowEndTurnConfirmation = () => {
       console.log('[App] Received showEndTurnConfirmation event - automatic trigger');
-      setIsEndTurnAutomatic(true);
-      
-      // Get fresh setting value from store to avoid stale closure
-      const currentSettings = useGameStore.getState().settings;
-      
-      // If skipEndTurnConfirmation is enabled, bypass modal and end turn immediately
-      if (currentSettings.skipEndTurnConfirmation) {
-        console.log('[App] Skipping end turn confirmation modal due to user preference');
-        // Directly process turn without showing modal
-        if (gameEngine) {
-          gameEngine.processTurn();
-        }
-      } else {
-        // Show confirmation modal
-        setShowEndTurnConfirm(true);
-      }
+      processEndTurn(true);
     };
 
     if (typeof window !== 'undefined') {
@@ -266,7 +289,7 @@ function App() {
         window.removeEventListener('showEndTurnConfirmation', handleShowEndTurnConfirmation);
       }
     };
-  }, [handleEndTurnConfirm]);
+  }, [handleEndTurnConfirm, processEndTurn]);
 
   // Handle menu actions
   const handleMenuClick = (menu: GameMenuName, event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
@@ -589,23 +612,8 @@ function App() {
       return;
     }
     console.log('[App] End turn requested manually - showing confirmation modal');
-    setIsEndTurnAutomatic(false);
-    
-    // Get fresh setting value from store to avoid stale closure
-    const currentSettings = useGameStore.getState().settings;
-    
-    // If skipEndTurnConfirmation is enabled, bypass modal and end turn immediately
-    if (currentSettings.skipEndTurnConfirmation) {
-      console.log('[App] Skipping end turn confirmation modal due to user preference');
-      // Directly process turn without showing modal
-      if (gameEngine) {
-        gameEngine.processTurn();
-      }
-    } else {
-      // Show confirmation modal
-      setShowEndTurnConfirm(true);
-    }
-  }, [gameEngine]);
+    processEndTurn(false);
+  }, [processEndTurn]);
 
   // Handle end turn cancellation
   const handleEndTurnCancel = () => {

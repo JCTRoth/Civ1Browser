@@ -28,12 +28,22 @@ const EndTurnConfirmModal: React.FC<EndTurnConfirmModalProps> = ({
 
   const handleConfirm = () => {
     console.log('EndTurnConfirmModal: Confirmed end turn');
+    // If "Don't show again" was checked, the player wants this choice to apply
+    // automatically going forward, so enable auto-end.
+    if (skipNextTime) {
+      actions.updateSettings({ autoEndTurn: true });
+    }
     // Setting is already updated via onChange - just confirm
     onConfirm();
   };
 
   const handleCancel = () => {
     console.log('EndTurnConfirmModal: Cancelled end turn');
+    // If "Don't show again" was checked, the player opted out of auto-ending,
+    // so disable auto-end.
+    if (skipNextTime) {
+      actions.updateSettings({ autoEndTurn: false });
+    }
     onCancel();
   };
 
