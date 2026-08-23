@@ -31,7 +31,7 @@ export const TERRAIN_TEXTURE_FILES: Record<string, string> = {
 };
 
 export const FEATURE_TEXTURE_FILES: Partial<Record<string, string>> = {
-  FOREST:    '/assets/tiles/terrain_forest_feature.png',
+  FOREST:    '/assets/tiles/terrain_forest_feature_1.png',
   JUNGLE:    '/assets/tiles/terrain_jungle_feature.png',
   HILLS:     '/assets/tiles/terrain_hills_feature.png',
   MOUNTAINS: '/assets/tiles/terrain_mountains_feature.png',
@@ -48,7 +48,7 @@ export const TERRAIN_PRIORITY: Record<string, number> = {
   HILLS:       6,
   DESERT:      5,
   SWAMP:       5,
-  FOREST:      4,
+  FOREST:      1,
   JUNGLE:      4,
   PLAINS:      2,
   GRASSLAND:   1,
@@ -76,7 +76,7 @@ export const TERRAIN_BLEND_COLOR: Record<string, string> = {
  */
 export const TRANSITION_DISTANCE = 0.15;
 
-/** Max number of additional numbered variants to probe per type (_2 … _N+1). */
+/** Max number of numbered variants to probe per type beyond the primary image. */
 const MAX_VARIANT_PROBES = 4;
 
 export class TerrainTextureManager {
@@ -95,7 +95,8 @@ export class TerrainTextureManager {
   constructor(onLoad?: () => void) {
     const baseTypes    = Object.keys(TERRAIN_TEXTURE_FILES);
     const featureTypes = Object.keys(FEATURE_TEXTURE_FILES);
-    this.totalCount    = baseTypes.length + featureTypes.length;
+    // Count primary + all variant probes so onLoad fires only after everything settles.
+    this.totalCount = (baseTypes.length + featureTypes.length) * (1 + MAX_VARIANT_PROBES);
 
     let resolve!: () => void;
     this.ready = new Promise(r => { resolve = r; });
@@ -106,11 +107,14 @@ export class TerrainTextureManager {
     };
 
     const probeVariants = (baseUrl: string, arr: HTMLImageElement[]) => {
-      const stem = baseUrl.replace(/\.png$/, '');
-      for (let v = 2; v <= 1 + MAX_VARIANT_PROBES; v++) {
+      // Strip any trailing _N so "feature_1.png" and "feature.png" probe the same variants.
+      const stem = baseUrl.replace(/(_\d+)?\.png$/, '');
+      const explicitN = baseUrl.match(/_(\d+)\.png$/)?.[1];
+      const start = explicitN ? parseInt(explicitN, 10) + 1 : 1;
+      for (let v = start; v < start + MAX_VARIANT_PROBES; v++) {
         const img = new Image();
-        img.onload = () => arr.push(img);
-        // onerror: variant absent — silently skip
+        img.onload = () => { arr.push(img); done(); };
+        img.onerror = done; // missing variant — still counts toward total
         img.src = `${stem}_${v}.png`;
       }
     };
@@ -119,24 +123,16 @@ export class TerrainTextureManager {
       const arr: HTMLImageElement[] = [];
       this.baseCache.set(type, arr);
       const img = new Image();
-      img.onload = () => {
-        arr.push(img);
-        probeVariants(TERRAIN_TEXTURE_FILES[type]!, arr);
-        done();
-      };
-      img.onerror = done;
+      img.onload = () => { arr.push(img); probeVariants(TERRAIN_TEXTURE_FILES[type]!, arr); done(); };
+      img.onerror = () => { probeVariants(TERRAIN_TEXTURE_FILES[type]!, arr); done(); };
       img.src = TERRAIN_TEXTURE_FILES[type]!;
     }
     for (const type of featureTypes) {
       const arr: HTMLImageElement[] = [];
       this.featureCache.set(type, arr);
       const img = new Image();
-      img.onload = () => {
-        arr.push(img);
-        probeVariants(FEATURE_TEXTURE_FILES[type]!, arr);
-        done();
-      };
-      img.onerror = done;
+      img.onload = () => { arr.push(img); probeVariants(FEATURE_TEXTURE_FILES[type]!, arr); done(); };
+      img.onerror = () => { probeVariants(FEATURE_TEXTURE_FILES[type]!, arr); done(); };
       img.src = FEATURE_TEXTURE_FILES[type]!;
     }
   }
@@ -419,7 +415,7 @@ export class TerrainTextureManager {
     if (!img) return;
 
     const overhang  = tileSize * 0.5;
-    const sideBleed = tileSize * 0.15;   // always bleed 25 % into each side neighbor
+    const sideBleed = tileSize * 0.05;
     const drawW     = tileSize + sideBleed * 2;
     const drawH     = tileSize * 1.5;
     const drawX     = tileX - sideBleed;
