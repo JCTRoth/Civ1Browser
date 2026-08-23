@@ -17,6 +17,7 @@ export interface TextureGroup {
   name: string;
   variants: TextureVariant[];
   inGame: GameTile | null;
+  inGameTiles: GameTile[];
 }
 
 export interface FalModel {

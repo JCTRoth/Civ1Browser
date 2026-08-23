@@ -397,13 +397,29 @@ const server = createServer(async (req, res) => {
     const groups = [];
     for (const [name, variants] of groupMap) {
       variants.sort((a, b) => a.n - b.n);
-      let inGame = null;
-      const gameFile = join(OUTPUT_DIR, name + '.png');
-      if (existsSync(gameFile)) {
-        const st = statSync(gameFile);
-        inGame = { filename: name + '.png', path: `/api/game-tiles/${encodeURIComponent(name + '.png')}`, size: st.size, mtime: st.mtimeMs };
+      
+      // Check for in-game tiles (both name.png and name_N.png patterns).
+      // A tile belongs to this group only if its parsed group matches —
+      // never via naive prefix matching, so terrain_forest_feature*.png
+      // stays out of the terrain_forest group.
+      const inGameTiles = [];
+      if (existsSync(OUTPUT_DIR)) {
+        const gameFiles = readdirSync(OUTPUT_DIR).filter(f => {
+          if (!/\.png$/i.test(f)) return false;
+          const parsed = parseTextureName(f);
+          if (parsed) return parsed.group === name;
+          // No _N suffix → belongs to the group with its own base name
+          return f.replace(/\.png$/i, '') === name;
+        });
+        for (const f of gameFiles) {
+          const st = statSync(join(OUTPUT_DIR, f));
+          inGameTiles.push({ filename: f, path: `/api/game-tiles/${encodeURIComponent(f)}`, size: st.size, mtime: st.mtimeMs });
+        }
       }
-      groups.push({ name, variants, inGame });
+      
+      // For backward compatibility, keep inGame as single item or first found
+      const inGame = inGameTiles.length > 0 ? inGameTiles[0] : null;
+      groups.push({ name, variants, inGame, inGameTiles });
     }
     groups.sort((a, b) => a.name.localeCompare(b.name));
     return json(res, { groups });
@@ -426,31 +442,87 @@ const server = createServer(async (req, res) => {
     catch { return json(res, { ok: false, error: 'Delete failed' }, 500); }
   }
 
-  // ─── API: use texture variant in game ────────────────────────────────
+  // ─── API: use texture variant(s) in game ─────────────────────────────
   if (pathname === '/api/use-in-game' && req.method === 'POST') {
     const body = await readBody(req);
     let params;
     try { params = JSON.parse(body); } catch { return json(res, { error: 'Invalid JSON' }, 400); }
 
-    const { filename } = params;
-    if (!filename) return json(res, { error: 'Missing filename' }, 400);
-
-    const parsed = parseTextureName(filename.replace(/\.png$/i, ''));
-    if (!parsed) return json(res, { error: 'Filename must end in _<n>.png' }, 400);
-
-    const safeFilename = filename.replace(/[^a-z0-9_.-]/gi, '_');
-    const srcPath = join(TEXTURES_DIR, safeFilename);
-    if (!srcPath.startsWith(TEXTURES_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
-    if (!existsSync(srcPath)) return json(res, { error: `Not found: ${safeFilename}` }, 404);
-
-    const targetName = parsed.group + '.png';
-    const destPath = join(OUTPUT_DIR, targetName);
-    if (!destPath.startsWith(OUTPUT_DIR)) { res.writeHead(403); return res.end('Forbidden'); }
+    // Support both single filename and array of filenames
+    const filenames = params.filenames || (params.filename ? [params.filename] : []);
+    if (filenames.length === 0) return json(res, { error: 'Missing filename(s)' }, 400);
 
     if (!existsSync(OUTPUT_DIR)) mkdirSync(OUTPUT_DIR, { recursive: true });
-    copyFileSync(srcPath, destPath);
-    console.log(`[use-in-game] ${safeFilename} → game tiles/${targetName}`);
-    return json(res, { ok: true, targetName });
+
+    const results = [];
+    for (const filename of filenames) {
+      const parsed = parseTextureName(filename.replace(/\.png$/i, ''));
+      if (!parsed) {
+        results.push({ filename, ok: false, error: 'Filename must end in _<n>.png' });
+        continue;
+      }
+
+      const safeFilename = filename.replace(/[^a-z0-9_.-]/gi, '_');
+      const srcPath = join(TEXTURES_DIR, safeFilename);
+      if (!srcPath.startsWith(TEXTURES_DIR)) {
+        results.push({ filename, ok: false, error: 'Forbidden' });
+        continue;
+      }
+      if (!existsSync(srcPath)) {
+        results.push({ filename, ok: false, error: `Not found: ${safeFilename}` });
+        continue;
+      }
+
+      // Keep the _N suffix in the target name
+      const targetName = safeFilename;
+      const destPath = join(OUTPUT_DIR, targetName);
+      if (!destPath.startsWith(OUTPUT_DIR)) {
+        results.push({ filename, ok: false, error: 'Forbidden' });
+        continue;
+      }
+
+      copyFileSync(srcPath, destPath);
+      console.log(`[use-in-game] ${safeFilename} → game tiles/${targetName}`);
+      results.push({ filename, ok: true, targetName });
+    }
+
+    const allOk = results.every(r => r.ok);
+    return json(res, { ok: allOk, results });
+  }
+
+  // ─── API: remove texture variant(s) from game ────────────────────────
+  if (pathname === '/api/remove-from-game' && req.method === 'POST') {
+    const body = await readBody(req);
+    let params;
+    try { params = JSON.parse(body); } catch { return json(res, { error: 'Invalid JSON' }, 400); }
+
+    // Support both single filename and array of filenames
+    const filenames = params.filenames || (params.filename ? [params.filename] : []);
+    if (filenames.length === 0) return json(res, { error: 'Missing filename(s)' }, 400);
+
+    const results = [];
+    for (const filename of filenames) {
+      const safeFilename = filename.replace(/[^a-z0-9_.-]/gi, '_');
+      const targetPath = join(OUTPUT_DIR, safeFilename);
+      if (!targetPath.startsWith(OUTPUT_DIR)) {
+        results.push({ filename, ok: false, error: 'Forbidden' });
+        continue;
+      }
+      if (!existsSync(targetPath)) {
+        results.push({ filename, ok: false, error: `Not in game: ${safeFilename}` });
+        continue;
+      }
+      try {
+        unlinkSync(targetPath);
+        console.log(`[remove-from-game] ${safeFilename} ← game tiles/`);
+        results.push({ filename, ok: true, targetName: safeFilename });
+      } catch {
+        results.push({ filename, ok: false, error: 'Remove failed' });
+      }
+    }
+
+    const allOk = results.every(r => r.ok);
+    return json(res, { ok: allOk, results });
   }
 
   // ─── API: serve current in-game tile ─────────────────────────────────

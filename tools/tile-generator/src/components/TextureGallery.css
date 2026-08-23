@@ -67,6 +67,18 @@
   font-size: 40px;
 }
 
+/* Section titles */
+.gallery-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 8px 0 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
 /* Group row */
 .group-row {
   background: var(--panel);
@@ -109,6 +121,58 @@
   border-radius: 3px;
 }
 
+.badge-selected {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: rgba(210, 153, 34, 0.18);
+  color: var(--yellow);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.btn-use-selected {
+  padding: 6px 12px;
+  background: rgba(88, 166, 255, 0.12);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-use-selected:hover {
+  background: rgba(88, 166, 255, 0.22);
+}
+
+.btn-remove-all {
+  padding: 6px 12px;
+  background: rgba(224, 82, 82, 0.12);
+  border: 1px solid var(--red);
+  border-radius: 5px;
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-remove-all:hover:not(:disabled) {
+  background: rgba(224, 82, 82, 0.22);
+}
+
+.btn-remove-all:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .variants-strip {
   display: flex;
   gap: 10px;
@@ -133,6 +197,26 @@
 
 .variant-card:hover {
   border-color: var(--accent);
+}
+
+.variant-selected {
+  border-color: var(--yellow);
+  box-shadow: 0 0 0 1px var(--yellow);
+}
+
+.card-select {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.card-select input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--yellow);
 }
 
 .variant-busy {
@@ -252,6 +336,27 @@
 }
 
 .btn-use-game:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-remove-game {
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(224, 82, 82, 0.12);
+  border: 1px solid var(--red);
+  border-radius: 5px;
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.btn-remove-game:hover:not(:disabled) {
+  background: rgba(224, 82, 82, 0.22);
+}
+
+.btn-remove-game:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

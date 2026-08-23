@@ -23,11 +23,22 @@ export async function generate(params: {
   return res.json();
 }
 
-export async function useInGame(filename: string): Promise<{ ok: boolean; targetName?: string; error?: string }> {
+export async function useInGame(filenames: string | string[]): Promise<{ ok: boolean; results?: Array<{ filename: string; ok: boolean; targetName?: string; error?: string }>; error?: string }> {
+  const filenameList = Array.isArray(filenames) ? filenames : [filenames];
   const res = await fetch(`${BASE}/use-in-game`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename }),
+    body: JSON.stringify({ filenames: filenameList }),
+  });
+  return res.json();
+}
+
+export async function removeFromGame(filenames: string | string[]): Promise<{ ok: boolean; results?: Array<{ filename: string; ok: boolean; targetName?: string; error?: string }>; error?: string }> {
+  const filenameList = Array.isArray(filenames) ? filenames : [filenames];
+  const res = await fetch(`${BASE}/remove-from-game`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filenames: filenameList }),
   });
   return res.json();
 }

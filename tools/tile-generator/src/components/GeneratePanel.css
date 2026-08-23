@@ -157,6 +157,22 @@
   font-size: 14px;
 }
 
+/* Variation row */
+.variation-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.variation-row .field-input {
+  width: 70px;
+}
+
+.variation-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Checkbox row */
 .checkbox-row {
   display: flex;

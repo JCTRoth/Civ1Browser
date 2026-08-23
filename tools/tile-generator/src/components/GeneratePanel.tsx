@@ -26,6 +26,7 @@ export default function GeneratePanel({ onGenerated }: Props) {
   const [height, setHeight] = useState(256);
   const [autoRemoveBg, setAutoRemoveBg] = useState(false);
   const [bgModel, setBgModel] = useState(BG_MODELS[0].id);
+  const [variationCount, setVariationCount] = useState(1);
   const [generating, setGenerating] = useState(false);
   const [status, setStatus] = useState<{ text: string; type: 'idle' | 'ok' | 'error' }>({ text: '', type: 'idle' });
   const [estimate, setEstimate] = useState<string>('—');
@@ -84,23 +85,31 @@ export default function GeneratePanel({ onGenerated }: Props) {
       return;
     }
     setGenerating(true);
-    setStatus({ text: 'Generating…', type: 'idle' });
+    const count = Math.max(1, Math.min(10, variationCount));
+    setStatus({ text: `Generating ${count} variation${count > 1 ? 's' : ''}…`, type: 'idle' });
     try {
-      const result = await api.generate({ model, prompt, tileName: tileName.trim(), width, height });
-      if (!result.ok) {
-        setStatus({ text: result.error ?? 'Generation failed', type: 'error' });
-        return;
-      }
-      if (autoRemoveBg && result.filename) {
-        setStatus({ text: 'Removing background…', type: 'idle' });
-        const bgResult = await api.removeBg(result.filename, bgModel);
-        if (!bgResult.ok) {
-          setStatus({ text: `Generated but bg-remove failed: ${bgResult.error}`, type: 'error' });
-          onGenerated();
+      const results = [];
+      for (let i = 0; i < count; i++) {
+        if (count > 1) {
+          setStatus({ text: `Generating variation ${i + 1}/${count}…`, type: 'idle' });
+        }
+        const result = await api.generate({ model, prompt, tileName: tileName.trim(), width, height });
+        if (!result.ok) {
+          setStatus({ text: result.error ?? 'Generation failed', type: 'error' });
           return;
         }
+        if (autoRemoveBg && result.filename) {
+          setStatus({ text: `Removing background for variation ${i + 1}…`, type: 'idle' });
+          const bgResult = await api.removeBg(result.filename, bgModel);
+          if (!bgResult.ok) {
+            setStatus({ text: `Generated but bg-remove failed: ${bgResult.error}`, type: 'error' });
+            onGenerated();
+            return;
+          }
+        }
+        results.push(result.filename);
       }
-      setStatus({ text: `Saved as ${result.filename}`, type: 'ok' });
+      setStatus({ text: `Saved ${results.length} variation${results.length > 1 ? 's' : ''}`, type: 'ok' });
       onGenerated();
     } catch (e: unknown) {
       setStatus({ text: String(e), type: 'error' });
@@ -220,6 +229,22 @@ export default function GeneratePanel({ onGenerated }: Props) {
           placeholder="e.g. terrain_grassland"
         />
         <p className="field-hint">Variants are stored as <code>{tileName || 'name'}_1.png</code>, <code>_2.png</code>, …</p>
+      </section>
+
+      {/* Variation count */}
+      <section className="gen-section">
+        <h3>Variations</h3>
+        <div className="variation-row">
+          <input
+            className="field-input"
+            type="number"
+            value={variationCount}
+            min={1}
+            max={10}
+            onChange={e => setVariationCount(Number(e.target.value))}
+          />
+          <span className="variation-hint">Generate multiple variations at once (1-10)</span>
+        </div>
       </section>
 
       {/* Remove BG */}
