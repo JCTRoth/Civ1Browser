@@ -1,9 +1,10 @@
 TOODO:
 
 * Implement Human and Human (on one computer) against AI vs AI game modes.
-
-
+* Implement End of game statistics that show the player how they did, enconmics, military, and science wise.
+* Implement Civ1 ingame statistics screen that shows the player greatest cities in the worl, and there rank in the world wide demographics.
 
 Far further development of the game engine is planned, including:
 
 * Networked multiplayer is not yet implemented, but the game engine is designed to support it in the future.
+* Replay to play replays, I think it would make sense to use the save game, turn log, and map download do the replay stuff.
