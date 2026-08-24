@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { BarbarianManager } from '@/game/engine/BarbarianManager';
 
 /**
- * Barbarian AI regression tests. Barbarians are the phantom civ (−1): they
- * raid cities, and captured cities become troop pumps (scout first, then
- * raiders). No GameEngine is needed — the manager only talks to the public
+ * Barbarian AI regression tests. Barbarians start as the phantom civ (−1):
+ * they raid cities, and the moment they hold a city they become a real
+ * faction whose cities run AutoProduction restricted to MILITARY units only
+ * (raiders). No GameEngine is needed — the manager only talks to the public
  * engine surface (units/cities, squareGrid, moveUnit, combatUnit,
- * spawnBarbarianUnit).
+ * spawnBarbarianUnit, autoProduction, ensureBarbarianCivilization).
  */
 const createMockEngine = () => {
   const units: any[] = [];
@@ -44,6 +45,22 @@ const createMockEngine = () => {
     combatUnit: (a: any, d: any) => { combatCalls.push({ a, d }); a.movesRemaining = 0; },
     spawnBarbarianUnit: (type: string, col: number, row: number) => {
       spawned.push(`${type}@${col},${row}`);
+    },
+    // Barbarians become a faction the moment they hold a city.
+    ensureBarbarianCivilization: () => ({ id: -1 }),
+    // Simplified stand-in for AutoProduction: barbarian cities produce a
+    // military raider (chariot) — the real engine routes through
+    // AutoProduction.buildBarbarianMilitaryProduction.
+    autoProduction: {
+      processAutoProductionForCivilization: (civId: number) => {
+        cities
+          .filter((c: any) => c.civilizationId === civId && c.autoProduction)
+          .forEach((c: any) => {
+            if (!c.currentProduction) {
+              c.currentProduction = { type: 'unit', itemType: 'chariot', name: 'Chariot', cost: 40 };
+            }
+          });
+      },
     },
   };
 
@@ -97,45 +114,49 @@ describe('Barbarian AI — aggression', () => {
 });
 
 describe('Barbarian AI — captured cities', () => {
-  it('captured cities sell everything, produce a SCOUT first, then raiders', () => {
+  it('captured cities sell everything and pump MILITARY units only (raiders)', () => {
     const { engine, cities, spawned } = createMockEngine();
     cities.push({
       id: 'cap', civilizationId: -1, col: 5, row: 5, population: 4, name: 'Captured',
       buildings: ['granary', 'marketplace'], yields: { production: 40 },
       currentProduction: null, productionStored: 0,
+      autoProduction: true,
     });
 
     const manager = new BarbarianManager(engine);
 
-    // Round 1: buildings sold, scout (cost 15) completed at 40 shields/turn.
+    // Round 1: buildings sold; auto-production picks a chariot raider
+    // (military only) which completes at 40 shields/turn.
     manager.processBarbarians();
     expect(cities[0].buildings).toEqual([]);
-    expect(spawned[0]).toBe('scout@5,5');
-    expect(cities[0].barbarianScoutBuilt).toBe(true);
+    expect(spawned[0]).toBe('chariot@5,5');
+    expect(cities[0].barbarianScoutBuilt).toBeUndefined(); // no scout path
 
-    // Round 2: now it pumps out a raider (chariot).
+    // Round 2: keeps pumping raiders.
     manager.processBarbarians();
     expect(spawned[1]).toBe('chariot@5,5');
   });
 
-  it('a slow captured city keeps a scout queued until it is produced', () => {
+  it('a slow captured city keeps a raider queued until it is produced', () => {
     const { engine, cities, spawned } = createMockEngine();
     cities.push({
       id: 'cap', civilizationId: -1, col: 5, row: 5, population: 4, name: 'Captured',
       buildings: [], yields: { production: 5 },
       currentProduction: null, productionStored: 0,
+      autoProduction: true,
     });
 
     const manager = new BarbarianManager(engine);
 
-    manager.processBarbarians(); // starts scout, 5/15 shields
+    manager.processBarbarians(); // starts chariot, 5/40 shields
     expect(spawned).toEqual([]);
-    expect(cities[0].currentProduction.itemType).toBe('scout');
+    expect(cities[0].currentProduction.itemType).toBe('chariot');
     expect(cities[0].productionStored).toBe(5);
 
-    manager.processBarbarians(); // 10/15
-    manager.processBarbarians(); // 15/15 → scout produced
-    expect(spawned).toEqual(['scout@5,5']);
-    expect(cities[0].barbarianScoutBuilt).toBe(true);
+    manager.processBarbarians(); // 10/40
+    manager.processBarbarians(); // 15/40
+    expect(spawned).toEqual([]);
+    expect(cities[0].currentProduction.itemType).toBe('chariot');
+    expect(cities[0].productionStored).toBe(15);
   });
 });

@@ -23,6 +23,7 @@ export enum TurnPhase {
 import { AIResearch } from './AIResearch';
 import { createDefaultAIState } from './AITypes';
 import { serializeCities } from '../../utils/CitySnapshots';
+import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import type { City, Civilization, Unit } from '../../../types/game';
 import GameEngine from './GameEngine';
 
@@ -489,8 +490,11 @@ export class TurnManager {
     
     const previousPlayer = this.currentPlayer;
     
-    // Get only active (alive) civilizations
-    const activeCivs = this.gameEngine.civilizations?.filter((civ) => civ.isAlive !== false) || [];
+    // Get only active (alive) civilizations. The barbarian faction (if it has
+    // been promoted to a real faction by capturing a city) is EXCLUDED from the
+    // normal turn rotation — its units and cities are driven by the dedicated
+    // BarbarianManager once per round instead.
+    const activeCivs = this.gameEngine.civilizations?.filter((civ) => civ.isAlive !== false && civ.id !== BARBARIAN_CIV_ID) || [];
     const numActiveCivs = activeCivs.length;
     
     if (numActiveCivs === 0) {

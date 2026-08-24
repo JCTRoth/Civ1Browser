@@ -6,6 +6,7 @@
 
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES, WONDER_PROPERTIES } from '@/data/BuildingConstants';
+import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import {
   assessCityThreat,
   calculateDangerThreshold,
@@ -223,6 +224,13 @@ export class AutoProduction {
     // 5. Standard building or settler
     // 6. Wonder (if safe)
     // 7. Default military unit
+
+    // The barbarian faction produces MILITARY UNITS ONLY — no buildings,
+    // settlers, wonders, scouts, or diplomats. A threatened city builds a
+    // defender; otherwise it builds a raider.
+    if (city.civilizationId === BARBARIAN_CIV_ID) {
+      return this.buildBarbarianMilitaryProduction(threatAssessment);
+    }
 
     const civ = this.gameEngine.civilizations?.[city.civilizationId];
     const strategy: StrategyProfile = this.getStrategyForCiv(city.civilizationId);
@@ -814,6 +822,31 @@ export class AutoProduction {
       }
     }
     return 'warrior';
+  }
+
+  /**
+   * Barbarian faction production — military units ONLY.
+   * A threatened city builds a defender; otherwise it builds a raider.
+   */
+  private buildBarbarianMilitaryProduction(threatAssessment?: CityThreatAssessment | null): ProductionItem {
+    if (threatAssessment?.needsDefense) {
+      return this.buildBarbarianDefenderProduction();
+    }
+    return this.buildBarbarianRaiderProduction();
+  }
+
+  /** The barbarian raider: a fast, strong attacker (chariot if present). */
+  private buildBarbarianRaiderProduction(): ProductionItem {
+    const type = UNIT_PROPS.chariot ? 'chariot' : (UNIT_PROPS.legion ? 'legion' : 'warrior');
+    const props = UNIT_PROPS[type];
+    return { type: 'unit', itemType: type, name: props?.name ?? type, cost: props?.cost ?? 40 };
+  }
+
+  /** Barbarian defender: an era-appropriate basic garrison unit. */
+  private buildBarbarianDefenderProduction(): ProductionItem {
+    const type = UNIT_PROPS.archer ? 'archer' : 'warrior';
+    const props = UNIT_PROPS[type];
+    return { type: 'unit', itemType: type, name: props?.name ?? type, cost: props?.cost ?? 10 };
   }
 
   // findCivForYear removed (unused)

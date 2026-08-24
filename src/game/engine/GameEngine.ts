@@ -178,11 +178,50 @@ export default class GameEngine {
   }
 
   /**
-   * Spawn a barbarian unit (phantom civ −1) at a tile. Public so the
+   * Spawn a barbarian unit (civ id BARBARIAN_CIV_ID) at a tile. Public so the
    * BarbarianManager can seed captured cities with new raiders.
    */
   public spawnBarbarianUnit(type: string, col: number, row: number): void {
     this.createUnit(BARBARIAN_CIV_ID, type, col, row);
+  }
+
+  /**
+   * Ensure the barbarian faction exists in civilizations[] (id BARBARIAN_CIV_ID).
+   * Called the moment barbarians hold a city so they count as a real faction:
+   * they appear in the civ list and — crucially — the game is NOT won until
+   * every barbarian unit and city is destroyed. Idempotent.
+   */
+  public ensureBarbarianCivilization(): Civilization {
+    const existing = this.civilizations.find((c) => c.id === BARBARIAN_CIV_ID);
+    if (existing) return existing;
+
+    const barbarianCiv: Civilization = {
+      id: BARBARIAN_CIV_ID,
+      name: 'Barbarians',
+      leader: 'Barbarian Chief',
+      color: '#8a2b2b',
+      isAlive: true,
+      isHuman: false,
+      isAI: true,
+      resources: { food: 0, production: 0, trade: 0, science: 0, gold: 0 },
+      technologies: [],
+      currentResearch: null,
+      researchProgress: 0,
+      scienceRate: 0,
+      taxRate: 100,
+      luxuryRate: 0,
+      government: 'despotism',
+      productionProfile: 'military_expansion',
+      personality: { aggression: 1, expansion: 0.5, science: 0, diplomacy: 0 },
+      score: 0,
+      cityNames: ['Barbarian Camp', 'Barbarian Horde', 'Barbarian Outpost'],
+      nextCityNameIndex: 0,
+    };
+    this.civilizations.push(barbarianCiv);
+    this.initializePlayerStorage(BARBARIAN_CIV_ID);
+    this.storeActions?.updateCivilizations?.([...this.civilizations]);
+    console.log('[BARB] Barbarians are now a faction in the game (they hold a city).');
+    return barbarianCiv;
   }
 
   /**
@@ -511,7 +550,11 @@ export default class GameEngine {
     if (!storage || !enemy) return;
 
     const enemyCivId = this.getEnemyCivIdAt(enemy.col, enemy.row, civilizationId);
-    if (enemyCivId < 0) return;
+    // null = nothing hostile at that square (skip). The barbarian faction has
+    // civilization id -1, which IS a valid enemy — so this guard must NOT
+    // reject negative ids, or barbarian cities would never be recorded and the
+    // AI could never plan an assault against them.
+    if (enemyCivId === null) return;
 
     const round = this.roundManager?.getRoundNumber?.() ?? 0;
     const location: EnemyLocation = {
@@ -546,15 +589,17 @@ export default class GameEngine {
   }
 
   /**
-   * Resolve the civilization id of whatever occupies a square (or -1).
-   * Only returns the id if it differs from the searcher's own civilization.
+   * Resolve the civilization id of whatever hostile occupies a square, or null
+   * if there is nothing belonging to another civ. Note the barbarian faction
+   * uses id -1 — that is a legitimate enemy id and must be returned as-is
+   * (only null signals "no enemy here").
    */
-  private getEnemyCivIdAt(col: number, row: number, ownCivId: number): number {
+  private getEnemyCivIdAt(col: number, row: number, ownCivId: number): number | null {
     const unit = this.getUnitAt(col, row);
     if (unit && unit.civilizationId !== ownCivId) return unit.civilizationId;
     const city = this.getCityAt(col, row);
     if (city && city.civilizationId !== ownCivId) return city.civilizationId;
-    return -1;
+    return null;
   }
 
   /**
@@ -1858,6 +1903,12 @@ export default class GameEngine {
             targetCity.population -= 1;
             targetCity.civilizationId = unit.civilizationId;
             targetCity.buildings = targetCity.buildings ?? [];
+            if (unit.civilizationId === BARBARIAN_CIV_ID) {
+              // A barbarian-held city is auto-managed (military units only) and
+              // the barbarians become a faction the moment they hold it.
+              targetCity.autoProduction = true;
+              this.ensureBarbarianCivilization();
+            }
             this.destroyBuildingsOnCapture(targetCity);
             this.plunderCityGold(oldCiv, unit.civilizationId);
             this.destroyGarrisonOnCapture(targetCity, oldCiv);
@@ -2595,10 +2646,13 @@ export default class GameEngine {
       city.civilizationId = attacker.civilizationId;
       city.buildings = city.buildings ?? [];
 
-      // A barbarian-captured city starts its troop pump from scratch: the
-      // first unit it builds is a scout (to find the next target).
+      // A barbarian-captured city is auto-managed and produces military units
+      // only (see AutoProduction). Barbarians become a real faction in the
+      // game the moment they hold a city.
       if (attacker.civilizationId === BARBARIAN_CIV_ID) {
         (city as any).barbarianScoutBuilt = false;
+        city.autoProduction = true;
+        this.ensureBarbarianCivilization();
       }
 
       // --- Civ1 capture aftermath ---

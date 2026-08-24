@@ -1,4 +1,4 @@
-import type { Unit, City, ProductionItem } from '../../../types/game';
+import type { Unit, City } from '../../../types/game';
 import GameEngine from './GameEngine';
 import { UNIT_PROPS } from '@/utils/Constants';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
@@ -15,8 +15,9 @@ import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
  *     defense to the horde's total strength.
  *  3. If horde strength ≥ 1.5× city defense → full assault (all converge).
  *  4. Otherwise → scout outward to find cities, avoid strong ones.
- *  5. Captured cities become troop pumps: sell buildings, produce scouts
- *     first, then raiders.
+ *  5. The moment barbarians hold a city they become a real faction (see
+ *     GameEngine.ensureBarbarianCivilization) and the city runs AutoProduction
+ *     restricted to MILITARY UNITS ONLY (see AutoProduction).
  */
 export class BarbarianManager {
   constructor(private readonly gameEngine: GameEngine) {}
@@ -195,13 +196,28 @@ export class BarbarianManager {
   }
 
   /**
-   * Captured cities become barbarian troop pumps:
+   * Barbarian-held cities run AutoProduction restricted to military units
+   * (AutoProduction.buildBarbarianMilitaryProduction) and are advanced here
+   * once per round, because the barbarian faction does not take a normal turn.
    *  - "sell everything": no buildings survive barbarian occupation.
-   *  - the FIRST unit produced after a capture is a SCOUT (finds the next
-   *    city), then the city produces raiders every round.
+   *  - shields accumulate and the finished military unit spawns.
    */
   private manageCities(cities: City[]): void {
     const engine = this.gameEngine;
+
+    // The moment barbarians hold a city they count as a faction in the game.
+    if (cities.length > 0) {
+      engine.ensureBarbarianCivilization?.();
+    }
+
+    // AutoProduction picks what each city builds (military units only). It
+    // only touches cities with autoProduction enabled.
+    for (const city of cities) {
+      city.autoProduction = true;
+    }
+    engine.autoProduction?.processAutoProductionForCivilization?.(BARBARIAN_CIV_ID);
+
+    // Apply shields and spawn the finished unit (once per round).
     for (const city of cities) {
       // Sell everything — raiders, not improvements.
       if (Array.isArray(city.buildings) && city.buildings.length > 0) {
@@ -209,11 +225,8 @@ export class BarbarianManager {
         city.buildings = [];
       }
 
-      // Pick what to produce: scout first, then a raider.
       if (!city.currentProduction) {
-        city.currentProduction = city.barbarianScoutBuilt === true
-          ? this.raiderProduction()
-          : this.scoutProduction();
+        continue; // auto-production found nothing to build
       }
 
       // Apply the city's shields.
@@ -227,23 +240,8 @@ export class BarbarianManager {
         city.productionProgress = 0;
         console.log(`[BARB] ${city.name} produced ${item.itemType}`);
         engine.spawnBarbarianUnit?.(item.itemType, city.col, city.row);
-        if (item.itemType === 'scout') {
-          city.barbarianScoutBuilt = true;
-        }
-        city.currentProduction = null; // re-picked next round
+        city.currentProduction = null; // re-picked next round by auto-production
       }
     }
-  }
-
-  private scoutProduction(): ProductionItem {
-    const props = UNIT_PROPS.scout ?? { cost: 15 };
-    return { type: 'unit', itemType: 'scout', name: 'Scout', cost: props.cost ?? 15 };
-  }
-
-  /** The barbarian raider: a fast, strong attacker (chariot if present). */
-  private raiderProduction(): ProductionItem {
-    const type = UNIT_PROPS.chariot ? 'chariot' : 'legion';
-    const props = UNIT_PROPS[type] ?? { name: type, cost: 40 };
-    return { type: 'unit', itemType: type, name: props.name ?? type, cost: props.cost ?? 40 };
   }
 }

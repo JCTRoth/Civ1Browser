@@ -5,7 +5,9 @@ import { GameResult, type VictoryReason } from '../../../types/game';
 /**
  * Centralized victory and defeat detection that runs at the end of each turn.
  * The TurnManager invokes {@link evaluateEndOfTurn} to determine whether the
- * game has concluded through domination or scientific progress.
+ * game has concluded through elimination or scientific progress. The game is
+ * won only when every enemy faction's units (and cities) are destroyed — the
+ * "own every city" domination shortcut is intentionally not a win condition.
  */
 export class VictoryManager {
   private readonly gameEngine: GameEngine;
@@ -68,16 +70,9 @@ export class VictoryManager {
     }
 
     const survivingCivs = civilizations.filter((civ) => aliveStatus.get(civ.id));
-    // Domination: with at least two alive civilizations, owning every city on
-    // the map is decisive. This ends AI-vs-AI games that would otherwise
-    // stall forever because stray units keep a civ "operational".
-    if (survivingCivs.length >= 2) {
-      const dominationWinner = this.detectDominationWinner(survivingCivs);
-      if (dominationWinner) {
-        return this.triggerVictory(dominationWinner, 'domination');
-      }
-    }
-
+    // The game is ONLY won when all enemy units are destroyed. A rival that
+    // still has a stray unit (even with no cities) keeps the game running —
+    // there is no "own every city" domination shortcut.
     if (survivingCivs.length <= 1) {
       const winner = survivingCivs[0];
       if (winner && winner.isHuman) {
@@ -107,38 +102,6 @@ export class VictoryManager {
         continue;
       }
       if (this.hasMoonshot(civ)) {
-        return civ;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Return the civilization that owns ALL cities on the map, or null.
-   * Only meaningful when at least two civilizations are still alive.
-   */
-  private detectDominationWinner(survivingCivs: Civilization[]): Civilization | null {
-    const cities = this.gameEngine.cities || [];
-    if (cities.length === 0) {
-      return null;
-    }
-
-    // A rival that still has a settler can refound a city, so the game is not
-    // decided yet — this prevents a premature win at turn 1 while rivals are
-    // still on their starting settlers. Stray military units (no settler, no
-    // city) cannot rebuild, so domination is decisive in that case.
-    const rivalHasSettler = survivingCivs.some((civ) =>
-      (this.gameEngine.units || []).some(
-        (u) => u.civilizationId === civ.id && u.type === 'settler'
-      )
-    );
-    if (rivalHasSettler) {
-      return null;
-    }
-
-    for (const civ of survivingCivs) {
-      const ownsAll = cities.every((city) => city.civilizationId === civ.id);
-      if (ownsAll) {
         return civ;
       }
     }

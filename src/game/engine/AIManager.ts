@@ -8,6 +8,7 @@
 import { AIUtility, scanAreaForEnemies, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
 import { UNIT_PROPS, TERRAIN_PROPS } from '@/utils/Constants';
+import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import { SettlementEvaluator, MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
 import { AICoordinator } from './AICoordinator';
@@ -190,7 +191,9 @@ export class AIManager {
     if (aggressionState.posture === 'aggressive' && this.gameEngine.diplomacyManager) {
       const plan = storage?.turnData?.offensivePlan as { targetCivId?: number } | undefined | null;
       const targetCivId = plan?.targetCivId;
-      if (typeof targetCivId === 'number' && targetCivId !== civilizationId) {
+      // Barbarians are always hostile but have no diplomacy relation — never
+      // "declare war" on them (a no-op); just attack.
+      if (typeof targetCivId === 'number' && targetCivId !== civilizationId && targetCivId !== BARBARIAN_CIV_ID) {
         const dm = this.gameEngine.diplomacyManager;
         if (!dm.isAtWar(civilizationId, targetCivId)) {
           console.log(`[AI] ${civ.name} declares war (aggression ${aggressionState.score}) — rush against civ ${targetCivId}`);
@@ -474,7 +477,12 @@ export class AIManager {
           console.log(`[AI] Pathfinding to non-adjacent target (${target.col},${target.row})`);
           const obstacles = unit.type === 'settler'
             ? this.getSettlerPathObstacles(unit.id, target)
-            : new Set<string>();
+            // Route around tiles that were previously blocked (an enemy/allied
+            // unit or impassable spot that made moveUnit fail), so findPath does
+            // not keep routing through the same blocker every turn.
+            : ((unit as any)._blockedScoutTargets instanceof Set
+                ? new Set<string>((unit as any)._blockedScoutTargets)
+                : new Set<string>());
           const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, obstacles, this.gameEngine.getPassabilityFilter?.());
           if (path.length > 1) {
             let next = path[1];
@@ -517,6 +525,21 @@ export class AIManager {
               if (unit.type === 'scout' && this.gameEngine.roundManager) {
                 this.gameEngine.roundManager.clearUnitPath(unit.id);
               }
+
+              // A blocked path step must not freeze the unit (e.g. two units
+              // facing off, or a step pinned by an allied unit / impassable
+              // tile). Step onto the best affordable adjacent tile toward the
+              // target so it keeps moving and can route around the blocker.
+              const fallbackStep = this.findAffordableStep(unit, target);
+              if (fallbackStep) {
+                const fb = this.gameEngine.moveUnit(unit.id, fallbackStep.col, fallbackStep.row);
+                if (fb && fb.success) {
+                  console.log(`[AI] Path step blocked — fallback move to (${fallbackStep.col},${fallbackStep.row})`);
+                  this.gameEngine.log('ai', `Fallback move — ${civ.name} ${unit.type}(${unit.id}) → (${fallbackStep.col},${fallbackStep.row})`, { civilizationId, action: 'move', unitId: unit.id, unitType: unit.type, targetCol: fallbackStep.col, targetRow: fallbackStep.row, reason: 'path_step_fallback' });
+                  break; // made progress; re-evaluate fresh next turn
+                }
+              }
+
              console.log(`[AI] Path step failed, skipping unit`);
               this.gameEngine.log('ai', `Path step failed — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'move_failed', unitId: unit.id, unitType: unit.type, reason: 'path_move_failed' });
               // Settler fallback: block unreachable target and re-evaluate.
@@ -537,6 +560,17 @@ export class AIManager {
           } else {
             // Unreachable target — a scout should drop it and pick another.
             this.blacklistScoutTarget(unit, target.col, target.row);
+            // A target with no path must not freeze the unit — step onto the
+            // best affordable adjacent tile toward it so it keeps moving.
+            const fallbackStep = this.findAffordableStep(unit, target);
+            if (fallbackStep) {
+              const fb = this.gameEngine.moveUnit(unit.id, fallbackStep.col, fallbackStep.row);
+              if (fb && fb.success) {
+                console.log(`[AI] No path — fallback move to (${fallbackStep.col},${fallbackStep.row})`);
+                this.gameEngine.log('ai', `Fallback move — ${civ.name} ${unit.type}(${unit.id}) → (${fallbackStep.col},${fallbackStep.row})`, { civilizationId, action: 'move', unitId: unit.id, unitType: unit.type, targetCol: fallbackStep.col, targetRow: fallbackStep.row, reason: 'no_path_fallback' });
+                break;
+              }
+            }
            console.log(`[AI] No path found to target, skipping unit`);
             this.gameEngine.log('ai', `No path — ${civ.name} ${unit.type}(${unit.id})`, { civilizationId, action: 'skip', unitId: unit.id, unitType: unit.type, reason: 'no_path' });
             // Settler fallback: block unreachable target and re-evaluate.
@@ -651,6 +685,10 @@ export class AIManager {
     for (const n of neighbors) {
       const tile = this.gameEngine.getTileAt(n.col, n.row);
       if (!tile) continue;
+      // The tile must be passable — moveCost alone does not catch ocean /
+      // mountains, and moveUnit would reject them anyway, silently defeating
+      // the whole fallback (the scout would still freeze).
+      if (typeof this.gameEngine.isTilePassable === 'function' && !this.gameEngine.isTilePassable(n.col, n.row)) continue;
       const moveCost = Math.max(1, TERRAIN_PROPS[tile.type ?? '']?.movement ?? 1);
       if (moveCost > movesLeft) continue;
       // Avoid stepping onto an allied unit.
@@ -725,10 +763,13 @@ export class AIManager {
           } as unknown as EnemyLocation);
         }
       }
-      // Respond only to civs we are at war with.
+      // Respond only to civs we are at war with — plus the barbarian faction,
+      // which has no diplomacy relation entries but is always hostile. The AI
+      // must attack/capture barbarian cities exactly like any other enemy's.
       const nearbyEnemies = scannedEnemies.filter(e => {
-        // Only target civs we are at war with
         const targetCivId = this.getOwnerCivId(e);
+        if (targetCivId === BARBARIAN_CIV_ID) return true;
+        // Only target civs we are at war with
         return targetCivId !== undefined && (!dm || dm.isAtWar(unit.civilizationId, targetCivId));
       });
 
