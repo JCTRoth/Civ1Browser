@@ -21,7 +21,8 @@ import GameEngine from './GameEngine';
 
 /** A production item pushed onto a city's build queue. */
 interface ProductionItem {
-  type: 'unit' | 'building';
+  // Matches types/game.ProductionItem — built dynamically with string types.
+  type: string;
   itemType: string;
   name: string;
   cost: number;
@@ -31,6 +32,7 @@ interface ProductionItem {
 interface QueueItem {
   type?: string;
   itemType?: string;
+  name?: string;
 }
 
 /** How many follow-up items auto-production keeps lined up in a city's queue. */
@@ -59,6 +61,11 @@ export class AutoProduction {
 
   constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
+  }
+
+  /** Reset any per-game state when starting a new game. */
+  reset(): void {
+    // All production decisions are derived from the engine's current state.
   }
 
   /**
@@ -968,7 +975,8 @@ export class AutoProduction {
           break;
         }
         case 'CITY_DESTROYED': {
-          const owner = data?.city?.civilizationId;
+          const destroyedCity = data?.city as { civilizationId?: unknown } | undefined;
+          const owner = destroyedCity?.civilizationId;
           if (typeof owner === 'number') this.processAutoProductionForCivilization(owner);
           break;
         }

@@ -22,6 +22,11 @@ import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 export class BarbarianManager {
   constructor(private readonly gameEngine: GameEngine) {}
 
+  /** Reset any per-game state when starting a new game. */
+  reset(): void {
+    // Stateless — everything is derived from the engine's current units/cities.
+  }
+
   /** Called once per round from the turn cycle. */
   processBarbarians(): void {
     const engine = this.gameEngine;
@@ -78,7 +83,7 @@ export class BarbarianManager {
     );
     if (cities.length === 0) return null;
 
-    let weakest: { col: number; row: number; defense: number } | null = null;
+    let weakest: { col: number; row: number; defense: number; defName?: string } | null = null;
     for (const city of cities) {
       const defense = this.estimateCityDefense(city);
       if (!weakest || defense < weakest.defense) {

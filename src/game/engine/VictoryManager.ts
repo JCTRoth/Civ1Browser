@@ -170,7 +170,7 @@ export class VictoryManager {
     this.pushCivilizationUpdates();
     this.gameEngine.onStateChange?.(
       result.outcome === 'victory' ? 'GAME_WON' : 'GAME_LOST',
-      result
+      result as unknown as Record<string, unknown>
     );
   }
 

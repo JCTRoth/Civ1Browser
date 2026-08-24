@@ -78,7 +78,8 @@ interface GameMap {
 }
 
 interface ProductionItem {
-    type: 'unit' | 'building';
+    // Matches types/game.ProductionItem — built dynamically with string types.
+    type: string;
     itemType: string;
     name?: string;
     cost?: number;

@@ -141,7 +141,11 @@ export interface CameraState {
 
 /** A production item that can be queued in a city's build queue. */
 export interface ProductionItem {
-  type: 'unit' | 'building';
+  // Production items are built dynamically throughout the codebase with a
+  // `string` type value (often from a unit-type variable), so the field is
+  // intentionally broad — the literal union was too strict and made every
+  // un-annotated city literal fail to assign.
+  type: string;
   itemType: string;
   name: string;
   cost: number;
@@ -249,6 +253,10 @@ export interface City {
   foodRequired?: number;
   productionStored?: number;
   buildings?: string[];
+  /** Built world-wonders (ids). */
+  wonders?: string[];
+  /** Whether the city was in disorder on the previous turn (transition tracking). */
+  disorderLastTurn?: boolean;
   shields?: number;
   productionQueue?: ProductionItem[];
   autoProduction?: boolean; // When true, the engine auto-selects production for this city
@@ -318,7 +326,7 @@ export interface Civilization {
   leaderName?: string;
   cityNames?: string[];
   nextCityNameIndex?: number;
-  currentResearch?: string | null;
+  currentResearch?: Technology | null;
   researchProgress?: number;
   technologies?: string[];
   score?: number;
@@ -376,7 +384,7 @@ export interface Technology {
   id: string;
   name: string;
   researched: boolean;
-  researching: boolean;
+  researching?: boolean;
   available?: boolean;
   description?: string;
   cost?: number;

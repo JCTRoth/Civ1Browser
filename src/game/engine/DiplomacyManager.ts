@@ -562,7 +562,7 @@ export class DiplomacyManager {
       gold: civ?.resources?.gold ?? 0,
       numCities: cities.length,
       numMilitaryUnits: military.length,
-      currentResearch: civ?.currentResearch?.id ?? civ?.currentResearch ?? null,
+      currentResearch: civ?.currentResearch?.id ?? null,
       government: civ?.government ?? 'despotism',
       attitude: this.getAttitude(targetCivId, spyCivId),
     };

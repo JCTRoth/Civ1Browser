@@ -9,7 +9,8 @@
  * choice is a weighted coin-flip, so games don't all play out identically.
  */
 
-import type { City, GameEngine } from '../../../types/game';
+import type { City } from '../../../types/game';
+import type GameEngine from './GameEngine';
 
 // ---------------------------------------------------------------------------
 // Constants

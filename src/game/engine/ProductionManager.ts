@@ -9,7 +9,8 @@ import GameEngine from './GameEngine';
 
 /** A production item that can be queued in a city's build queue. */
 interface ProductionItem {
-  type?: 'unit' | 'building';
+  // Matches types/game.ProductionItem — built dynamically with string types.
+  type?: string;
   itemType?: string;
   name?: string;
   cost?: number;

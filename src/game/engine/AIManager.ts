@@ -29,7 +29,7 @@ import {
   type CityThreatAssessment
 } from './AIStrategy';
 import type { DiplomatAction } from './DiplomacyTypes';
-import type { Unit, City, EnemyLocation } from '../../../types/game';
+import type { Unit, City } from '../../../types/game';
 import GameEngine, { type PlayerTurnStorage, type MapTile } from './GameEngine';
 
 // How much better (in settlement-score points) the best location must be for a
@@ -759,8 +759,8 @@ export class AIManager {
         if (typeof this.gameEngine.recordEnemyLocation === 'function') {
           this.gameEngine.recordEnemyLocation(unit.civilizationId, {
             col: e.col, row: e.row,
-            targetType: e.type, targetId: e.id, priority: e.type === 'city' ? 2 : 1,
-          } as unknown as EnemyLocation);
+            targetType: e.type, targetId: e.id, distance: e.distance, priority: e.type === 'city' ? 2 : 1,
+          });
         }
       }
       // Respond only to civs we are at war with — plus the barbarian faction,
@@ -1035,7 +1035,7 @@ export class AIManager {
 
           if (!alreadyKnown) {
             // Store enemy location in player storage for civilization-wide decision making
-            this.gameEngine.recordEnemyLocation(unit.civilizationId, enemyResult as unknown as EnemyLocation);
+            this.gameEngine.recordEnemyLocation(unit.civilizationId, enemyResult);
 
             // Civ1: a scout that spots a lone enemy UNIT keeps exploring — the
             // army handles units. Only an enemy CITY is valuable enough to

@@ -25,7 +25,7 @@ import { createDefaultAIState } from './AITypes';
 import { serializeCities } from '../../utils/CitySnapshots';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import type { ProcessTurnResult } from './EconomicManager';
-import type { City, Civilization, Unit } from '../../../types/game';
+import type { City, Civilization, Technology, Unit } from '../../../types/game';
 import GameEngine from './GameEngine';
 
 export class TurnManager {
@@ -428,8 +428,8 @@ export class TurnManager {
           numCities: cities.length,
           numEnemyCitiesKnown: 0,
           isAtWar: (civ.warWith?.size ?? 0) > 0,
-          hasLibrary: cities.some((c) => c.buildings?.some?.((b) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
-          totalScience: this.gameEngine.cities?.reduce((s: number, c) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
+hasLibrary: cities.some((c) => c.buildings?.includes('library')),
+            totalScience: this.gameEngine.cities?.reduce((s: number, c) => s + (c.science || 0), 0) ?? 0,
           hasWaterAccess: cities.some((city) => this.cityHasDirectWaterAccess(city)),
         };
 
@@ -971,8 +971,8 @@ export class TurnManager {
             numCities: cities.length,
             numEnemyCitiesKnown: 0,
             isAtWar: (civ.warWith?.size ?? 0) > 0,
-            hasLibrary: cities.some((c) => c.buildings?.some?.((b) => typeof b === 'string' ? b === 'library' : b?.id === 'library' || b?.type === 'library')),
-            totalScience: this.gameEngine.cities?.reduce((s: number, c) => s + (c.science || c.yields?.science || 0), 0) ?? 0,
+            hasLibrary: cities.some((c) => c.buildings?.includes('library')),
+            totalScience: this.gameEngine.cities?.reduce((s: number, c) => s + (c.science || 0), 0) ?? 0,
           };
 
           const techChoice = AIResearch.selectResearch(civ, strategy, gameState);
@@ -994,7 +994,7 @@ export class TurnManager {
     civ.researchProgress = (civ.researchProgress || 0) + (totalScience || 0);
     const techCost = typeof tech === 'object' && tech.cost ? tech.cost : 0;
     if (civ.researchProgress >= techCost && techCost > 0) {
-      return tech.id || tech;
+      return tech.id || null;
     }
     return null;
   }

@@ -66,8 +66,11 @@ interface MapData {
   width: number;
   height: number;
   tiles: MapTile[];
-  visibility: boolean[];
-  revealed: boolean[];
+  // Fog-of-war arrays are only populated for some maps (the renderer reads
+  // them with optional chaining); optional so generated maps that don't fill
+  // them still type-check.
+  visibility?: boolean[];
+  revealed?: boolean[];
 }
 
 export interface PlayerTurnStorage {
@@ -1113,7 +1116,7 @@ export default class GameEngine {
    * Create a single unit
    */
   private createUnit(civId: number, type: string, col: number, row: number) {
-    const unitProps: { movement: number; attack: number; defense: number; icon: string; hitPoints?: number; name?: string; type?: string; maintenance?: number } = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
+    const unitProps: { movement: number; attack: number; defense: number; icon?: string; hitPoints?: number; name?: string; type?: string; maintenance?: number } = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
     const unitId = `${type}_${civId}_${this.units.filter(u => u.civilizationId === civId).length}`;
     
     const unit = {
