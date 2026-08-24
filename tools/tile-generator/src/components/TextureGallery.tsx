@@ -320,7 +320,7 @@ function VariantCard({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [bgModelOpen, setBgModelOpen] = useState(false);
-  const [bgModel, setBgModel] = useState('fal-ai/imageutils/rembg');
+  const [bgModel, setBgModel] = useState('local-rembg');
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function handleUseInGame() {
@@ -405,14 +405,9 @@ function VariantCard({
             {bgModelOpen && (
               <div className="bg-picker">
                 <label>
-                  <input type="radio" name={`bg-${variant.filename}`} value="fal-ai/imageutils/rembg"
-                    checked={bgModel === 'fal-ai/imageutils/rembg'} onChange={() => setBgModel('fal-ai/imageutils/rembg')} />
-                  rembg ⚡
-                </label>
-                <label>
-                  <input type="radio" name={`bg-${variant.filename}`} value="fal-ai/bria/background/remove"
-                    checked={bgModel === 'fal-ai/bria/background/remove'} onChange={() => setBgModel('fal-ai/bria/background/remove')} />
-                  BRIA
+                  <input type="radio" name={`bg-${variant.filename}`} value="local-rembg"
+                    checked={bgModel === 'local-rembg'} onChange={() => setBgModel('local-rembg')} />
+                  rembg (local)
                 </label>
                 <button className="bg-go" onClick={handleRemoveBg}>Go</button>
               </div>

@@ -1,32 +1,57 @@
 /**
- * Simple Node.js server for the AI Tile Generator tool.
- * Serves the HTML UI and proxies requests to fal.ai with the API key.
+ * Node.js server for the AI Tile Generator tool — switchable backend.
+ *
+ * Serves the HTML UI and the /api endpoints.
+ *
+ * BACKEND=local (default): image generation goes directly to the local
+ * AUTOMATIC1111-compatible Stable Diffusion server (sd-server from
+ * stable-diffusion.cpp) at http://127.0.0.1:8081.
+ *
+ * BACKEND=fal: image generation uses the fal.ai cloud queue API
+ * (https://queue.fal.run/{FAL_MODEL}) and requires FAL_AI_KEY.
+ *
+ * Background removal always runs locally via Python rembg.
  *
  * Usage: node Zivilisation_1/tools/tile-generator/server.mjs
  * Debug: DEBUG=1 node Zivilisation_1/tools/tile-generator/server.mjs
+ *
+ * Env overrides:
+ *   BACKEND       local|fal               which generator backend to use
+ *   FAL_AI_KEY    (required for fal)      fal.ai API key
+ *   FAL_MODEL     fal-ai/flux-2/turbo     fal.ai model endpoint
+ *   SD_SERVER     http://127.0.0.1:8081   sd-server URL (local backend)
+ *   SD_STEPS      4                       Flux.2 klein — fast
+ *   SD_CFG        1.0
+ *   SD_SAMPLER    euler
+ *   PYTHON        python3                 interpreter with `rembg` installed
+ *
+ * /api/generate accepts optional `steps` (sampling iterations) and `strength`
+ * (img2img denoising strength, 0..1). When `imageUrl` is provided the request
+ * is routed to img2img (local sd-server /sdapi/v1/img2img, or the fal.ai edit
+ * endpoint when BACKEND=fal); otherwise txt2img.
  */
 
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, renameSync, copyFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PORT = 3456;
-const FAL_KEY = process.env.FAL_AI_KEY || '';
 const DEBUG = !!process.env.DEBUG;
+const BACKEND    = (process.env.BACKEND    || 'local').toLowerCase();
+const FAL_KEY    = process.env.FAL_AI_KEY  || '';
+const FAL_MODEL  = process.env.FAL_MODEL   || 'fal-ai/flux-2/turbo';
+const SD_SERVER  = process.env.SD_SERVER   || 'http://127.0.0.1:8081';
+const SD_STEPS   = parseInt(process.env.SD_STEPS  || '4', 10);
+const SD_CFG     = parseFloat(process.env.SD_CFG    || '1.0');
+const SD_SAMPLER = process.env.SD_SAMPLER || 'euler';
+const PYTHON     = process.env.PYTHON     || 'python3';
 const OUTPUT_DIR = join(__dirname, '..', '..', 'public', 'assets', 'tiles');
 const ARCHIVE_DIR = join(__dirname, '..', '..', 'archive', 'tiles');
 // Generated variants live here; copied to OUTPUT_DIR via "Use in Game"
 const TEXTURES_DIR = join(__dirname, 'textures');
-
-function debugLog(...args) {
-  if (DEBUG) console.log('[debug]', ...args);
-}
-
-function debugWarn(...args) {
-  if (DEBUG) console.warn('[debug:WARN]', ...args);
-}
 
 /** Parse "terrain_grassland_3.png" → { group: "terrain_grassland", n: 3 } */
 function parseTextureName(filename) {
@@ -112,110 +137,6 @@ const MIME = {
   '.svg': 'image/svg+xml',
 };
 
-// Pricing cache — fetched live from fal.ai's Platform API.
-// Cache TTL: 1 hour for successful fetches, 5 minutes for "not found".
-const _pricingCache = new Map(); // endpoint_id → { unit_price, unit, currency, fetched_at } or { not_found: true, fetched_at }
-const FETCH_TIMEOUT_MS = 10_000; // 10s timeout for fal.ai API calls
-
-async function fetchPricingFromFal(endpointIds) {
-  if (!FAL_KEY) return {};
-  // Filter out cached entries (within their TTL)
-  const now = Date.now();
-  const toFetch = endpointIds.filter(id => {
-    const cached = _pricingCache.get(id);
-    if (!cached) return true;
-    // "Not found" markers expire after 5 minutes; real pricing after 1 hour
-    const ttl = cached.not_found ? 300_000 : 3_600_000;
-    return (now - cached.fetched_at) > ttl;
-  });
-
-  if (toFetch.length === 0) {
-    // All cached — return from cache (filter out not_found markers as null)
-    const result = {};
-    for (const id of endpointIds) {
-      const c = _pricingCache.get(id);
-      result[id] = (c && !c.not_found) ? c : null;
-    }
-    return result;
-  }
-
-  // Fetch in batches of 10 — URL length limit, not API limit
-  const results = {};
-  debugLog(`[pricing] Fetching ${toFetch.length} uncached IDs in ${Math.ceil(toFetch.length / 10)} batch(es)`);
-  for (let i = 0; i < toFetch.length; i += 10) {
-    const batch = toFetch.slice(i, i + 10);
-    const url = `https://api.fal.ai/v1/models/pricing?${batch.map(id => `endpoint_id=${encodeURIComponent(id)}`).join('&')}`;
-    debugLog(`[pricing] Fetching batch ${i / 50 + 1}: ${batch.length} IDs with url ${url}`);
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const resp = await fetch(url, {
-        headers: { 'Authorization': `Key ${FAL_KEY}` },
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (!resp.ok) {
-        console.error(`[pricing] HTTP ${resp.status} fetching batch of ${batch.length} IDs`);
-        debugWarn(`[pricing] Batch ${i / 50 + 1} failed with HTTP ${resp.status}`);
-        // Mark batch IDs as not-found so we don't hammer the API
-        for (const id of batch) {
-          _pricingCache.set(id, { not_found: true, fetched_at: now });
-        }
-        continue;
-      }
-      const data = await resp.json();
-      const foundIds = new Set();
-      for (const p of (data.prices || [])) {
-        const entry = { ...p, fetched_at: now };
-        _pricingCache.set(p.endpoint_id, entry);
-        results[p.endpoint_id] = entry;
-        foundIds.add(p.endpoint_id);
-      }
-      debugLog(`[pricing] Batch ${i / 50 + 1}: got ${foundIds.size} prices, ${batch.length - foundIds.size} not found`);
-      // Mark batch IDs not in response as not-found
-      for (const id of batch) {
-        if (!foundIds.has(id)) {
-          _pricingCache.set(id, { not_found: true, fetched_at: now });
-        }
-      }
-    } catch (err) {
-      console.error(`[pricing] Error fetching batch:`, err.message);
-      debugWarn(`[pricing] Batch ${i / 50 + 1} error: ${err.message}`);
-      // Mark batch IDs as not-found on error too (with short TTL for retry)
-      for (const id of batch) {
-        if (!_pricingCache.has(id)) {
-          _pricingCache.set(id, { not_found: true, fetched_at: now });
-        }
-      }
-    }
-  }
-
-  // Merge with cache for any IDs that weren't in the fetch batches
-  for (const id of endpointIds) {
-    if (!results[id]) {
-      const cached = _pricingCache.get(id);
-      results[id] = (cached && !cached.not_found) ? cached : null;
-    }
-  }
-
-  return results;
-}
-
-function classifyPricing(p) {
-  if (!p || p.unit_price == null) return { cost: '—', unit: '', type: 'unknown', note: 'No price info' };
-  const price = `$${p.unit_price.toFixed(p.unit_price < 0.01 ? 4 : 3)}`;
-  // Real fal.ai unit values: "megapixels", "images", "units", "compute seconds"
-  let unitLabel, type;
-  switch (p.unit) {
-    case 'megapixels':     unitLabel = '/MP';  type = 'megapixel'; break;
-    case 'images':         unitLabel = '/img'; type = 'image';     break;
-    case 'units':          unitLabel = '/unit';type = 'per-unit';  break; // one image = multiple units, effectively more expensive
-    case 'compute seconds':unitLabel = '/sec'; type = 'gpu';       break;
-    default:               unitLabel = `/${p.unit || 'unit'}`; type = 'unknown'; break;
-  }
-  return { cost: price, unit: unitLabel, type, note: `per ${p.unit || 'unit'}` };
-}
-
 function serveFile(res, path, mime) {
   try {
     const data = readFileSync(path);
@@ -256,26 +177,220 @@ function uniqueArchivePath(fname) {
   return candidate;
 }
 
+// ─── Local Stable Diffusion helpers ──────────────────────────────────────────
+
+let _sdUpCache = null;
+async function sdServerUp() {
+  if (_sdUpCache !== null) return _sdUpCache;
+  try {
+    const r = await fetch(`${SD_SERVER}/`, { signal: AbortSignal.timeout(3000) });
+    _sdUpCache = r.ok;
+  } catch { _sdUpCache = false; }
+  return _sdUpCache;
+}
+
+let _rembgCache = null;
+function rembgAvailable() {
+  if (_rembgCache !== null) return _rembgCache;
+  const r = spawnSync(PYTHON, ['-c', 'import rembg'], { encoding: 'utf8' });
+  _rembgCache = r.status === 0;
+  return _rembgCache;
+}
+
+/**
+ * POST to a local SD server endpoint and return the decoded PNG buffer.
+ * Retries on transient network errors (the sd-server occasionally closes the
+ * socket mid-request, e.g. when it is busy or the request takes too long).
+ */
+async function sdFetchWithRetry(path, body, retries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const r = await fetch(`${SD_SERVER}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error(`SD server HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
+      const data = await r.json();
+      if (!data.images?.[0]) throw new Error('No image returned from SD server');
+      return Buffer.from(data.images[0], 'base64');
+    } catch (err) {
+      lastErr = err;
+      if (attempt < retries) {
+        console.warn(`[sd] request failed (${err.message}) — retrying ${attempt + 1}/${retries}…`);
+        await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/** Generate an image via the local SD server (txt2img) and return a PNG buffer. */
+function sdTxt2img(prompt, width, height, steps = SD_STEPS) {
+  return sdFetchWithRetry('/sdapi/v1/txt2img', {
+    prompt,
+    width,
+    height,
+    steps,
+    cfg_scale: SD_CFG,
+    sampler_name: SD_SAMPLER,
+    seed: -1,
+  });
+}
+
+/** Generate an image via the local SD server (img2img) and return a PNG buffer. */
+function sdImg2img(prompt, initDataUri, width, height, steps, denoisingStrength) {
+  const strength = Math.max(0, Math.min(1, Number(denoisingStrength) || 0.6));
+  return sdFetchWithRetry('/sdapi/v1/img2img', {
+    prompt,
+    init_images: [initDataUri],
+    width,
+    height,
+    steps,
+    cfg_scale: SD_CFG,
+    sampler_name: SD_SAMPLER,
+    seed: -1,
+    denoising_strength: strength,
+  });
+}
+
+/**
+ * Build the fal.ai request body, selecting the image-input field a given
+ * model family expects (mirrors the original fal.ai integration):
+ *  - Nano Banana / Gemini edit endpoints are prompt+images only.
+ *  - Classic `.../image-to-image` endpoints use `image_url` + `strength`.
+ *  - Everything else (FLUX.2 edit, FLUX.1 dev, …) uses `image_urls`.
+ */
+function falBuildBody(prompt, width, height, imageUrl, strength, steps) {
+  if (FAL_MODEL.includes('nano-banana') || FAL_MODEL.includes('gemini')) {
+    const body = { prompt };
+    if (imageUrl) body.image_urls = [imageUrl];
+    return body;
+  }
+  const body = { prompt, image_size: { width, height }, num_inference_steps: steps };
+  if (imageUrl) {
+    if (FAL_MODEL.includes('/image-to-image')) {
+      body.image_url = imageUrl;
+      if (strength != null) body.strength = strength;
+    } else {
+      body.image_urls = [imageUrl];
+    }
+  }
+  return body;
+}
+
+/**
+ * Generate an image via the fal.ai cloud queue API and return a PNG buffer.
+ * Supports txt2img, and img2img/edit when a source data URI is supplied.
+ */
+async function falGenerate(prompt, width, height, imageUrl = null, strength = null, steps = null) {
+  if (!FAL_KEY) throw new Error('BACKEND=fal requires FAL_AI_KEY (export FAL_AI_KEY=...)');
+  const numSteps = steps || (FAL_MODEL.includes('schnell') ? 4
+    : (FAL_MODEL.includes('flux-2') || FAL_MODEL.includes('flux.2')) ? 8 : 28);
+  console.log(`[fal.ai] ${FAL_MODEL} — "${prompt.slice(0, 80)}..." (${width}x${height})${imageUrl ? ' [img2img]' : ''}`);
+
+  async function fetchJSON(url, opts) {
+    const resp = await fetch(url, opts);
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(`fal.ai HTTP ${resp.status}: ${text.slice(0, 300)}`);
+    try { return JSON.parse(text); } catch { throw new Error(`Invalid JSON from ${url}: ${text.slice(0, 200)}`); }
+  }
+
+  const submit = await fetchJSON(`https://queue.fal.run/${FAL_MODEL}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Key ${FAL_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(falBuildBody(prompt, width, height, imageUrl, strength, numSteps)),
+  });
+  const { status_url, response_url } = submit;
+  if (!status_url || !response_url) {
+    throw new Error(`Missing status_url/response_url in fal.ai response: ${JSON.stringify(submit).slice(0, 200)}`);
+  }
+
+  for (let attempt = 1; attempt <= 120; attempt++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const status = await fetchJSON(status_url, { headers: { 'Authorization': `Key ${FAL_KEY}` } });
+    if (status.status === 'COMPLETED') {
+      const result = await fetchJSON(response_url, { headers: { 'Authorization': `Key ${FAL_KEY}` } });
+      const outUrl = result?.images?.[0]?.url || result?.image?.url;
+      if (!outUrl) throw new Error('No image URL in fal.ai result');
+      const imgResp = await fetch(outUrl);
+      return Buffer.from(await imgResp.arrayBuffer());
+    }
+    if (status.status === 'FAILED') {
+      throw new Error(`fal.ai generation failed: ${JSON.stringify(status).slice(0, 300)}`);
+    }
+  }
+  throw new Error('fal.ai generation timed out (120s)');
+}
+
+const REMBG_PY = [
+  'from rembg import remove',
+  'from PIL import Image',
+  'import sys',
+  'src, dst = sys.argv[1], sys.argv[2]',
+  'Image.MAX_IMAGE_PIXELS = None',
+  'img = Image.open(src).convert("RGB")',
+  'out = remove(img)',
+  'out.save(dst)',
+].join('\n');
+
+/** Remove the background of srcPath with local Python rembg and return the PNG buffer. */
+function sdRemoveBackground(srcPath) {
+  const tmp = `${srcPath}.nobg.png`;
+  const r = spawnSync(PYTHON, ['-c', REMBG_PY, srcPath, tmp], {
+    encoding: 'utf8',
+    timeout: 180_000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (r.status !== 0) {
+    const tail = (r.stderr || r.stdout || '').trim().split('\n').slice(-3).join('\n');
+    throw new Error(`rembg failed (exit ${r.status}): ${tail}`);
+  }
+  const buf = readFileSync(tmp);
+  try { unlinkSync(tmp); } catch { /* ignore */ }
+  return buf;
+}
+
+/**
+ * Resolve a source-image reference into a base64 data URI the SD server accepts.
+ * Accepts an existing `data:` URI, a server texture path (`/api/textures/…`,
+ * `/api/game-tiles/…`, `/api/tiles/…`), or a bare filename (searched in
+ * TEXTURES_DIR then OUTPUT_DIR). Returns null if the file cannot be found.
+ */
+function resolveSourceToDataUri(ref) {
+  if (!ref) return null;
+  if (typeof ref === 'string' && ref.startsWith('data:')) return ref;
+
+  const pathOnly = String(ref).split('?')[0];
+  let filePath = null;
+
+  if (pathOnly.startsWith('/api/textures/')) {
+    const fname = decodeURIComponent(pathOnly.slice('/api/textures/'.length));
+    const cand = join(TEXTURES_DIR, fname);
+    if (existsSync(cand)) filePath = cand;
+  } else if (pathOnly.startsWith('/api/game-tiles/') || pathOnly.startsWith('/api/tiles/')) {
+    const prefix = pathOnly.startsWith('/api/game-tiles/') ? '/api/game-tiles/' : '/api/tiles/';
+    const fname = decodeURIComponent(pathOnly.slice(prefix.length));
+    const cand = join(OUTPUT_DIR, fname);
+    if (existsSync(cand)) filePath = cand;
+  } else {
+    const fname = decodeURIComponent(pathOnly.replace(/^\/+/, ''));
+    for (const dir of [TEXTURES_DIR, OUTPUT_DIR]) {
+      const cand = join(dir, fname);
+      if (existsSync(cand)) { filePath = cand; break; }
+    }
+  }
+
+  if (!filePath) return null;
+  const buf = readFileSync(filePath);
+  const mime = (buf[0] === 0xFF && buf[1] === 0xD8) ? 'image/jpeg' : 'image/png';
+  return `data:${mime};base64,${buf.toString('base64')}`;
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
-
-  debugLog(`${req.method} ${pathname}${url.search ? '?' + url.search : ''}`);
-
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    return res.end();
-  }
-
-  // ─── Serve HTML tool ─────────────────────────────────────────────────
-  if (pathname === '/' || pathname === '/index.html') {
-    return serveFile(res, join(__dirname, 'index.html'), 'text/html; charset=utf-8');
-  }
 
   // ─── API: list tiles ─────────────────────────────────────────────────
   if (pathname === '/api/tiles' && req.method === 'GET') {
@@ -313,36 +428,38 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  // ─── API: generate tile ─────────────────────────────────────────────
+  // ─── API: generate tile (local Stable Diffusion) ────────────────────
   if (pathname === '/api/generate' && req.method === 'POST') {
-    if (!FAL_KEY) return json(res, { error: 'FAL_AI_KEY not set in environment. Export it: export FAL_AI_KEY=your-key' }, 500);
-
     const body = await readBody(req);
     let params;
     try { params = JSON.parse(body); } catch {
       return json(res, { error: 'Invalid JSON' }, 400);
     }
 
-    const { model, prompt, tileName, width, height, useInGame, imageUrl, strength } = params;
+    const { prompt, tileName, width, height, useInGame, imageUrl, steps, strength } = params;
     if (!prompt || !tileName) return json(res, { error: 'Missing prompt or tileName' }, 400);
 
     const w = width || 512;
     const h = height || 512;
+    const sdSteps = (steps != null && Number.isInteger(Number(steps)) && Number(steps) > 0)
+      ? Math.min(Number(steps), 200)
+      : SD_STEPS;
 
     try {
-      // Resolve the source image (if any) to a data URI fal.ai can read.
-      const resolvedImageUrl = imageUrl ? resolveSourceToDataUri(imageUrl) : null;
-      if (imageUrl && !resolvedImageUrl) {
-        return json(res, { error: 'Source image not found or unreadable' }, 404);
+      let buffer;
+      if (BACKEND === 'fal') {
+        const sourceDataUri = imageUrl ? resolveSourceToDataUri(imageUrl) : null;
+        if (imageUrl && !sourceDataUri) return json(res, { error: 'Source image not found or unreadable' }, 404);
+        buffer = await falGenerate(prompt, w, h, sourceDataUri, strength, sdSteps);
+      } else if (imageUrl) {
+        const sourceDataUri = resolveSourceToDataUri(imageUrl);
+        if (!sourceDataUri) return json(res, { error: 'Source image not found or unreadable' }, 404);
+        console.log(`[sd] img2img "${prompt.slice(0, 80)}..." (${w}x${h}, steps=${sdSteps}, strength=${strength ?? 0.6})`);
+        buffer = await sdImg2img(prompt, sourceDataUri, w, h, sdSteps, strength);
+      } else {
+        console.log(`[sd] txt2img "${prompt.slice(0, 80)}..." (${w}x${h}, steps=${sdSteps}, cfg=${SD_CFG}, sampler=${SD_SAMPLER})`);
+        buffer = await sdTxt2img(prompt, w, h, sdSteps);
       }
-      const result = await callFalAI(model, prompt, w, h, resolvedImageUrl, strength);
-      if (!result.imageUrl) {
-        return json(res, { error: 'No image returned from fal.ai' }, 500);
-      }
-
-      // Download image
-      const imgResp = await fetch(result.imageUrl);
-      const buffer = Buffer.from(await imgResp.arrayBuffer());
 
       const safeBase = tileName.replace(/[^a-z0-9_-]/gi, '_');
 
@@ -384,22 +501,16 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  // ─── API: remove background ─────────────────────────────────────────
+  // ─── API: remove background (local Python rembg) ────────────────────
   if (pathname === '/api/remove-bg' && req.method === 'POST') {
-    if (!FAL_KEY) return json(res, { error: 'FAL_AI_KEY not set in environment. Export it: export FAL_AI_KEY=your-key' }, 500);
-
     const body = await readBody(req);
     let params;
     try { params = JSON.parse(body); } catch {
       return json(res, { error: 'Invalid JSON' }, 400);
     }
 
-    const { tileName, bgModel, source } = params;
+    const { tileName, source } = params;
     if (!tileName) return json(res, { error: 'Missing tileName' }, 400);
-
-    // Validate model against allowlist
-    const ALLOWED_BG_MODELS = ['fal-ai/imageutils/rembg', 'fal-ai/bria/background/remove'];
-    const resolvedBgModel = ALLOWED_BG_MODELS.includes(bgModel) ? bgModel : ALLOWED_BG_MODELS[0];
 
     // Sanitize — no path separators allowed
     const fname = tileName.replace(/[^a-z0-9_.-]/gi, '_');
@@ -415,16 +526,11 @@ const server = createServer(async (req, res) => {
     const filePath = join(fileDir, fname);
 
     try {
-      const fileBuffer = readFileSync(filePath);
-      // Detect JPEG vs PNG from magic bytes
-      const mime = (fileBuffer[0] === 0xFF && fileBuffer[1] === 0xD8) ? 'image/jpeg' : 'image/png';
-      const dataUri = `data:${mime};base64,${fileBuffer.toString('base64')}`;
-
-      console.log(`[bg-remove] Processing "${fname}" (${fileBuffer.length} bytes, ${mime}) via ${resolvedBgModel}...`);
-      const result = await callFalBgRemove(dataUri, resolvedBgModel);
-
-      const imgResp = await fetch(result.imageUrl);
-      const outBuffer = Buffer.from(await imgResp.arrayBuffer());
+      if (!rembgAvailable()) {
+        return json(res, { error: 'Python rembg is not available. Install it: pip install rembg' }, 500);
+      }
+      console.log(`[bg-remove] Processing "${fname}" via local Python rembg...`);
+      const outBuffer = sdRemoveBackground(filePath);
 
       // Overwrite in place — result is always PNG with alpha channel
       writeFileSync(filePath, outBuffer);
@@ -454,7 +560,7 @@ const server = createServer(async (req, res) => {
     const groups = [];
     for (const [name, variants] of groupMap) {
       variants.sort((a, b) => a.n - b.n);
-      
+
       // Check for in-game tiles (both name.png and name_N.png patterns).
       // A tile belongs to this group only if its parsed group matches —
       // never via naive prefix matching, so terrain_forest_feature*.png
@@ -473,7 +579,7 @@ const server = createServer(async (req, res) => {
           inGameTiles.push({ filename: f, path: `/api/game-tiles/${encodeURIComponent(f)}`, size: st.size, mtime: st.mtimeMs });
         }
       }
-      
+
       // For backward compatibility, keep inGame as single item or first found
       const inGame = inGameTiles.length > 0 ? inGameTiles[0] : null;
       groups.push({ name, variants, inGame, inGameTiles });
@@ -614,228 +720,123 @@ const server = createServer(async (req, res) => {
     return serveFile(res, safe, MIME[extname(fname).toLowerCase()] || 'image/png');
   }
 
-  // ─── API: list text-to-image models from fal.ai ──────────────────────
+  // ─── API: list models (local sd-server or fal.ai) ───────────────────
   if (pathname === '/api/models' && req.method === 'GET') {
-    if (!FAL_KEY) return json(res, { error: 'FAL_AI_KEY not set' }, 500);
-    try {
-      const resp = await fetch('https://api.fal.ai/v1/models?limit=500', {
-        headers: { 'Authorization': `Key ${FAL_KEY}` },
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status} from fal.ai`);
-      const data = await resp.json();
-      const t2i = (data.models || [])
-        .filter(m => ['text-to-image', 'image-to-image'].includes(m.metadata?.category))
-        .map(m => {
-          const eid = m.endpoint_id;
-          let dn = m.metadata.display_name
-            .replace(/ Text To Image$/, '')
-            .replace(/ Image To Image$/, '')
-            .replace(/ API$/, '')
-            .replace(/ Edit$/, '');
-          return {
-            id: eid,
-            name: dn,
+    if (BACKEND === 'fal') {
+      if (!FAL_KEY) return json(res, { error: 'FAL_AI_KEY not set (BACKEND=fal)' }, 500);
+      try {
+        const resp = await fetch('https://api.fal.ai/v1/models?limit=500', {
+          headers: { 'Authorization': `Key ${FAL_KEY}` },
+        });
+        if (!resp.ok) throw new Error(`fal.ai HTTP ${resp.status}`);
+        const data = await resp.json();
+        const t2i = (data.models || [])
+          .filter(m => ['text-to-image', 'image-to-image'].includes(m.metadata?.category))
+          .map(m => ({
+            id: m.endpoint_id,
+            name: (m.metadata?.display_name || m.endpoint_id)
+              .replace(/ (Text|Image) To Image?$/, '')
+              .replace(/ API$/, '')
+              .replace(/ Edit$/, ''),
             category: m.metadata?.category || 'image-to-image',
             isEdit: m.metadata?.category === 'image-to-image',
-            description: (m.metadata.description || '').split('\n')[0].slice(0, 200),
+            description: (m.metadata?.description || '').split('\n')[0].slice(0, 200),
             status: m.metadata?.status || 'unknown',
             pricing: null,
-          };
-        })
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      // Ensure the 4 hardcoded quick-select models are always present.
-      // They may be inactive or miscategorized in the API — include them
-      // anyway so the browser list is exhaustive.
-      const QUICK_SELECT_IDS = [
-        'fal-ai/flux.2-turbo',
-        'fal-ai/fast-sdxl',
-        'fal-ai/flux/schnell',
-        'fal-ai/flux/dev',
-        'fal-ai/stable-diffusion-v3.5',
-        'fal-ai/flux-2/turbo/edit',
-        'fal-ai/nano-banana-2/edit',
-      ];
-      const existingIds = new Set(t2i.map(m => m.id));
-      for (const id of QUICK_SELECT_IDS) {
-        if (!existingIds.has(id)) {
-          const name = id.replace('fal-ai/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          t2i.push({
-            id,
-            name,
-            category: id.includes('/edit') ? 'image-to-image' : 'text-to-image',
-            isEdit: id.includes('/edit'),
-            description: id.includes('/edit')
-              ? 'Image-to-image / variation (quick-select)'
-              : 'Quick-select model (not listed as text-to-image by fal.ai API)',
-            status: 'unknown',
-            pricing: null,
-          });
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const QUICK_SELECT_IDS = [
+          'fal-ai/flux-2/turbo', 'fal-ai/flux/schnell', 'fal-ai/flux/dev',
+          'fal-ai/fast-sdxl', 'fal-ai/stable-diffusion-v3.5',
+          'fal-ai/flux-2/turbo/edit', 'fal-ai/nano-banana-2/edit',
+        ];
+        const existing = new Set(t2i.map(m => m.id));
+        for (const id of QUICK_SELECT_IDS) {
+          if (!existing.has(id)) {
+            const name = id.replace('fal-ai/', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            t2i.push({
+              id, name,
+              category: id.includes('/edit') ? 'image-to-image' : 'text-to-image',
+              isEdit: id.includes('/edit'),
+              description: 'Quick-select model',
+              status: 'unknown',
+              pricing: null,
+            });
+          }
         }
+        t2i.sort((a, b) => a.name.localeCompare(b.name));
+        return json(res, { models: t2i });
+      } catch (err) {
+        console.error('[models] Error:', err);
+        return json(res, { error: String(err) }, 500);
       }
-      t2i.sort((a, b) => a.name.localeCompare(b.name));
-
-      return json(res, { models: t2i });
-    } catch (err) {
-      console.error('[models] Error:', err);
-      return json(res, { error: String(err) }, 500);
     }
+    return json(res, {
+      models: [{
+        id: 'flux-2-klein-4b',
+        name: 'Flux 2 Klein (local)',
+        category: 'text-to-image',
+        isEdit: false,
+        description: 'Local stable-diffusion.cpp sd-server — flux-2-klein-4b-Q4_K_S.gguf (txt2img only)',
+        status: 'ready',
+        pricing: null,
+      }],
+    });
   }
 
-  // ─── API: fetch live pricing from fal.ai Platform API ────────────────
+  // ─── API: pricing (local = free, fal = online) ──────────────────────
   if (pathname === '/api/pricing' && req.method === 'GET') {
-    if (!FAL_KEY) return json(res, { error: 'FAL_AI_KEY not set' }, 500);
     const idsParam = url.searchParams.get('ids');
-    if (!idsParam) return json(res, { error: 'Missing ?ids= comma-separated endpoint IDs' }, 400);
-    const ids = [...new Set(idsParam.split(',').map(s => s.trim()).filter(Boolean))];
-    if (ids.length === 0) return json(res, { error: 'No valid IDs' }, 400);
-    if (ids.length > 200) return json(res, { error: 'Too many IDs (max 200)' }, 400);
-
-    try {
-      const raw = await fetchPricingFromFal(ids);
-      const prices = {};
-      for (const id of ids) {
-        prices[id] = raw[id] ? classifyPricing(raw[id]) : { cost: '—', unit: '', type: 'unknown', note: 'No price info' };
-      }
-      return json(res, { prices });
-    } catch (err) {
-      console.error('[pricing] Error:', err);
-      return json(res, { error: String(err) }, 500);
+    const ids = idsParam ? [...new Set(idsParam.split(',').map(s => s.trim()).filter(Boolean))] : [];
+    const prices = {};
+    for (const id of ids) {
+      prices[id] = BACKEND === 'fal'
+        ? { cost: '—', unit: '', type: 'online', note: 'fal.ai (online, paid)' }
+        : { cost: 'free', unit: '', type: 'local', note: 'Local Stable Diffusion server' };
     }
+    return json(res, { prices });
   }
 
-// Estimate cache — short-lived (30s) to avoid hammering fal.ai on every keystroke
-const _estimateCache = new Map(); // key: "model:w:h" → { estimatedCost, currency, ... }
-
-  // ─── API: estimate generation cost ───────────────────────────────────
+  // ─── API: estimate generation cost (local = free, fal = online) ─────
   if (pathname === '/api/estimate-cost' && req.method === 'POST') {
-    if (!FAL_KEY) return json(res, { error: 'FAL_AI_KEY not set' }, 500);
-
     const body = await readBody(req);
     let params;
     try { params = JSON.parse(body); } catch {
       return json(res, { error: 'Invalid JSON' }, 400);
     }
-
-    const { model, width, height } = params;
-    if (!model) return json(res, { error: 'Missing model' }, 400);
-
-    const w = parseInt(width) || 512;
-    const h = parseInt(height) || 512;
+    const w = parseInt(params.width) || 512;
+    const h = parseInt(params.height) || 512;
     const megapixels = (w * h) / 1_000_000;
-
-    // Check short-lived cache (30s TTL)
-    const cacheKey = `${model}:${w}:${h}`;
-    const cached = _estimateCache.get(cacheKey);
-    if (cached && (Date.now() - cached.ts) < 30_000) {
-      return json(res, cached.data);
-    }
-
-    try {
-      // First get pricing to determine the unit type
-      const raw = await fetchPricingFromFal([model]);
-      const priceInfo = raw[model];
-
-      // If no pricing available, return local estimate immediately
-      if (!priceInfo || priceInfo.unit_price == null) {
-        const fallback = computeLocalEstimate(priceInfo, 1);
-        _estimateCache.set(cacheKey, { data: fallback, ts: Date.now() });
-        return json(res, fallback);
-      }
-
-      // Determine unit_quantity based on the billing unit
-      let unitQuantity;
-      if (priceInfo.unit === 'megapixels') {
-        unitQuantity = Math.max(0.001, megapixels);
-      } else if (priceInfo.unit === 'images' || priceInfo.unit === 'units') {
-        unitQuantity = 1;
-      } else if (priceInfo.unit === 'compute seconds') {
-        unitQuantity = 1;
-      } else {
-        unitQuantity = Math.max(0.001, megapixels);
-      }
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const resp = await fetch('https://api.fal.ai/v1/models/pricing/estimate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Key ${FAL_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          estimate_type: 'unit_price',
-          endpoints: { [model]: { unit_quantity: parseFloat(unitQuantity.toFixed(6)) } },
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-
-      if (!resp.ok) {
-        const errText = await resp.text();
-        // Rate limited — return a rough local estimate and cache it too
-        if (resp.status === 429) {
-          console.warn(`[estimate] Rate limited, using local estimate for ${model}`);
-          const fallback = computeLocalEstimate(priceInfo, unitQuantity);
-          _estimateCache.set(cacheKey, { data: fallback, ts: Date.now() });
-          return json(res, fallback);
-        }
-        console.error(`[estimate] HTTP ${resp.status}: ${errText.slice(0, 300)}`);
-        return json(res, { error: `Estimate failed: HTTP ${resp.status}` }, 500);
-      }
-
-      const data = await resp.json();
-      const result = {
-        estimatedCost: data.total_cost,
-        currency: data.currency || 'USD',
+    if (BACKEND === 'fal') {
+      return json(res, {
+        estimatedCost: null,
+        currency: 'USD',
         megapixels: parseFloat(megapixels.toFixed(4)),
-        unitQuantity: parseFloat(unitQuantity.toFixed(6)),
-        unit: priceInfo?.unit || 'unknown',
-      };
-      // Cache the result
-      _estimateCache.set(cacheKey, { data: result, ts: Date.now() });
-      return json(res, result);
-    } catch (err) {
-      console.error('[estimate] Error:', err);
-      return json(res, { error: String(err) }, 500);
-    }
-  }
-
-/** Compute a rough local estimate when the fal.ai estimate API is unavailable. */
-function computeLocalEstimate(priceInfo, unitQuantity) {
-  if (!priceInfo || priceInfo.unit_price == null) {
-    return { estimatedCost: 0, currency: 'USD', megapixels: 0, unitQuantity, unit: 'unknown', local: true };
-  }
-  return {
-    estimatedCost: parseFloat((priceInfo.unit_price * unitQuantity).toFixed(6)),
-    currency: priceInfo.currency || 'USD',
-    megapixels: 0,
-    unitQuantity: parseFloat(unitQuantity.toFixed(6)),
-    unit: priceInfo.unit || 'unknown',
-    local: true,
-  };
-}
-
-  // ─── API: debug/diagnostics ──────────────────────────────────────────
-  if (pathname === '/api/debug' && req.method === 'GET') {
-    const cacheEntries = [];
-    for (const [id, entry] of _pricingCache.entries()) {
-      cacheEntries.push({
-        id,
-        not_found: !!entry.not_found,
-        unit_price: entry.unit_price ?? null,
-        unit: entry.unit ?? null,
-        fetched_at: entry.fetched_at ? new Date(entry.fetched_at).toISOString() : null,
-        age_sec: entry.fetched_at ? Math.round((Date.now() - entry.fetched_at) / 1000) : null,
+        unitQuantity: 1,
+        unit: 'online',
       });
     }
     return json(res, {
+      estimatedCost: 0,
+      currency: 'USD',
+      megapixels: parseFloat(megapixels.toFixed(4)),
+      unitQuantity: 1,
+      unit: 'local',
+      local: true,
+    });
+  }
+
+  // ─── API: debug/diagnostics ──────────────────────────────────────────
+  if (pathname === '/api/debug' && req.method === 'GET') {
+    return json(res, {
       debug: DEBUG,
+      backend: BACKEND,
       falKey: FAL_KEY ? `Present (${FAL_KEY.length} chars)` : 'MISSING',
-      pricingCacheSize: _pricingCache.size,
-      pricingCache: cacheEntries.slice(0, 100), // limit to 100 entries
-      estimateCacheSize: _estimateCache.size,
-      estimateCacheKeys: [..._estimateCache.keys()].slice(0, 50),
+      falModel: FAL_MODEL,
+      sdServer: SD_SERVER,
+      sdServerUp: await sdServerUp(),
+      python: PYTHON,
+      rembg: rembgAvailable(),
       outputDir: OUTPUT_DIR,
       tileCount: existsSync(OUTPUT_DIR)
         ? readdirSync(OUTPUT_DIR).filter(f => /\.(png|jpg|jpeg|webp)$/i.test(f)).length
@@ -847,7 +848,10 @@ function computeLocalEstimate(priceInfo, unitQuantity) {
   if (pathname === '/api/test' && req.method === 'GET') {
     return json(res, {
       ok: true,
+      backend: BACKEND,
       falKey: FAL_KEY ? `Present (${FAL_KEY.length} chars)` : 'MISSING',
+      sdServer: SD_SERVER,
+      sdServerUp: await sdServerUp(),
       outputDir: OUTPUT_DIR,
       outputExists: existsSync(OUTPUT_DIR),
       tileCount: existsSync(OUTPUT_DIR)
@@ -861,222 +865,25 @@ function computeLocalEstimate(priceInfo, unitQuantity) {
   if (pathname.startsWith('/api/')) {
     return json(res, { error: 'Not found', path: pathname, method: req.method }, 404);
   }
+
+  // Serve the HTML UI
+  if (pathname === '/' || pathname === '/index.html') {
+    const index = join(__dirname, 'index.html');
+    return serveFile(res, index, MIME['.html']);
+  }
+
   res.writeHead(404);
   res.end('Not found');
 });
 
-async function callFalAI(model, prompt, width, height, imageUrl = null, strength = null) {
-  const falModel = model || 'fal-ai/fast-sdxl';
-  console.log(`[fal.ai] Generating with model "${falModel}"${imageUrl ? ' (image-to-image)' : ''}: "${prompt.slice(0, 80)}..."`);
-
-  // Helper: safely fetch and parse JSON with better error messages
-  async function fetchJSON(url, opts) {
-    const resp = await fetch(url, opts);
-    const text = await resp.text();
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status} from ${url}: ${text.slice(0, 300)}`);
-    }
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error(`Invalid JSON from ${url}: ${text.slice(0, 200)}`);
-    }
-  }
-
-  // Submit generation request
-  const submitData = await fetchJSON(`https://queue.fal.run/${falModel}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Key ${FAL_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(buildGenerateBody(falModel, prompt, width, height, imageUrl, strength)),
-  });
-
-  const requestId = submitData.request_id;
-  if (!requestId) throw new Error('No request_id in fal.ai submit response: ' + JSON.stringify(submitData).slice(0, 200));
-  console.log(`[fal.ai] Submitted — request_id: ${requestId}`);
-
-  // Use the URLs returned by fal.ai — some models (like flux/schnell) use a
-  // different base path than the model name (e.g. submit to /fal-ai/flux/schnell
-  // but status/result URLs use /fal-ai/flux without the /schnell suffix).
-  const statusUrl = submitData.status_url;
-  const resultUrl = submitData.response_url;
-  if (!statusUrl || !resultUrl) {
-    throw new Error('Missing status_url or response_url in submit response: ' + JSON.stringify(submitData).slice(0, 200));
-  }
-  console.log(`[fal.ai] Status URL: ${statusUrl}`);
-
-  // Poll for result
-  for (let attempt = 1; attempt <= 120; attempt++) {
-    await new Promise((r) => setTimeout(r, 1000));
-
-    const statusData = await fetchJSON(
-      statusUrl,
-      { headers: { 'Authorization': `Key ${FAL_KEY}` } },
-    );
-
-    console.log(`[fal.ai] Poll #${attempt}: ${statusData.status}`);
-
-    if (statusData.status === 'COMPLETED') {
-      const resultData = await fetchJSON(
-        resultUrl,
-        { headers: { 'Authorization': `Key ${FAL_KEY}` } },
-      );
-
-      const imageUrl = resultData?.images?.[0]?.url || resultData?.image?.url;
-      const contentType = resultData?.images?.[0]?.content_type || 'image/png';
-
-      if (!imageUrl) {
-        console.error('[fal.ai] Result had no image URL:', JSON.stringify(resultData).slice(0, 500));
-        throw new Error('No image URL in fal.ai response');
-      }
-      console.log(`[fal.ai] Done — image URL: ${imageUrl.slice(0, 80)}...`);
-      return { imageUrl, content_type: contentType };
-    }
-
-    if (statusData.status === 'FAILED') {
-      console.error('[fal.ai] Generation FAILED:', JSON.stringify(statusData));
-      throw new Error(`fal.ai generation failed: ${JSON.stringify(statusData).slice(0, 300)}`);
-    }
-  }
-
-  throw new Error('fal.ai generation timed out (120s)');
-}
-
-/**
- * Build the fal.ai request body, selecting the image-input field that a given
- * model family expects:
- *  - Nano Banana / Gemini edit endpoints are prompt+images only; they reject
- *    diffusion params like num_inference_steps / image_size.
- *  - Classic `.../image-to-image` endpoints use a single `image_url` plus an
- *    optional `strength` that controls variation intensity.
- *  - Everything else (FLUX.2 edit, FLUX.1 dev, kontext, etc.) uses an
- *    `image_urls` array.
- */
-function buildGenerateBody(model, prompt, width, height, imageUrl, strength) {
-  if (model.includes('nano-banana') || model.includes('gemini')) {
-    const body = { prompt };
-    if (imageUrl) body.image_urls = [imageUrl];
-    return body;
-  }
-
-  const numSteps = model.includes('schnell') ? 4
-    : (model.includes('flux-2') || model.includes('flux.2')) ? 8 : 28;
-
-  const body = {
-    prompt,
-    image_size: { width, height },
-    num_inference_steps: numSteps,
-  };
-
-  if (imageUrl) {
-    if (model.includes('/image-to-image')) {
-      body.image_url = imageUrl;
-      // strength = how far the variation drifts from the source (0 = unchanged)
-      if (strength != null) body.strength = strength;
-    } else {
-      body.image_urls = [imageUrl];
-    }
-  }
-
-  return body;
-}
-
-/**
- * Resolve a source-image reference into a base64 data URI that fal.ai accepts.
- * Accepts:
- *  - an existing `data:` URI (e.g. a client-side file upload), used as-is;
- *  - a server texture path like `/api/textures/foo.png` or `/api/game-tiles/foo.png`;
- *  - a bare filename, searched in TEXTURES_DIR then OUTPUT_DIR.
- * Returns null if the file cannot be found.
- */
-function resolveSourceToDataUri(ref) {
-  if (!ref) return null;
-  if (typeof ref === 'string' && ref.startsWith('data:')) return ref;
-
-  const pathOnly = String(ref).split('?')[0];
-  let filePath = null;
-
-  if (pathOnly.startsWith('/api/textures/')) {
-    const fname = decodeURIComponent(pathOnly.slice('/api/textures/'.length));
-    const cand = join(TEXTURES_DIR, fname);
-    if (existsSync(cand)) filePath = cand;
-  } else if (pathOnly.startsWith('/api/game-tiles/') || pathOnly.startsWith('/api/tiles/')) {
-    const prefix = pathOnly.startsWith('/api/game-tiles/') ? '/api/game-tiles/' : '/api/tiles/';
-    const fname = decodeURIComponent(pathOnly.slice(prefix.length));
-    const cand = join(OUTPUT_DIR, fname);
-    if (existsSync(cand)) filePath = cand;
-  } else {
-    const fname = decodeURIComponent(pathOnly.replace(/^\/+/, ''));
-    for (const dir of [TEXTURES_DIR, OUTPUT_DIR]) {
-      const cand = join(dir, fname);
-      if (existsSync(cand)) { filePath = cand; break; }
-    }
-  }
-
-  if (!filePath) return null;
-  const buf = readFileSync(filePath);
-  const mime = (buf[0] === 0xFF && buf[1] === 0xD8) ? 'image/jpeg' : 'image/png';
-  return `data:${mime};base64,${buf.toString('base64')}`;
-}
-
-async function callFalBgRemove(imageDataUri, model = 'fal-ai/imageutils/rembg') {
-  console.log(`[fal.ai] Submitting background removal to ${model}...`);
-
-  async function fetchJSON(url, opts) {
-    const resp = await fetch(url, opts);
-    const text = await resp.text();
-    if (!resp.ok) throw new Error(`HTTP ${resp.status} from ${url}: ${text.slice(0, 300)}`);
-    try { return JSON.parse(text); }
-    catch { throw new Error(`Invalid JSON from ${url}: ${text.slice(0, 200)}`); }
-  }
-
-  const submitData = await fetchJSON(`https://queue.fal.run/${model}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Key ${FAL_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ image_url: imageDataUri }),
-  });
-
-  const statusUrl = submitData.status_url;
-  const resultUrl = submitData.response_url;
-  if (!statusUrl || !resultUrl) {
-    throw new Error('Missing status_url or response_url in bg-remove response: ' + JSON.stringify(submitData).slice(0, 200));
-  }
-  console.log(`[fal.ai bg-remove] request_id: ${submitData.request_id}`);
-
-  for (let attempt = 1; attempt <= 60; attempt++) {
-    await new Promise((r) => setTimeout(r, 1000));
-
-    const statusData = await fetchJSON(statusUrl, { headers: { 'Authorization': `Key ${FAL_KEY}` } });
-    console.log(`[fal.ai bg-remove] Poll #${attempt}: ${statusData.status}`);
-
-    if (statusData.status === 'COMPLETED') {
-      const resultData = await fetchJSON(resultUrl, { headers: { 'Authorization': `Key ${FAL_KEY}` } });
-      const imageUrl = resultData?.image?.url;
-      if (!imageUrl) throw new Error('No image URL in bg-remove result: ' + JSON.stringify(resultData).slice(0, 300));
-      console.log(`[fal.ai bg-remove] Done — ${imageUrl.slice(0, 80)}...`);
-      return { imageUrl };
-    }
-
-    if (statusData.status === 'FAILED') {
-      throw new Error(`fal.ai bg-remove failed: ${JSON.stringify(statusData).slice(0, 300)}`);
-    }
-  }
-
-  throw new Error('fal.ai bg-remove timed out (60s)');
-}
-
 server.listen(PORT, () => {
   console.log(`\n🎨  Tile Generator running at http://localhost:${PORT}`);
-  if (!FAL_KEY) {
-    console.warn('⚠️  FAL_AI_KEY not set — generation will not work.');
-    console.warn('   Export it:  export FAL_AI_KEY=your-api-key\n');
+  if (BACKEND === 'fal') {
+    console.log(`☁️  Backend: fal.ai — ${FAL_MODEL} (${FAL_KEY ? `key ${FAL_KEY.length} chars` : 'FAL_AI_KEY MISSING'})`);
   } else {
-    console.log(`🔑 FAL_AI_KEY loaded (${FAL_KEY.length} chars)`);
+    console.log(`🖥️  Backend: local SD — ${SD_SERVER} (${sdServerUp() ? 'online' : 'OFFLINE — start the sd-server first'})`);
+    console.log('   Switch backend with: BACKEND=fal FAL_AI_KEY=...');
   }
-  console.log(`📁 Images saved to: ${OUTPUT_DIR}\n`);
+  console.log(`🧹  Background removal: local Python rembg (${rembgAvailable() ? 'available' : 'MISSING — pip install rembg'})`);
+  console.log(`📁  Images saved to: ${OUTPUT_DIR}\n`);
 });

@@ -4,30 +4,12 @@ import { TERRAIN_PRESETS, FEATURE_PRESETS } from '../presets';
 import type { FalModel, TextureGroup } from '../types';
 import './GeneratePanel.css';
 
-const DEFAULT_MODEL = 'fal-ai/flux-2/turbo';
-const QUICK_MODEL_IDS = [
-  'fal-ai/flux-2/turbo',
-  'fal-ai/flux/schnell',
-  'fal-ai/flux/dev',
-  'fal-ai/fast-sdxl',
-  'fal-ai/flux-2/turbo/edit',
-  'fal-ai/nano-banana-2/edit',
-  'fal-ai/flux/dev/image-to-image',
-];
+const DEFAULT_MODEL = 'flux-2-klein-4b';
+const QUICK_MODEL_IDS = ['flux-2-klein-4b'];
+// Local Stable Diffusion server — background removal runs via local Python rembg.
 const BG_MODELS = [
-  { id: 'fal-ai/imageutils/rembg', label: 'rembg — Fast & Cheap ⚡' },
-  { id: 'fal-ai/bria/background/remove', label: 'BRIA — Higher Quality' },
+  { id: 'local-rembg', label: 'rembg (local)' },
 ];
-
-/** Heuristic: is this an image-to-image / edit endpoint that needs a source? */
-function isEditModel(model: string): boolean {
-  return (
-    model.includes('/edit') ||
-    model.includes('/image-to-image') ||
-    model.includes('nano-banana') ||
-    model.includes('kontext')
-  );
-}
 
 interface Props {
   onGenerated: () => void;
@@ -45,6 +27,7 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
   const [tileName, setTileName] = useState('');
   const [width, setWidth] = useState(256);
   const [height, setHeight] = useState(256);
+  const [steps, setSteps] = useState(4); // sampling iterations (steps)
   const [autoRemoveBg, setAutoRemoveBg] = useState(false);
   const [bgModel, setBgModel] = useState(BG_MODELS[0].id);
   const [variationCount, setVariationCount] = useState(1);
@@ -92,9 +75,8 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
     if (!pendingSource) return;
     setSourceImage(pendingSource.path);
     setSourceName(pendingSource.name);
-    // Make sure we're using an image-to-image model so the source is used.
-    setModel(prev => (isEditModel(prev) ? prev : 'fal-ai/flux-2/turbo/edit'));
-    setStatus({ text: `Source set: ${pendingSource.name} — choose an edit model or vary the prompt.`, type: 'idle' });
+    // The source drives img2img — denoising strength is the "Strength" slider.
+    setStatus({ text: `Source set: ${pendingSource.name} — will be used for img2img.`, type: 'idle' });
     onPendingSourceConsumed?.();
   }, [pendingSource, onPendingSourceConsumed]);
 
@@ -161,10 +143,6 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
       setStatus({ text: 'Enter a prompt and tile name.', type: 'error' });
       return;
     }
-    if (isEditModel(model) && !sourceImage) {
-      setStatus({ text: 'Image-to-image model selected — pick or upload a source image.', type: 'error' });
-      return;
-    }
     setGenerating(true);
     const count = Math.max(1, Math.min(10, variationCount));
     setStatus({ text: `Generating ${count} variation${count > 1 ? 's' : ''}…`, type: 'idle' });
@@ -180,8 +158,9 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
           tileName: tileName.trim(),
           width,
           height,
+          steps,
           imageUrl: sourceImage,
-          strength: isEditModel(model) ? strength : null,
+          strength,
         });
         if (!result.ok) {
           setStatus({ text: result.error ?? 'Generation failed', type: 'error' });
@@ -228,13 +207,7 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
             value={model}
             onChange={e => setModel(e.target.value)}
           >
-            <option value="fal-ai/flux-2/turbo">Flux 2 Turbo ⚡</option>
-            <option value="fal-ai/flux-2/turbo/edit">Flux 2 Turbo Edit ✏️</option>
-            <option value="fal-ai/nano-banana-2/edit">Nano Banana 2 Edit 🍌</option>
-            <option value="fal-ai/flux/dev/image-to-image">Flux Dev Img2Img 🔁</option>
-            <option value="fal-ai/flux/schnell">Flux Schnell</option>
-            <option value="fal-ai/flux/dev">Flux Dev</option>
-            <option value="fal-ai/fast-sdxl">Fast SDXL</option>
+            <option value="flux-2-klein-4b">Flux 2 Klein (local) ⚡</option>
             {!QUICK_MODEL_IDS.includes(model) && (
               <option value={model}>{model}</option>
             )}
@@ -310,6 +283,22 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
         </div>
       </section>
 
+      {/* Iterations (sampling steps) */}
+      <section className="gen-section">
+        <h3>Iterations (steps)</h3>
+        <div className="variation-row">
+          <input
+            className="field-input"
+            type="number"
+            value={steps}
+            min={1}
+            max={50}
+            onChange={e => setSteps(Math.max(1, Math.min(50, Number(e.target.value))))}
+          />
+          <span className="variation-hint">sampling steps — more = higher quality, slower</span>
+        </div>
+      </section>
+
       {/* Tile name */}
       <section className="gen-section">
         <h3>Tile Name</h3>
@@ -339,48 +328,44 @@ export default function GeneratePanel({ onGenerated, pendingSource, onPendingSou
         </div>
       </section>
 
-      {/* Source image + strength — only for image-to-image / edit models */}
-      {isEditModel(model) && (
-        <>
-          <section className="gen-section">
-            <h3>Source Image</h3>
-            {sourceImage ? (
-              <div className="source-preview">
-                <img src={sourceImage} alt="Source" className="source-thumb" />
-                <div className="source-meta">
-                  <span className="source-name" title={sourceName}>{sourceName || 'source'}</span>
-                  <button className="btn-secondary" onClick={clearSource}>Clear</button>
-                </div>
-              </div>
-            ) : (
-              <p className="source-empty">No source selected — pick an existing texture or upload one.</p>
-            )}
-            <div className="source-actions">
-              <button className="btn-secondary" onClick={openSourcePicker}>Pick texture…</button>
-              <label className="btn-secondary source-upload-label">
-                Upload…
-                <input type="file" accept="image/*" onChange={handleSourceUpload} />
-              </label>
+      {/* Source image (img2img) + strength */}
+      <section className="gen-section">
+        <h3>Source Image (img2img)</h3>
+        {sourceImage ? (
+          <div className="source-preview">
+            <img src={sourceImage} alt="Source" className="source-thumb" />
+            <div className="source-meta">
+              <span className="source-name" title={sourceName}>{sourceName || 'source'}</span>
+              <button className="btn-secondary" onClick={clearSource}>Clear</button>
             </div>
-          </section>
+          </div>
+        ) : (
+          <p className="source-empty">No source selected — pick or upload one (optional; leave empty for text-to-image).</p>
+        )}
+        <div className="source-actions">
+          <button className="btn-secondary" onClick={openSourcePicker}>Pick texture…</button>
+          <label className="btn-secondary source-upload-label">
+            Upload…
+            <input type="file" accept="image/*" onChange={handleSourceUpload} />
+          </label>
+        </div>
+      </section>
 
-          <section className="gen-section">
-            <h3>Strength</h3>
-            <div className="strength-row">
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={strength}
-                onChange={e => setStrength(Number(e.target.value))}
-              />
-              <span className="strength-value">{strength.toFixed(2)}</span>
-            </div>
-            <p className="field-hint">Higher = more variation from the source. Lower = closer to the original.</p>
-          </section>
-        </>
-      )}
+      <section className="gen-section">
+        <h3>Strength</h3>
+        <div className="strength-row">
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={strength}
+            onChange={e => setStrength(Number(e.target.value))}
+          />
+          <span className="strength-value">{strength.toFixed(2)}</span>
+        </div>
+        <p className="field-hint">Denoising strength for img2img (needs a source image). Higher = more change from the source.</p>
+      </section>
 
       {/* Remove BG */}
       <section className="gen-section">

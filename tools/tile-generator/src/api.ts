@@ -14,6 +14,7 @@ export async function generate(params: {
   tileName: string;
   width: number;
   height: number;
+  steps?: number;
   imageUrl?: string | null;
   strength?: number | null;
 }): Promise<GenerateResult> {

@@ -55,9 +55,8 @@ debugging game-engine logic, AI behaviour, rendering, or UI issues.
 
 ## Tile Generator & Terrain Textures
 
-The AI tile generator lives in the sibling `tile-generator/` folder (repo root) and writes its
-output directly into `Zivilisation_1/public/assets/tiles/`. It is a Wesnoth-style **two-layer**
-system:
+The AI tile generator lives in `tools/tile-generator/` and writes its output directly into
+`Zivilisation_1/public/assets/tiles/`. It is a Wesnoth-style **two-layer** system:
 
 - **Layer 1 — base ground tiles**: 256×256, flat top-down, seamless. Named `terrain_<type>.png`.
 - **Layer 2 — feature sprites**: 256×384 (1.5:1), transparent background. Named
@@ -65,12 +64,27 @@ system:
 
 ### Running it
 ```bash
-cd tile-generator
-npm start                     # UI + proxy server on http://localhost:3456 (needs FAL_AI_KEY)
-FAL_AI_KEY=... node generate_terrain_v4.mjs   # batch-generate the current terrain set
+cd tools/tile-generator
+npm start                     # UI + API server on http://localhost:3456 (uses the local SD server)
+node generate_terrain_v4.mjs  # batch-generate the current terrain set
 ```
-`generate_terrain_v4.mjs` is the current script — it uses `fal-ai/flux-2/turbo`. Older scripts
-(`generate_terrain.mjs`, `_v2.mjs`, `_v3.mjs`) are kept for history; update v4, don't add v5.
+`generate_terrain_v4.mjs` is the current batch script. The generator supports **two backends**,
+selected with the `BACKEND` env var (`local` default, or `fal`):
+
+- **`BACKEND=local`** (default): the local Stable Diffusion server
+  (`http://127.0.0.1:8081/` — the `sd-server` from stable-diffusion.cpp, Flux.2 klein). No API key.
+- **`BACKEND=fal`**: the online fal.ai API (`fal-ai/flux-2/turbo` by default, override with
+  `FAL_MODEL`). Requires `FAL_AI_KEY`.
+
+```bash
+node generate_terrain_v4.mjs                     # local backend
+BACKEND=fal FAL_AI_KEY=... node generate_terrain_v4.mjs   # online backend
+```
+
+The same `BACKEND` env var switches the UI server (`npm start` / `npm run dev`) between the local
+sd-server and fal.ai. Feature-sprites background removal always runs locally via Python `rembg`
+(`pip install rembg`). Older scripts (`generate_terrain.mjs`, `_v2.mjs`, `_v3.mjs`) are kept in
+git history; update v4, don't add v5.
 
 ### Feature sprite rules (important)
 - Aspect ratio is **1.5:1 (256×384)**, NOT 2:1. The lower 256×256 sits on the tile; only the
