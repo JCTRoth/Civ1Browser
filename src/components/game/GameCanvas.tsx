@@ -62,6 +62,10 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const animationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticRenderedRef = useRef<boolean>(false);
   const terrainRebuildNeededRef = useRef<boolean>(false);
+  // Tracks whether the starting settler has already been auto-selected for the
+  // current game. Prevents the "select starting settler" effect from re-running
+  // on every `units` change (load, unit movement, turn processing).
+  const initialSettlerSelectionDoneRef = useRef<boolean>(false);
   const [texturesLoaded, setTexturesLoaded] = useState(false);
 
   // ---- Touch / gesture state (mobile support) ----
@@ -353,11 +357,29 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     }
   }, [mapData.visibility, mapData.revealed, mapData.height, mapData.width, mapData.tiles]);
 
-  // Select player's starting settler when game starts
+  // Select player's starting settler when a game starts.
+  // This runs ONLY once per new game. Without the guard it re-fires on every
+  // `units` change (loading a save, each unit move, turn processing), which
+  // re-selects the starting settler mid-game and overrides the unit-turn-queue's
+  // correct selection while the camera stays on the queue unit — the
+  // "settler is selected but the camera moves to another unit" bug.
   useEffect(() => {
-    if (units && units.length > 0 && gameState.isGameStarted) {
+    // Reset the one-time flag whenever no game is active (fresh game / quit),
+    // so a newly started game can re-run the initial settler selection.
+    if (!gameState.isGameStarted) {
+      initialSettlerSelectionDoneRef.current = false;
+      return;
+    }
+    // Only auto-select the starting settler once, and only on the first turn of
+    // a game. Loading a mid-game save (currentTurn > 1) must NOT re-select the
+    // settler — the unit-turn-queue owns unit selection from then on.
+    if (initialSettlerSelectionDoneRef.current || gameState.currentTurn !== 1) {
+      return;
+    }
+    if (units && units.length > 0) {
       const playerSettler = units.find(u => u.civilizationId === 0 && u.type === 'settler');
       if (playerSettler) {
+        initialSettlerSelectionDoneRef.current = true;
         setSelectedHex({ col: playerSettler.col, row: playerSettler.row });
         // Also select the unit in the store
         if (actions && typeof actions.selectUnit === 'function') {
@@ -404,7 +426,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         }
       }
     }
-  }, [units, gameState.isGameStarted, actions, mapData, terrain]);
+  }, [units, gameState.isGameStarted, gameState.currentTurn, actions, mapData, terrain]);
 
   // Focus the canvas when game engine is available for keyboard controls
   useEffect(() => {
