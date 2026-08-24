@@ -520,14 +520,17 @@ export class DiplomacyManager {
         if (!techOffered || !techRequested) return { accepted: false, reason: 'Must specify both technologies' };
         const fromCiv = this.gameEngine.civilizations?.[fromCivId];
         const toCiv = this.gameEngine.civilizations?.[toCivId];
+        // Engine civs store technologies as a string[] (Set methods would throw).
+        const fromTechs = fromCiv?.technologies;
+        const toTechs = toCiv?.technologies;
         // Verify both sides have what they claim
-        const fromHas = fromCiv?.technologies?.has?.(techOffered) ?? false;
-        const toHas = toCiv?.technologies?.has?.(techRequested) ?? false;
+        const fromHas = !!fromTechs && fromTechs.includes(techOffered);
+        const toHas = !!toTechs && toTechs.includes(techRequested);
         if (!fromHas) return { accepted: false, reason: 'You do not have the offered technology' };
         if (!toHas) return { accepted: false, reason: 'They do not have the requested technology' };
         // Exchange: add techs to both sides
-        if (fromCiv?.technologies?.add) fromCiv.technologies.add(techRequested);
-        if (toCiv?.technologies?.add) toCiv.technologies.add(techOffered);
+        if (fromTechs && !fromTechs.includes(techRequested)) fromTechs.push(techRequested);
+        if (toTechs && !toTechs.includes(techOffered)) toTechs.push(techOffered);
         this.logEvent({
           type: 'tech_exchanged',
           fromCivId,
