@@ -11,8 +11,8 @@ module.exports = {
   plugins: ['@typescript-eslint', 'react-refresh'],
   overrides: [
     {
-      // Node.js runtime files (Vite config, build/test scripts) — no browser env.
-      files: ['vite.config.js', 'scripts/**/*.mjs', 'scripts/**/*.js', 'e2e/**/*.ts', 'e2e/**/*.js', 'playwright.config.ts'],
+      // Node.js runtime files (Vite config, build/test scripts, tile-generator) — no browser env.
+      files: ['vite.config.js', 'scripts/**/*.mjs', 'scripts/**/*.js', 'e2e/**/*.ts', 'e2e/**/*.js', 'playwright.config.ts', 'tools/tile-generator/**/*.mjs'],
       env: { node: true },
     },
   ],
