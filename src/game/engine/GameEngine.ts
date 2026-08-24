@@ -1727,7 +1727,7 @@ export default class GameEngine {
     // its tile with an enemy the attacker itself may come back first and the
     // tile would be treated as "allied". For the same-tile case scan explicitly
     // for a stacked enemy so a same-tile attack is allowed.
-    let targetUnit = this.getUnitAt(targetCol, targetRow);
+    const targetUnit = this.getUnitAt(targetCol, targetRow);
     if (targetCol === unit.col && targetRow === unit.row) {
       const stackedEnemy = this.units.find(u => u.col === targetCol && u.row === targetRow
         && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);

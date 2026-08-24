@@ -24,6 +24,7 @@ import { AIResearch } from './AIResearch';
 import { createDefaultAIState } from './AITypes';
 import { serializeCities } from '../../utils/CitySnapshots';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
+import type { ProcessTurnResult } from './EconomicManager';
 import type { City, Civilization, Unit } from '../../../types/game';
 import GameEngine from './GameEngine';
 
@@ -780,9 +781,9 @@ export class TurnManager {
     const population = Number(city.population ?? 1);
     // Purchased settlers do NOT consume population or destroy the city —
     // only shield-based production triggers the Civ1 settler rule.
-    const destroysCity = isSettler && population <= 1 && !isChieftain;
+    const destroysCity = isSettler && population <= 1 && !isChieftain && !isPurchased;
 
-    if (isSettler && population > 1) {
+    if (isSettler && population > 1 && !isPurchased) {
       // Civ1 consumes exactly one citizen when the settler completes.
       city.population = population - 1;
       city.foodNeeded = Math.max(20, city.population * 20);
@@ -902,7 +903,7 @@ export class TurnManager {
     }
   }
 
-  private processCivilizationResources(civ: Civilization): { food: number; production: number; trade: number; science: number; gold: number } {
+  private processCivilizationResources(civ: Civilization): ProcessTurnResult | null {
     try {
       if (civ?.resources && this.gameEngine.economicManager) {
         // Rate-based income (tax/science/luxury split) + upkeep + deficit
