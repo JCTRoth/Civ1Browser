@@ -281,7 +281,8 @@ function App() {
 
     // Listen for end turn confirmation requests (automatic from engine)
     const handleShowEndTurnConfirmation = () => {
-      console.log('[App] Received showEndTurnConfirmation event - automatic trigger');
+      const s = useGameStore.getState().settings;
+      console.log(`[AUTO-END] App received showEndTurnConfirmation event (autoEndTurn: ${s.autoEndTurn}, skipConfirm: ${s.skipEndTurnConfirmation}) — routing to processEndTurn`);
       processEndTurn(true);
     };
 

@@ -137,6 +137,10 @@ export default class GameEngine {
   // for the post-end summary notification.
   lastAutoEndSummary: string | null = null;
 
+  /** Monotonic sequence counter for checkAndEndTurnIfNoMoves calls, so the
+   *  auto-end trace can be correlated across GameEngine → router → App. */
+  private autoEndCheckCounter = 0;
+
   // Getter for turnManager (alias for roundManager)
   get turnManager() {
     return this.roundManager;
@@ -1731,7 +1735,7 @@ export default class GameEngine {
         distance,
       });
     }
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('trade-route-established');
     return { success: true, gold: payout, science: payout };
   }
 
@@ -2031,7 +2035,7 @@ export default class GameEngine {
         this.unitTurnQueue.checkUnitStatus(unitId);
       }
       if (this.activePlayer === unit.civilizationId) {
-        this.checkAndEndTurnIfNoMoves();
+        this.checkAndEndTurnIfNoMoves('combat-unit-done');
       }
 
       // combatUnit returns boolean success currently; normalize
@@ -2137,7 +2141,7 @@ export default class GameEngine {
             this.unitTurnQueue.removeUnit(unitId);
           }
           if (this.activePlayer === unit.civilizationId) {
-            this.checkAndEndTurnIfNoMoves();
+            this.checkAndEndTurnIfNoMoves('scout-rush-captured');
           }
           if (this.onStateChange) {
             this.onStateChange('CITY_CAPTURED', {
@@ -2175,7 +2179,7 @@ export default class GameEngine {
         }
       }
       if (this.activePlayer === unit.civilizationId) {
-        this.checkAndEndTurnIfNoMoves();
+        this.checkAndEndTurnIfNoMoves('city-combat-done');
       }
 
       if (result === 'captured') {
@@ -2296,7 +2300,7 @@ export default class GameEngine {
       }
 
       // Check if turn should end automatically
-      this.checkAndEndTurnIfNoMoves();
+      this.checkAndEndTurnIfNoMoves('unit-moved');
 
       return { success: true };
     }
@@ -2757,7 +2761,7 @@ export default class GameEngine {
       }
 
       // Check if turn should end automatically
-      this.checkAndEndTurnIfNoMoves();
+      this.checkAndEndTurnIfNoMoves('combat-win');
       
       return true;
     } else {
@@ -2802,7 +2806,7 @@ export default class GameEngine {
       }
 
       // Check if turn should end automatically
-      this.checkAndEndTurnIfNoMoves();
+      this.checkAndEndTurnIfNoMoves('combat-defeat');
       
       return false;
     }
@@ -3064,7 +3068,7 @@ export default class GameEngine {
       this.units = this.units.filter(u => u.id !== settlerId);
       this.unitTurnQueue?.removeUnit(settlerId);
       this.onStateChange?.('CITY_JOINED', { city: cityAtLocation, settler });
-      this.checkAndEndTurnIfNoMoves();
+      this.checkAndEndTurnIfNoMoves('settler-joined-city');
       return true;
     }
 
@@ -3149,7 +3153,7 @@ export default class GameEngine {
     this.checkSettlerRushCapture(city);
 
     // Check if turn should end automatically after founding city
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('city-founded');
 
     return true;
   }
@@ -3242,8 +3246,9 @@ export default class GameEngine {
    * Check if current player has any units with moves remaining, and end turn if not
    * Only considers ACTIVE units (not sleeping or fortified) for auto-end turn
    */
-  checkAndEndTurnIfNoMoves() {
-    console.log('[TURN] checkAndEndTurnIfNoMoves: Checking active player', this.activePlayer);
+  checkAndEndTurnIfNoMoves(reason = 'unknown') {
+    const checkSeq = ++this.autoEndCheckCounter;
+    console.log(`[TURN] ▶ checkAndEndTurnIfNoMoves #${checkSeq} (trigger: ${reason}, activePlayer: ${this.activePlayer})`);
     
     // Don't auto-end the turn while the game is paused — the player paused
     // because they want the action to stop, not to skip ahead.
@@ -3637,7 +3642,7 @@ export default class GameEngine {
       }
 
       // Check if this was the last unit with moves, and end turn if so
-      this.checkAndEndTurnIfNoMoves();
+      this.checkAndEndTurnIfNoMoves('unit-skipped');
 
       if (this.onStateChange) {
         this.onStateChange('UNIT_SKIPPED', { unit });
@@ -3781,7 +3786,7 @@ export default class GameEngine {
     if (this.unitTurnQueue) {
       this.unitTurnQueue.checkUnitStatus(unitId);
     }
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('unit-slept');
 
     if (this.onStateChange) {
       this.onStateChange('UNIT_SLEPT', { unit });
@@ -3831,7 +3836,7 @@ export default class GameEngine {
     if (this.unitTurnQueue) {
       this.unitTurnQueue.checkUnitStatus(unitId);
     }
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('unit-fortified');
 
     if (this.onStateChange) {
       this.onStateChange('UNIT_FORTIFIED', { unit });
@@ -3903,7 +3908,7 @@ export default class GameEngine {
         result = this.diplomacyManager.gatherIntelligence(diplomat.civilizationId, targetCivId);
         diplomat.movesRemaining = 0;
         if (this.unitTurnQueue) this.unitTurnQueue.checkUnitStatus(diplomatId);
-        if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves();
+        if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves('diplomat-gather-intelligence');
         return { success: true, type: 'intelligence', report: result };
 
       case 'propose_peace':
@@ -3918,7 +3923,7 @@ export default class GameEngine {
         });
         diplomat.movesRemaining = 0;
         if (this.unitTurnQueue) this.unitTurnQueue.checkUnitStatus(diplomatId);
-        if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves();
+        if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves('diplomat-proposal');
         return { success: true, type: 'proposal', response: result };
 
       case 'bribe_unit': {
@@ -3932,7 +3937,7 @@ export default class GameEngine {
             // Diplomat is consumed after bribery attempt
             this.units = this.units.filter(u => u.id !== diplomatId);
             if (this.unitTurnQueue) this.unitTurnQueue.checkUnitStatus(diplomatId);
-            if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves();
+            if (this.activePlayer === diplomat.civilizationId) this.checkAndEndTurnIfNoMoves('diplomat-bribe');
             return { success: true, type: 'bribe', response: result };
           }
         }
@@ -4008,7 +4013,7 @@ export default class GameEngine {
     if (this.unitTurnQueue) {
       this.unitTurnQueue.checkUnitStatus(unitId);
     }
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('improvement-work-started');
     return true;
   }
 
@@ -4250,7 +4255,7 @@ export default class GameEngine {
       this.unitTurnQueue.checkUnitStatus(unitId);
     }
 
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('pollution-cleaned');
     return true;
   }
 
@@ -4301,7 +4306,7 @@ export default class GameEngine {
     }
 
     // Check if turn should end automatically
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('unit-attached');
 
     return true;
   }
@@ -4341,7 +4346,7 @@ export default class GameEngine {
       this.onStateChange('UNIT_DISBANDED', { unit });
     }
 
-    this.checkAndEndTurnIfNoMoves();
+    this.checkAndEndTurnIfNoMoves('unit-disbanded');
     return true;
   }
 

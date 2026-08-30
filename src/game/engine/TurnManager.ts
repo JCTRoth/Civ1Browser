@@ -287,7 +287,7 @@ export class TurnManager {
         // After GoTo paths are processed and queue is initialized, check if turn should auto-end
         // (GoTo movements may have consumed all unit moves, leaving nothing for the player to do)
         if (this.gameEngine.checkAndEndTurnIfNoMoves) {
-          this.gameEngine.checkAndEndTurnIfNoMoves();
+          this.gameEngine.checkAndEndTurnIfNoMoves('turn-start');
         }
         break;
       case TurnPhase.CITY_PRODUCTION:

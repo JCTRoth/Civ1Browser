@@ -402,7 +402,7 @@ export class EngineEventRouter {
       setTimeout(() => {
         this.actions.removeCombatAnimation(id);
         if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
-          this.gameEngine.checkAndEndTurnIfNoMoves();
+          this.gameEngine.checkAndEndTurnIfNoMoves('combat-animation-ended');
         }
       }, animation.duration + animation.deathBlinkDuration + 200);
     }
@@ -510,7 +510,7 @@ export class EngineEventRouter {
       setTimeout(() => {
         this.actions.removeCombatAnimation(id);
         if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
-          this.gameEngine.checkAndEndTurnIfNoMoves();
+          this.gameEngine.checkAndEndTurnIfNoMoves('combat-animation-ended');
         }
       }, animation.duration + animation.deathBlinkDuration + 100);
     }
@@ -597,10 +597,11 @@ export class EngineEventRouter {
   private onCheckAutoEndTurn() {
     const state = useGameStore.getState();
     const settings = state.settings;
-    console.log('[EngineEventRouter] Checking auto end turn. Setting enabled:', settings.autoEndTurn);
+    const activePlayer = this.gameEngine?.activePlayer ?? '?';
+    console.log(`[AUTO-END] CHECK_AUTO_END_TURN received (activePlayer: ${activePlayer}, autoEndTurn: ${settings.autoEndTurn}, skipConfirm: ${settings.skipEndTurnConfirmation})`);
 
     if (!settings.autoEndTurn) {
-      console.log('[EngineEventRouter] Auto end turn disabled, waiting for manual turn end');
+      console.log('[AUTO-END] Auto end turn disabled, waiting for manual turn end');
       return;
     }
 
@@ -615,11 +616,11 @@ export class EngineEventRouter {
     const decisionScreenOpen = this.isDecisionScreenOpen(state.uiState?.activeDialog ?? null);
     const combatActive = (state.combatAnimations ?? []).length > 0;
     if (decisionScreenOpen || combatActive) {
-      console.log(`[EngineEventRouter] Auto end turn deferred (dialog: ${state.uiState?.activeDialog ?? 'none'}, combat: ${combatActive})`);
+      console.log(`[AUTO-END] Auto end turn DEFERRED (dialog: ${state.uiState?.activeDialog ?? 'none'}, combat: ${combatActive}) — will re-check when it closes`);
       return;
     }
 
-    console.log('[EngineEventRouter] Auto-end reached - asking player to confirm via End Turn dialog');
+    console.log('[AUTO-END] Auto-end reached — asking player to confirm via End Turn dialog');
     // Ask the player to confirm instead of ending instantly, so they get a
     // chance to cancel (wake a unit, adjust a city, …). The App shows the
     // "All Your Units Have Moved!" modal; with skipEndTurnConfirmation enabled
