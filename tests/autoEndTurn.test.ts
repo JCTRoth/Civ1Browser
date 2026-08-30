@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
+import { MIN_CITY_CENTER_DISTANCE } from '@/game/engine/SettlementEvaluator';
 
 /**
  * Auto End Turn + city founding behavior.
@@ -43,8 +44,9 @@ describe('Auto End Turn + city founding', () => {
         const tile = (engine as any).getTileAt?.(col, row);
         if (!tile || tile.type === 'OCEAN' || tile.type === 'ocean') continue;
         const tooClose = engine.cities.some((c: any) => {
-          const d = Math.abs(c.col - col) + Math.abs(c.row - row);
-          return d < 3;
+          // foundCityWithSettler enforces MIN_CITY_CENTER_DISTANCE (Chebyshev).
+          const d = Math.max(Math.abs(c.col - col), Math.abs(c.row - row));
+          return d < MIN_CITY_CENTER_DISTANCE;
         });
         if (!tooClose) return { col, row };
       }

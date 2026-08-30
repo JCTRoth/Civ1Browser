@@ -110,19 +110,22 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     return 'Unknown';
   };
 
-  // Dialogs that defer auto-end while open; closing one re-checks auto-end
-  // (city management + diplomacy, where the player may still be deciding).
-  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report', 'village', 'upkeep-disbanded', 'trade-route-result'];
+  // Dialogs that do NOT defer auto-end while open (they never block it), so
+  // closing them must not trigger a re-check. Everything else defers auto-end
+  // while open (see EngineEventHandlers.isDecisionScreenOpen) and MUST re-check
+  // on close — otherwise auto-end silently stops after closing a rates /
+  // government / statistics / diplomacy / village modal.
+  const NON_BLOCKING_DIALOGS = ['game-menu', 'help', 'tech', 'hex-details'];
 
   const handleCloseDialog = () => {
     const closing = useGameStore.getState().uiState.activeDialog;
     actions.hideDialog();
-    // Re-check auto-end turn after a screen that defers it closes: city
-    // management or diplomacy. Once closed, end the turn if every unit is done
-    // and auto-end is enabled. Other dialogs (WORLD menu, tech, help, hex
-    // details) do not block auto-end and must not trigger a re-check,
-    // otherwise closing them could prematurely end the turn.
-    if (AUTO_END_BLOCKING_DIALOGS.includes(closing) &&
+    // Re-check auto-end after any screen that defers it closes (city
+    // management, diplomacy, rates, government, statistics, village, …). Once
+    // closed, end the turn if every unit is done and auto-end is enabled.
+    // Non-blocking dialogs (WORLD menu, tech, help, hex details) never defer
+    // auto-end, so closing them must not trigger a re-check.
+    if (!NON_BLOCKING_DIALOGS.includes(closing) &&
         gameEngine && typeof gameEngine.checkAndEndTurnIfNoMoves === 'function') {
       gameEngine.checkAndEndTurnIfNoMoves();
     }

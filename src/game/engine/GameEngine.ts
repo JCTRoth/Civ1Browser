@@ -3311,10 +3311,10 @@ export default class GameEngine {
     // non-empty production queue (extra items queued behind the current one).
     // Don't auto-end the turn in that case — the player may want to review or
     // adjust the city's queued production before ending the turn.
-    const hasCitiesWithNoProductionQueued = this.cities.some(
+    const hasCitiesWithProductionQueued = this.cities.some(
       (c: City) => c.civilizationId === this.activePlayer
         && Array.isArray(c.buildQueue)
-        && c.buildQueue.length == 0
+        && c.buildQueue.length > 0
     );
 
     // For human players, check if auto turn ending should trigger
@@ -3325,8 +3325,8 @@ export default class GameEngine {
       // — there is nothing left to do this turn — UNLESS a city still has
       // production queued to build this turn.
       if (!hasActiveUnitsWithMoves) {
-        if (hasCitiesWithNoProductionQueued) {
-          console.log('[TURN] ⏸️ Human player still has cities with no production queued, not ending turn');
+        if (hasCitiesWithProductionQueued) {
+          console.log('[TURN] ⏸️ Human player still has cities with production queued, not ending turn');
         } else {
           console.log('[TURN] All active human units have no moves and queue is empty - checking auto end turn setting');
           // Transparency: log which units the auto-end is skipping and remember
