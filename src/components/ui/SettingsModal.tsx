@@ -19,7 +19,10 @@ function SettingsModal({ show, onHide }) {
       menuFontSize: 12,
       sidebarWidth: 140,
       minimapHeight: 120,
-      civListFontSize: 10
+      civListFontSize: 10,
+      enableAnimations: true,
+      animationSpeed: 1,
+      cameraGlideSpeed: 1
     });
   };
 
@@ -100,6 +103,33 @@ function SettingsModal({ show, onHide }) {
             'civListFontSize',
             'Font size for civilization names in the info panel (8px to 16px)',
             (v) => `${v}px`
+          )}
+
+          <Form.Check
+            type="switch"
+            id="enableAnimations"
+            label="Enable animations"
+            checked={settings.enableAnimations}
+            onChange={(e) => actions.updateSettings({ enableAnimations: e.target.checked })}
+            className="settings-control__toggle"
+          />
+
+          {renderSlider(
+            'Animation Speed',
+            settings.animationSpeed,
+            0, 3, 0.1,
+            'animationSpeed',
+            'How fast units move and combat plays (leftmost = instant)',
+            (v) => (v === 0 ? 'Instant' : `${v.toFixed(1)}x`)
+          )}
+
+          {renderSlider(
+            'Camera Glide Speed',
+            settings.cameraGlideSpeed,
+            0, 3, 0.1,
+            'cameraGlideSpeed',
+            'How fast the camera pans to a new focus (leftmost = instant)',
+            (v) => (v === 0 ? 'Instant' : `${v.toFixed(1)}x`)
           )}
         </Form>
       </Modal.Body>

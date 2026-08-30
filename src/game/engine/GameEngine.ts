@@ -1229,7 +1229,7 @@ export default class GameEngine {
           buildQueue: civ.isAI ? [] : [],
           buildings: [],
           tiles: [],
-          autoProduction: true // Enable auto-production for AI cities by default
+          autoProduction: civ.isAI // Auto-production enabled for AI cities, disabled for human cities by default
         };
         
         this.cities.push(city);
@@ -1478,7 +1478,7 @@ export default class GameEngine {
       shields: 0, // Production shields
       currentProduction: { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }, // Start building a warrior
       productionQueue: [],
-      autoProduction: true, // Auto Production is selected by default for every new city
+      autoProduction: civ.isAI, // Auto Production enabled for AI cities, disabled for human founding by default
       buildings: [],
       wonders: [],
       workingTiles: new Set<string>(), // Tiles being worked by citizens
@@ -2476,7 +2476,7 @@ export default class GameEngine {
         ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
         : this.pickInitialAIProduction(civId),
       buildQueue: [],
-      autoProduction: true,
+      autoProduction: civ.isAI,
     };
     this.cities.push(city);
 
@@ -3104,7 +3104,7 @@ export default class GameEngine {
         ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
         : this.pickInitialAIProduction(civId), // AI: scout for first city, defender otherwise
       buildQueue: [], // Empty: the Warrior is already the current production, never also queue it
-      autoProduction: true // Auto Production is selected by default for every new city
+      autoProduction: civ.isAI // Auto Production enabled for AI cities, disabled for human cities by default
     };
 
     this.cities.push(city);
@@ -3306,26 +3306,41 @@ export default class GameEngine {
     }
 
     const hasActiveUnitsWithMoves = activeUnitsWithMoves.length > 0 || !queueEmpty;
-    
+
+    // A human player still has "stuff to build" when any of their cities has a
+    // non-empty production queue (extra items queued behind the current one).
+    // Don't auto-end the turn in that case — the player may want to review or
+    // adjust the city's queued production before ending the turn.
+    const hasCitiesWithNoProductionQueued = this.cities.some(
+      (c: City) => c.civilizationId === this.activePlayer
+        && Array.isArray(c.buildQueue)
+        && c.buildQueue.length == 0
+    );
+
     // For human players, check if auto turn ending should trigger
     if (currentCiv.isHuman) {
       // Only auto-end if NO active units have moves left AND queue is empty.
       // Sleeping/fortified/skipped units don't prevent auto-end. A player with
       // zero units (e.g. their last settler just founded a city) also auto-ends
-      // — there is nothing left to do this turn.
+      // — there is nothing left to do this turn — UNLESS a city still has
+      // production queued to build this turn.
       if (!hasActiveUnitsWithMoves) {
-        console.log('[TURN] All active human units have no moves and queue is empty - checking auto end turn setting');
-        // Transparency: log which units the auto-end is skipping and remember
-        // the summary for the post-end recap notification.
-        const skipped = playerUnits
-          .filter(u => (u.movesRemaining || 0) <= 0 || u.isSleeping || u.isFortified || u.isSkipped || u.areTurnsDone)
-          .map(u => `${u.type}${u.isSleeping ? '(sleep)' : u.isFortified ? '(fort)' : u.isSkipped ? '(skip)' : ''}`);
-        this.lastAutoEndSummary = skipped.length
-          ? `${skipped.length} unit${skipped.length === 1 ? '' : 's'} skipped: ${skipped.join(', ')}`
-          : 'No units with remaining actions';
-        console.log(`[TURN] Auto-end summary — skipping turn, units skipped: ${skipped.length ? skipped.join(', ') : 'none'}`);
-        if (this.onStateChange) {
-          this.onStateChange('CHECK_AUTO_END_TURN', { civilizationId: this.activePlayer });
+        if (hasCitiesWithNoProductionQueued) {
+          console.log('[TURN] ⏸️ Human player still has cities with no production queued, not ending turn');
+        } else {
+          console.log('[TURN] All active human units have no moves and queue is empty - checking auto end turn setting');
+          // Transparency: log which units the auto-end is skipping and remember
+          // the summary for the post-end recap notification.
+          const skipped = playerUnits
+            .filter(u => (u.movesRemaining || 0) <= 0 || u.isSleeping || u.isFortified || u.isSkipped || u.areTurnsDone)
+            .map(u => `${u.type}${u.isSleeping ? '(sleep)' : u.isFortified ? '(fort)' : u.isSkipped ? '(skip)' : ''}`);
+          this.lastAutoEndSummary = skipped.length
+            ? `${skipped.length} unit${skipped.length === 1 ? '' : 's'} skipped: ${skipped.join(', ')}`
+            : 'No units with remaining actions';
+          console.log(`[TURN] Auto-end summary — skipping turn, units skipped: ${skipped.length ? skipped.join(', ') : 'none'}`);
+          if (this.onStateChange) {
+            this.onStateChange('CHECK_AUTO_END_TURN', { civilizationId: this.activePlayer });
+          }
         }
       } else if (hasActiveUnitsWithMoves) {
         console.log('[TURN] ⏸️ Human player still has active units with moves or queue not empty, not ending turn');

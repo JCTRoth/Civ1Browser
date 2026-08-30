@@ -294,3 +294,61 @@ describe('Auto End Turn after combat', () => {
     expect(emitted).not.toContain('CHECK_AUTO_END_TURN');
   });
 });
+
+describe('Auto End Turn defers while a city still has production queued', () => {
+  let engine: GameEngine;
+  let emitted: string[];
+
+  beforeEach(async () => {
+    engine = new GameEngine(null);
+    (engine as any).sleep = () => Promise.resolve();
+    emitted = [];
+    engine.onStateChange = (type: string, _data?: any) => {
+      emitted.push(type);
+    };
+
+    await engine.initialize({
+      numberOfCivilizations: 2,
+      mapType: 'MANY_CITIES',
+      devMode: false,
+      startingGold: 100
+    });
+  });
+
+  /** Leave the player with no movable units so only the city-queue decides. */
+  const clearMovableHumanUnits = () => {
+    (engine as any).units = (engine as any).units.filter(
+      (u: any) => u.civilizationId !== 0
+    );
+    (engine as any).unitTurnQueue?.clearQueue?.(0);
+  };
+
+  it('does NOT auto-end when a human city has a non-empty production queue', () => {
+    clearMovableHumanUnits();
+
+    // Give one human city queued production (stuff still to build).
+    const humanCity = engine.cities.find((c: any) => c.civilizationId === 0);
+    expect(humanCity).toBeTruthy();
+    (humanCity as any).buildQueue = [
+      { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 },
+      { type: 'building', itemType: 'granary', name: 'Granary', cost: 60 }
+    ];
+
+    (engine as any).checkAndEndTurnIfNoMoves();
+
+    expect(emitted).not.toContain('CHECK_AUTO_END_TURN');
+  });
+
+  it('auto-ends when all human cities have an empty production queue', () => {
+    clearMovableHumanUnits();
+
+    // Ensure the human city queues are empty.
+    for (const city of engine.cities.filter((c: any) => c.civilizationId === 0)) {
+      (city as any).buildQueue = [];
+    }
+
+    (engine as any).checkAndEndTurnIfNoMoves();
+
+    expect(emitted).toContain('CHECK_AUTO_END_TURN');
+  });
+});

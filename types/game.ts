@@ -422,6 +422,12 @@ interface Settings {
   skipEndTurnConfirmation: boolean;
   autoEndTurn: boolean; // Automatically end turn when all units are done
   devMode: boolean; // Developer mode: see all players on minimap and switch between them
+  /** Master switch for all movement/combat/camera animations. When false, durations are 0 (instant). */
+  enableAnimations: boolean;
+  /** Animation speed multiplier (0..3). 0 = instant, 1 = normal, higher = slower. */
+  animationSpeed: number;
+  /** Camera glide speed multiplier (0..3). 0 = instant, 1 = normal, higher = slower. */
+  cameraGlideSpeed: number;
 }
 
 export interface Technology {
@@ -476,6 +482,12 @@ export interface GameStoreState {
   };
   /** Active combat animations (cloud + unit hide/fade effects). */
   combatAnimations: CombatAnimation[];
+  /** Active unit-movement glides (position interpolation between tiles). */
+  movementAnimations: MovementAnimation[];
+  /** True while a human-initiated move/attack animation is playing (blocks input & turn end). */
+  isUnitAnimating: boolean;
+  /** Requested camera pan target; consumed by the camera-pan effect in GameCanvas. */
+  cameraPanRequest: CameraPanRequest | null;
   /** Last village (goody hut) outcome for the village-result modal. */
   villageResult: VillageResult | null;
   /** Info for the "unit disbanded to cover upkeep" modal. */
@@ -488,6 +500,36 @@ export interface GameStoreState {
   incomingDiplomacyOffer: IncomingDiplomacyOffer | null;
   // Internal state for preventing rapid focus calls
   _lastFocusCall?: number;
+}
+
+/**
+ * A unit gliding from one tile to another during movement (or a combat lunge).
+ * The renderer interpolates the drawn position from (fromCol,fromRow) to
+ * (toCol,toRow) over `duration` ms starting at `startTime`.
+ */
+export interface MovementAnimation {
+  id: string;
+  unitId: string;
+  fromCol: number;
+  fromRow: number;
+  toCol: number;
+  toRow: number;
+  /** performance.now() timestamp when the animation started. */
+  startTime: number;
+  /** Glide duration in ms. */
+  duration: number;
+}
+
+/**
+ * A request to smoothly pan the camera to a tile (consumed by GameCanvas).
+ */
+export interface CameraPanRequest {
+  col: number;
+  row: number;
+  /** Keep the current zoom (true) or also animate zoom to a target (false). */
+  keepZoom: boolean;
+  /** Unique id so a newer request supersedes an older one. */
+  requestId: string;
 }
 
 /**
@@ -517,6 +559,20 @@ export interface CombatAnimation {
   deathBlinkDuration: number;
   /** Whether this is a city attack (draws 💥 instead of 🫯). */
   cityAttack?: boolean;
+  /** Attacker health (%) at combat start (for HP bar tween). */
+  attackerHealthBefore?: number;
+  /** Attacker health (%) after combat (for HP bar tween). */
+  attackerHealthAfter?: number;
+  /** Defender health (%) at combat start (for HP bar tween). */
+  defenderHealthBefore?: number;
+  /** Defender health (%) after combat (for HP bar tween). */
+  defenderHealthAfter?: number;
+  /** For city attacks: city id whose HP bar should tween. */
+  cityId?: string;
+  /** City HP at combat start (for city HP bar tween). */
+  cityHealthBefore?: number;
+  /** City HP after combat (for city HP bar tween). */
+  cityHealthAfter?: number;
 }
 
 export interface GameActions {
@@ -576,6 +632,12 @@ export interface GameActions {
   incrementTurnFlash: () => void;
   addCombatAnimation: (animation: CombatAnimation) => void;
   removeCombatAnimation: (id: string) => void;
+  addMovementAnimation: (animation: MovementAnimation) => void;
+  removeMovementAnimation: (id: string) => void;
+  clearMovementAnimations: () => void;
+  setUnitAnimating: (isAnimating: boolean) => void;
+  focusCameraOnTile: (col: number, row: number, keepZoom?: boolean) => void;
+  clearCameraPanRequest: () => void;
 }
 
 export interface GameEngine {

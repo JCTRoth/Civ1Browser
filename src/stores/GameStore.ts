@@ -2,7 +2,6 @@
 
 import { create } from 'zustand';
 import { Constants } from '../utils/Constants';
-import { centerCameraOnTile, getGameViewport } from '../utils/CameraUtils';
 import { SquareGrid } from '../game/HexGrid';
 import { UNIT_TYPES } from '../data/GameData';
 import { UNIT_PROPERTIES } from '../data/UnitConstants';
@@ -127,6 +126,15 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   // Combat animations (cloud + hide/fade effects)
   combatAnimations: [],
 
+  // Movement glides (position interpolation between tiles)
+  movementAnimations: [],
+
+  // True while a human-initiated move/attack animation is playing
+  isUnitAnimating: false,
+
+  // Requested camera pan target (consumed by GameCanvas)
+  cameraPanRequest: null,
+
   // Last village (goody hut) outcome, shown by the village-result modal
   villageResult: null,
 
@@ -152,7 +160,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     civListFontSize: 10, // Civilization list font size
     skipEndTurnConfirmation: false, // Skip showing end turn confirmation modal
     autoEndTurn: false, // Automatically end turn when all human player units are done (default disabled)
-    devMode: false       // Developer mode: see all players on minimap and switch between them
+    devMode: false,     // Developer mode: see all players on minimap and switch between them
+    enableAnimations: true, // Master switch for movement/combat/camera animations
+    animationSpeed: 1,  // Animation speed multiplier (0 = instant, 1 = normal)
+    cameraGlideSpeed: 1 // Camera glide speed multiplier (0 = instant, 1 = normal)
   },
 
   // Technology State
@@ -271,26 +282,6 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       const candidate = state.units.find(u => u.civilizationId === activeId && (u.movesRemaining || 0) > 0 && !u.isSleeping);
 
       if (candidate) {
-        // Focus on the unit: preserve zoom, use the real canvas viewport, and
-        // clamp to the map bounds so the view never lands on empty black space.
-        const zoom = Math.max(0.1, state.camera.zoom || 2.0);
-        const viewport = getGameViewport();
-        const { x, y } = centerCameraOnTile({
-          col: candidate.col,
-          row: candidate.row,
-          zoom,
-          viewportWidth: viewport.width,
-          viewportHeight: viewport.height,
-          mapWidth: state.map?.width ?? 80,
-          mapHeight: state.map?.height ?? 50,
-        });
-
-        const newCamera = {
-          x: isFinite(x) ? x : 0,
-          y: isFinite(y) ? y : 0,
-          zoom,
-        };
-
         // Only select/follow the unit when the human player should see it.
         if (!shouldFocus(candidate)) {
           return state;
@@ -300,32 +291,34 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           ...state,
           _lastFocusCall: now,
           gameState: { ...state.gameState, selectedUnit: candidate.id, activeUnit: candidate.id, selectedCity: null },
-          camera: { ...state.camera, ...newCamera }
+          cameraPanRequest: {
+            col: candidate.col,
+            row: candidate.row,
+            keepZoom: true,
+            requestId: `focus-${now}-${Math.random().toString(36).slice(2, 8)}`,
+          }
         };
       } else {
-        // No unit found, focus on the capital city of the active player
+        // No unit found. Only bring the camera to a city when the player still
+        // has production left to manage — this mirrors the engine's auto-end
+        // turn gate (`hasCitiesWithNoProductionQueued`): a city with an empty
+        // build queue means "no production queued", so the player needs to
+        // review/queue something and we land on the capital. Otherwise let the
+        // turn end without snapping the camera to a city.
+        const hasProductionLeft = state.cities.some(
+          (c) => c.civilizationId === activeId
+            && Array.isArray(c.buildQueue)
+            && c.buildQueue.length === 0
+        );
+        if (!hasProductionLeft) {
+          return state;
+        }
+
+        // Focus on the capital city of the active player
         const activeCivilization = state.civilizations.find(c => c.id === activeId);
         const capitalCity = activeCivilization?.capital;
 
         if (capitalCity) {
-          const zoom = Math.max(0.1, state.camera.zoom || 2.0);
-          const viewport = getGameViewport();
-          const { x, y } = centerCameraOnTile({
-            col: capitalCity.col,
-            row: capitalCity.row,
-            zoom,
-            viewportWidth: viewport.width,
-            viewportHeight: viewport.height,
-            mapWidth: state.map?.width ?? 80,
-            mapHeight: state.map?.height ?? 50,
-          });
-
-          const newCamera = {
-            x: isFinite(x) ? x : 0,
-            y: isFinite(y) ? y : 0,
-            zoom,
-          };
-
           // Same rule for capitals: only follow the human's own or a visible one.
           if (!shouldFocus({ civilizationId: capitalCity.civilizationId, col: capitalCity.col, row: capitalCity.row })) {
             return state;
@@ -335,7 +328,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
             ...state,
             _lastFocusCall: now,
             gameState: { ...state.gameState, selectedUnit: null, activeUnit: null, selectedCity: capitalCity.id },
-            camera: { ...state.camera, ...newCamera }
+            cameraPanRequest: {
+              col: capitalCity.col,
+              row: capitalCity.row,
+              keepZoom: true,
+              requestId: `focus-${now}-${Math.random().toString(36).slice(2, 8)}`,
+            }
           };
         }
       }
@@ -370,6 +368,35 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     removeCombatAnimation: (id) => set(state => ({
       combatAnimations: state.combatAnimations.filter(a => a.id !== id)
+    })),
+
+    addMovementAnimation: (animation) => set(state => ({
+      movementAnimations: [...state.movementAnimations, animation]
+    })),
+
+    removeMovementAnimation: (id) => set(state => ({
+      movementAnimations: state.movementAnimations.filter(a => a.id !== id)
+    })),
+
+    clearMovementAnimations: () => set(() => ({
+      movementAnimations: []
+    })),
+
+    setUnitAnimating: (isAnimating) => set(() => ({
+      isUnitAnimating: isAnimating
+    })),
+
+    focusCameraOnTile: (col, row, keepZoom = true) => set(() => ({
+      cameraPanRequest: {
+        col,
+        row,
+        keepZoom,
+        requestId: `camera-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      }
+    })),
+
+    clearCameraPanRequest: () => set(() => ({
+      cameraPanRequest: null
     })),
 
     showDialog: (dialog) => set(state => ({

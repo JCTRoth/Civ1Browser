@@ -1,8 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { useShallow } from 'zustand/react/shallow';
 import { TILE_SIZE } from '@/data/TerrainData';
-import { MapRenderer, TerrainRenderGrid, TerrainTileRenderInfo, UnitPathStep } from '@/game/rendering/MapRenderer';
+import { MapRenderer, TerrainRenderGrid, TerrainTileRenderInfo, UnitPathStep, getUnitDisplayTile } from '@/game/rendering/MapRenderer';
+import MoveAnimator from '@/game/engine/MoveAnimator';
+import { MathUtils } from '@/utils/MathUtils';
+import { centerCameraOnTile } from '@/utils/CameraUtils';
 import { MiniMapRenderer } from '@/game/rendering/MiniMapRenderer';
 import { TerrainTextureManager } from '@/game/rendering/TerrainTextureManager';
 import type { City, GameState, MapState, Unit } from '../../../types/game';
@@ -47,6 +50,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const civilizations = useGameStore(state => state.civilizations);
   const currentQueueUnitId = useGameStore(state => state.uiState.currentQueueUnitId);
   const combatAnimations = useGameStore(state => state.combatAnimations);
+  const movementAnimations = useGameStore(state => state.movementAnimations);
+  const cameraPanRequest = useGameStore(state => state.cameraPanRequest);
+  const moveAnimator = useMemo(() => (gameEngine ? new MoveAnimator(gameEngine) : null), [gameEngine]);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [lastMousePos, setLastMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [selectedHex, setSelectedHex] = useState<HexCoordinates>({ col: 5, row: 5 });
@@ -60,6 +66,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const [reachableTiles, setReachableTiles] = useState<Map<string, number>>(new Map());
   const animationFrameRef = useRef<number | null>(null);
   const needsRender = useRef<boolean>(true);
+  const cameraPanRafRef = useRef<number | null>(null);
   const lastGameState = useRef<any>(null);
   const animationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticRenderedRef = useRef<boolean>(false);
@@ -703,7 +710,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       squareToScreen,
       cameraZoom: camera.zoom,
       reachableTiles,
-      combatAnimations
+      combatAnimations,
+      movementAnimations
     });
 
     // Save the static content to animation canvas for efficient restoration
@@ -722,7 +730,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
     staticRenderedRef.current = true;
     // console.log('[GameCanvas] Static content rendered and saved');
-  }, [camera, canvasRef, civilizations, cities, combatAnimations, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units, texturesLoaded, renderTerrainToOffscreen]);
+  }, [camera, canvasRef, civilizations, cities, combatAnimations, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units, texturesLoaded, renderTerrainToOffscreen, movementAnimations]);
 
   const renderAnimationLayer = useCallback((currentTime: number) => {
     if (!canvasRef.current || !animationCanvasRef.current) return;
@@ -745,7 +753,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     const unitRadius = Math.round(20 * camera.zoom * 1.2); // Add margin for glow
 
     activePlayerUnits.forEach(unit => {
-      const { x, y } = squareToScreen(unit.col, unit.row);
+      const displayTile = getUnitDisplayTile(unit, movementAnimations);
+      const { x, y } = squareToScreen(displayTile.col, displayTile.row);
       
       // Only restore and redraw this specific region
       const regionSize = unitRadius * 2;
@@ -771,12 +780,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       squareToScreen,
       cameraZoom: camera.zoom,
       currentQueueUnitId: currentQueueUnitId ?? undefined,
-      combatAnimations
+      combatAnimations,
+      movementAnimations
     });
-  }, [camera.zoom, civilizations, combatAnimations, currentQueueUnitId, gameState, mapData, squareToScreen, units]);
+  }, [camera.zoom, civilizations, combatAnimations, currentQueueUnitId, gameState, mapData, movementAnimations, squareToScreen, units]);
 
   // Handle mouse events
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Cancel any in-progress camera pan when the user interacts directly.
+    if (cameraPanRafRef.current) {
+      cancelAnimationFrame(cameraPanRafRef.current);
+      cameraPanRafRef.current = null;
+    }
+    actions.clearCameraPanRequest();
+
     // Only the primary (left) button starts a drag-pan. Right/middle clicks
     // open the context menu instead — starting a drag for them would leave
     // `isDragging` stuck as true (the context menu's backdrop swallows the
@@ -1069,8 +1086,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
               if (isAdjacent && (selectedUnit.movesRemaining || 0) > 0) {
                 console.log(`[CLICK] Adjacent attack - attempting to move/attack`);
                 try {
-                  // moveUnit handles combat automatically
-                  gameEngine?.moveUnit?.(selectedUnit.id, hex.col, hex.row);
+                  // MoveAnimator lunges toward the defender, then commits combat.
+                  moveAnimator?.attack(selectedUnit.id, hex.col, hex.row);
                 } catch (e) {
                   console.log(`[CLICK] Attack error:`, e);
                 }
@@ -1165,31 +1182,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
                   triggerRender();
 
-                  // Then, if unit has moves, start moving along the path using GoToManager
+                  // Then, if unit has moves, start moving along the path using the
+                  // deferred-commit MoveAnimator (glide each step, then commit).
                   if (pathToFollow.length > 0 && (selectedUnit.movesRemaining || 0) > 0) {
-                    console.log(`[CLICK] Starting automatic movement along path for unit ${selectedUnit.id}`);
-                    
-                    // Use a small delay to ensure path is rendered first
-                    setTimeout(() => {
-                      goToManager.executePathWithAnimation(
-                        selectedUnit.id,
-                        300,
-                        (_remainingSteps: number) => {
-                          // Update UI after each step
-                          const path = goToManager.getUnitPath(selectedUnit.id);
-                          setUnitPaths(prev => {
-                            const next = new Map(prev);
-                            if (path && path.length > 0) {
-                              next.set(selectedUnit.id, path);
-                            } else {
-                              next.delete(selectedUnit.id);
-                            }
-                            return next;
-                          });
-                          triggerRender();
-                        }
-                      );
-                    }, 100);
+                    moveAnimator?.moveAlongPath(selectedUnit.id, pathToFollow).then(() => {
+                      setUnitPaths(prev => {
+                        const next = new Map(prev);
+                        next.delete(selectedUnit.id);
+                        return next;
+                      });
+                      triggerRender();
+                    });
                   }
                 } else {
                   console.error('[CLICK] GoToManager not available, falling back to old method');
@@ -1877,6 +1880,100 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [minimap, gameState.isGameStarted, combatAnimations, renderStaticContent]);
+
+  // Movement animation loop: while a unit glide is active, re-render the static
+  // frame at ~30 FPS so the interpolated position updates smoothly.
+  useEffect(() => {
+    if (minimap || !gameState.isGameStarted) return;
+    if (!movementAnimations || movementAnimations.length === 0) return;
+
+    let raf = 0;
+    let last = 0;
+    const fps = 30;
+    const interval = 1000 / fps;
+
+    const loop = (currentTime: number) => {
+      raf = requestAnimationFrame(loop);
+      if (currentTime - last < interval) return;
+      last = currentTime;
+      renderStaticContent();
+
+      const now = performance.now();
+      const anyActive = (movementAnimations ?? []).some(a => now - a.startTime < a.duration);
+      if (!anyActive) {
+        cancelAnimationFrame(raf);
+      }
+    };
+
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [minimap, gameState.isGameStarted, movementAnimations, renderStaticContent]);
+
+  // Smooth camera pan: when a focus request arrives, tween camera.x/y toward the
+  // centered target tile (scaled by cameraGlideSpeed; instant when disabled).
+  useEffect(() => {
+    if (minimap || !gameState.isGameStarted) return;
+    if (!cameraPanRequest) return;
+
+    const state = useGameStore.getState();
+    const cam = state.camera;
+    const map = state.map;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const viewportWidth = rect?.width ?? window.innerWidth;
+    const viewportHeight = rect?.height ?? window.innerHeight;
+    const mapWidth = map?.width ?? 0;
+    const mapHeight = map?.height ?? 0;
+    const target = centerCameraOnTile({
+      col: cameraPanRequest.col,
+      row: cameraPanRequest.row,
+      zoom: cam.zoom,
+      viewportWidth,
+      viewportHeight,
+      mapWidth,
+      mapHeight,
+    });
+    if (!isFinite(target.x) || !isFinite(target.y)) {
+      actions.clearCameraPanRequest();
+      return;
+    }
+
+    const settings = state.settings;
+    const duration = !settings.enableAnimations || settings.cameraGlideSpeed <= 0
+      ? 0
+      : Math.round(400 * settings.cameraGlideSpeed);
+
+    const startX = cam.x;
+    const startY = cam.y;
+
+    if (duration <= 0) {
+      actions.updateCamera({ x: target.x, y: target.y });
+      actions.clearCameraPanRequest();
+      return;
+    }
+
+    const startTime = performance.now();
+    const animate = (now: number) => {
+      cameraPanRafRef.current = requestAnimationFrame(animate);
+      const elapsed = now - startTime;
+      const t = Math.min(1, elapsed / duration);
+      const eased = MathUtils.fade(t);
+      actions.updateCamera({
+        x: MathUtils.lerp(startX, target.x, eased),
+        y: MathUtils.lerp(startY, target.y, eased),
+      });
+      if (t >= 1) {
+        actions.updateCamera({ x: target.x, y: target.y });
+        actions.clearCameraPanRequest();
+        cancelAnimationFrame(cameraPanRafRef.current ?? 0);
+        cameraPanRafRef.current = null;
+      }
+    };
+    cameraPanRafRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (cameraPanRafRef.current) cancelAnimationFrame(cameraPanRafRef.current);
+      cameraPanRafRef.current = null;
+    };
+  }, [cameraPanRequest, minimap, gameState.isGameStarted, actions]);
 
   // Trigger render when camera changes (pan/zoom)
   useEffect(() => {

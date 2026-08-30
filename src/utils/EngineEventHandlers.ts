@@ -1,5 +1,4 @@
 import { useGameStore } from '../stores/GameStore';
-import { centerCameraOnTile, getGameViewport } from './CameraUtils';
 import { firstUnresearchedInPath } from './ResearchPath';
 import type { GameEngine, Technology, Unit, City, Civilization, VillageOutcome } from '../../types/game';
 
@@ -247,12 +246,19 @@ export class EngineEventRouter {
   }
 
   private onUnitMoved(eventData: Record<string, unknown>) {
+    const moved = (eventData && eventData.unit ? eventData.unit : null) as Unit | null;
+    // Capture the unit's tile BEFORE the store updates, so a visible AI move can
+    // be glided from its previous tile to the new one (human units are animated
+    // by MoveAnimator and don't need this).
+    const prevStoreUnit = moved ? useGameStore.getState().units.find(u => u.id === moved.id) : undefined;
+    const fromCol = prevStoreUnit?.col ?? moved?.col ?? 0;
+    const fromRow = prevStoreUnit?.row ?? moved?.row ?? 0;
+
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     // In AI-vs-AI mode don't follow AI moves — no auto-selection or camera
     // centering between players (the board still updates above).
     if (this.isAIVsAI) return;
-    const moved = (eventData && eventData.unit ? eventData.unit : null) as Unit | null;
     if (moved) {
       const movesLeft = moved.movesRemaining || 0;
       if (movesLeft > 0) {
@@ -266,6 +272,8 @@ export class EngineEventRouter {
         // focusOnNextUnit applies the same visibility rule before moving the camera.
         this.actions.focusOnNextUnit();
       }
+      // Glide any AI unit the human can currently see (human units are handled by MoveAnimator).
+      this.glideVisibleAIMove(moved, fromCol, fromRow);
     }
   }
 
@@ -284,7 +292,72 @@ export class EngineEventRouter {
     return !!state.map?.visibility?.[index];
   }
 
+  /** Resolve a movement-animation duration for AI moves (0 = instant). */
+  private aiAnimationDuration(base: number): number {
+    const settings = useGameStore.getState().settings;
+    if (!settings.enableAnimations || settings.animationSpeed <= 0) return 0;
+    return Math.round(base * settings.animationSpeed);
+  }
+
+  /** Glide a visible AI unit from its previous tile to its committed tile. */
+  private glideVisibleAIMove(unit: Unit, fromCol: number, fromRow: number): void {
+    if (unit.civilizationId === HUMAN_PLAYER_ID) return;
+    if (!this.isUnitVisibleToHuman(unit)) return;
+    const duration = this.aiAnimationDuration(250);
+    if (duration <= 0) return;
+    const id = `ai-move-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.actions.addMovementAnimation({
+      id, unitId: unit.id, fromCol, fromRow,
+      toCol: unit.col, toRow: unit.row,
+      startTime: performance.now(), duration,
+    });
+    setTimeout(() => this.actions.removeMovementAnimation(id), duration + 60);
+  }
+
+  /** Lunge a visible AI attacker toward the defender; recoil if it didn't advance. */
+  private animateAIAttacker(attacker: Unit, defender: Unit, fromCol: number, fromRow: number): void {
+    if (attacker.civilizationId === HUMAN_PLAYER_ID) return;
+    if (!this.isUnitVisibleToHuman(attacker)) return;
+    const lungeDuration = this.aiAnimationDuration(300);
+    if (lungeDuration <= 0) return;
+
+    const advanced = attacker.col === defender.col && attacker.row === defender.row;
+    const lungeId = `ai-lunge-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    this.actions.addMovementAnimation({
+      id: lungeId, unitId: attacker.id, fromCol, fromRow,
+      toCol: defender.col, toRow: defender.row,
+      startTime: performance.now(), duration: lungeDuration,
+    });
+
+    // When the lunge finishes, remove it and, if the attacker didn't advance
+    // (it was repelled / lost), recoil it back to its actual tile.
+    setTimeout(() => {
+      this.actions.removeMovementAnimation(lungeId);
+      if (!advanced && !(attacker as Unit).isDefeated) {
+        const recoilDuration = this.aiAnimationDuration(250);
+        if (recoilDuration <= 0) return;
+        const recoilId = `ai-recoil-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        this.actions.addMovementAnimation({
+          id: recoilId, unitId: attacker.id,
+          fromCol: defender.col, fromRow: defender.row,
+          toCol: attacker.col, toRow: attacker.row,
+          startTime: performance.now(), duration: recoilDuration,
+        });
+        setTimeout(() => this.actions.removeMovementAnimation(recoilId), recoilDuration + 60);
+      }
+    }, lungeDuration + 10);
+  }
+
   private onCombat(eventType: string, eventData: Record<string, unknown>) {
+    const attacker = eventData?.attacker as Unit | undefined;
+    const defender = eventData?.defender as Unit | undefined;
+
+    // Capture pre-combat health from the store (before updateUnits) so the HP
+    // bar can tween from its old value to the new one.
+    const preStore = useGameStore.getState().units;
+    const preAttacker = attacker ? preStore.find(u => u.id === attacker.id) : undefined;
+    const preDefender = defender ? preStore.find(u => u.id === defender.id) : undefined;
+
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     this.actions.addNotification({
@@ -292,10 +365,8 @@ export class EngineEventRouter {
       message: eventType === 'COMBAT_VICTORY' ? 'Victory in combat!' : 'Unit defeated in combat!'
     });
 
-    // Record a combat animation: both units vanish, a cloud appears at the
-    // defender's tile, then the survivor fades back in (2 seconds total).
-    const attacker = eventData?.attacker as Unit | undefined;
-    const defender = eventData?.defender as Unit | undefined;
+    // Record a combat animation: a cloud appears at the defender's tile, the
+    // HP bars tween, and the survivor fades back in (2 seconds total).
     if (attacker && defender) {
       const id = `combat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const animation = {
@@ -311,8 +382,20 @@ export class EngineEventRouter {
         startTime: performance.now(),
         duration: 800, // Cloud blinks for 0.8s
         deathBlinkDuration: 2000, // Dead unit blinks for 2s after cloud
+        attackerHealthBefore: preAttacker?.health ?? attacker.health,
+        attackerHealthAfter: attacker.health,
+        defenderHealthBefore: preDefender?.health ?? defender.health,
+        defenderHealthAfter: defender.health,
       };
       this.actions.addCombatAnimation(animation);
+
+      // Animate a visible AI attacker's lunge (and recoil if it didn't advance).
+      this.animateAIAttacker(attacker, defender, animation.attackerCol, animation.attackerRow);
+
+      // When the player's own unit is attacked, smoothly pan the camera to it.
+      if (defender.civilizationId === HUMAN_PLAYER_ID) {
+        this.actions.focusCameraOnTile(defender.col, defender.row);
+      }
 
       // Remove the animation once it has fully played out (cloud + death blink).
       setTimeout(() => {
@@ -384,15 +467,20 @@ export class EngineEventRouter {
   }
 
   private onCityAttacked(eventData: Record<string, unknown>) {
+    const city = eventData?.city as City | undefined;
+    const attacker = eventData?.attacker as Unit | undefined;
+    // Capture pre-combat city HP before the store updates.
+    const preCity = city ? useGameStore.getState().cities.find(c => c.id === city.id) : undefined;
+
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
     this.actions.updateCities(this.gameEngine.getAllCities());
 
     // Show a 💥 combat cloud at the city tile (2 seconds, same as unit-vs-unit).
-    const city = eventData?.city as { col: number; row: number } | undefined;
-    const attacker = eventData?.attacker as { id?: string; col?: number; row?: number } | undefined;
     if (city) {
       const id = `city-combat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const cityHealthBefore = (preCity?.hitPoints ?? preCity?.population) ?? 1;
+      const cityHealthAfter = (city.hitPoints ?? city.population) ?? 1;
       const animation = {
         id,
         attackerId: attacker?.id ?? '',
@@ -407,8 +495,17 @@ export class EngineEventRouter {
         duration: 800, // Cloud blinks for 0.8s
         deathBlinkDuration: 2000, // Dead unit blinks for 2s after cloud
         cityAttack: true,
+        cityId: city.id,
+        cityHealthBefore,
+        cityHealthAfter,
       };
       this.actions.addCombatAnimation(animation);
+
+      // When the player's own city is attacked, smoothly pan the camera to it.
+      if (city.civilizationId === HUMAN_PLAYER_ID) {
+        this.actions.focusCameraOnTile(city.col, city.row);
+      }
+
       setTimeout(() => {
         this.actions.removeCombatAnimation(id);
         if (this.gameEngine && typeof this.gameEngine.checkAndEndTurnIfNoMoves === 'function') {
@@ -649,7 +746,7 @@ export class EngineEventRouter {
       // Find unit and focus camera on it
       const unit = this.gameEngine.getAllUnits().find(u => u.id === unitId);
       if (unit) {
-        this.actions.updateCamera({ x: unit.col * 32, y: unit.row * 32 });
+        this.actions.focusCameraOnTile(unit.col, unit.row);
       }
     }
   }
@@ -667,7 +764,7 @@ export class EngineEventRouter {
       // Find unit and focus camera on it
       const unit = this.gameEngine.getAllUnits().find(u => u.id === unitId);
       if (unit) {
-        this.actions.updateCamera({ x: unit.col * 32, y: unit.row * 32 });
+        this.actions.focusCameraOnTile(unit.col, unit.row);
       }
     }
   }
@@ -750,33 +847,9 @@ export class EngineEventRouter {
    * to the map bounds so the view never lands on empty black space.
    */
   private focusOnUnit(unit: Unit): void {
-    const currentCamera = useGameStore.getState().camera;
-    const map = this.gameEngine.map;
-    const mapWidth = map?.width ?? 80;
-    const mapHeight = map?.height ?? 50;
-    const zoom = currentCamera?.zoom ?? 2.0;
-    const viewport = getGameViewport();
-
-    const { x, y } = centerCameraOnTile({
-      col: unit.col,
-      row: unit.row,
-      zoom,
-      viewportWidth: viewport.width,
-      viewportHeight: viewport.height,
-      mapWidth,
-      mapHeight,
-    });
-
-    const newCamera = { x, y, zoom };
-
-    console.log('[EngineEventRouter] Focusing camera on unit', {
-      unitId: unit.id,
-      col: unit.col,
-      row: unit.row,
-      camera: newCamera
-    });
-
-    this.actions.updateCamera(newCamera);
+    // Smoothly pan the camera to the unit (GameCanvas eases camera.x/y toward the
+    // centered target). Selection is handled by the caller.
+    this.actions.focusCameraOnTile(unit.col, unit.row);
   }
 
   private onWarDeclared(eventData: Record<string, unknown>) {

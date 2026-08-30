@@ -42,7 +42,7 @@ describe('Newly founded cities default to Auto Production', () => {
     });
   });
 
-  it('sets autoProduction to true when a human founds a city with a settler', () => {
+  it('disables autoProduction by default when a human founds a city with a settler', () => {
     const width = (engine as any).map?.width ?? 80;
     const height = (engine as any).map?.height ?? 50;
 
@@ -80,6 +80,17 @@ describe('Newly founded cities default to Auto Production', () => {
       (c: any) => c.civilizationId === 0 && engine.cities.indexOf(c) >= beforeCount
     );
     expect(city).toBeTruthy();
-    expect((city as any).autoProduction).toBe(true);
+    expect((city as any).autoProduction).toBe(false);
+  });
+
+  it('keeps autoProduction enabled by default for AI cities', () => {
+    // In MANY_CITIES mode, AI civ 1 gets starting cities via
+    // createStartingCities; those must keep auto-production on so the AI
+    // actually builds units/buildings each turn.
+    const aiCities = engine.cities.filter((c: any) => c.civilizationId === 1);
+    expect(aiCities.length).toBeGreaterThan(0);
+    for (const city of aiCities) {
+      expect((city as any).autoProduction).toBe(true);
+    }
   });
 });

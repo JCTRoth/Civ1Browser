@@ -22,8 +22,36 @@ import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, ImprovementDisplayConfig } f
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
 import { TERRAIN_FONT_FAMILY } from '@/utils/terrainFont';
-import type { MapState, CameraState, Unit, City, GameState, Civilization, CombatAnimation } from '../../../types/game';
+import { MathUtils } from '@/utils/MathUtils';
+import type { MapState, CameraState, Unit, City, GameState, Civilization, CombatAnimation, MovementAnimation } from '../../../types/game';
 import { TerrainTextureManager } from './TerrainTextureManager';
+
+/**
+ * Compute the (possibly fractional) tile a unit should be drawn at, honoring any
+ * active movement animation (glide). Falls back to the unit's committed tile when
+ * no animation applies. Shared by the static renderer and GameCanvas' pulsing
+ * layer so a gliding unit is always drawn at the same interpolated position.
+ */
+export function getUnitDisplayTile(
+  unit: Unit,
+  movementAnimations?: MovementAnimation[]
+): { col: number; row: number } {
+  if (movementAnimations && movementAnimations.length > 0) {
+    const now = performance.now();
+    for (const anim of movementAnimations) {
+      if (anim.unitId !== unit.id) continue;
+      const elapsed = now - anim.startTime;
+      const t = Math.max(0, Math.min(1, elapsed / (anim.duration || 1)));
+      const eased = MathUtils.fade(t);
+      return {
+        col: MathUtils.lerp(anim.fromCol, anim.toCol, eased),
+        row: MathUtils.lerp(anim.fromRow, anim.toRow, eased),
+      };
+    }
+  }
+  return { col: unit.col, row: unit.row };
+}
+
 
 /** Civ1 special-resource glyphs rendered on the map (keyed by lowercase name). */
 const RESOURCE_GLYPHS: Record<string, string> = {
@@ -128,6 +156,8 @@ export interface RenderFrameParams {
   reachableTiles?: Map<string, number>;
   /** Active combat animations (hide units + draw cloud) */
   combatAnimations?: CombatAnimation[];
+  /** Active unit-movement glides (position interpolation between tiles) */
+  movementAnimations?: MovementAnimation[];
 }
 
 /**
@@ -166,6 +196,8 @@ export interface RenderStaticFrameParams {
   reachableTiles?: Map<string, number>;
   /** Active combat animations (hide units + draw cloud) */
   combatAnimations?: CombatAnimation[];
+  /** Active unit-movement glides (position interpolation between tiles) */
+  movementAnimations?: MovementAnimation[];
 }
 
 /**
@@ -192,6 +224,8 @@ export interface RenderPulsingUnitsParams {
   currentQueueUnitId?: string | null;
   /** Active combat animations (hide units + apply survivor fade) */
   combatAnimations?: CombatAnimation[];
+  /** Active unit-movement glides (position interpolation between tiles) */
+  movementAnimations?: MovementAnimation[];
 }
 
 /**
@@ -264,6 +298,8 @@ interface DynamicContentParams {
   reachableTiles?: Map<string, number>;
   /** Active combat animations (hide units + draw cloud) */
   combatAnimations?: CombatAnimation[];
+  /** Active unit-movement glides (position interpolation between tiles) */
+  movementAnimations?: MovementAnimation[];
 }
 
 /**
@@ -556,7 +592,8 @@ export class MapRenderer {
       hasOffscreen,
       squareToScreen,
       reachableTiles,
-      combatAnimations: params.combatAnimations
+      combatAnimations: params.combatAnimations,
+      movementAnimations: params.movementAnimations
     });
 
     this.drawUnitPaths(ctx, unitPaths, units, gameState, squareToScreen);
@@ -585,7 +622,8 @@ export class MapRenderer {
       squareToScreen,
       cameraZoom,
       reachableTiles,
-      combatAnimations
+      combatAnimations,
+      movementAnimations
     } = params;
 
     const canvasSize = this.ensureCanvasSize(canvas);
@@ -620,7 +658,8 @@ export class MapRenderer {
       hasOffscreen,
       squareToScreen,
       reachableTiles,
-      combatAnimations
+      combatAnimations,
+      movementAnimations
     });
 
     this.drawUnitPaths(ctx, unitPaths, units, gameState, squareToScreen);
@@ -682,7 +721,8 @@ export class MapRenderer {
       const isVisible = map.visibility?.[tileIndex] ?? true;
       
       if (isVisible) {
-        const { x, y } = squareToScreen(unit.col, unit.row);
+        const displayTile = this.getUnitDisplayTile(unit, params.movementAnimations);
+        const { x, y } = squareToScreen(displayTile.col, displayTile.row);
         this.drawUnitWithPulse(ctx, x, y, unit, pulseValue, cameraZoom, civilizations, combat.alpha);
       }
     });
@@ -908,7 +948,8 @@ export class MapRenderer {
       cameraZoom,
       squareToScreen,
       reachableTiles,
-      combatAnimations
+      combatAnimations,
+      movementAnimations
     } = params;
 
     const margin = this.tileSize * 2;
@@ -1122,7 +1163,7 @@ export class MapRenderer {
         if (isVisible) {
           const city = cities.find(c => c.col === col && c.row === row);
           if (city) {
-            this.drawCity(ctx, x, y, city, cameraZoom, civilizations);
+            this.drawCity(ctx, x, y, city, cameraZoom, civilizations, combatAnimations);
           }
         }
 
@@ -1170,7 +1211,9 @@ export class MapRenderer {
             }
             alpha *= combat.alpha;
 
-            this.drawUnit(ctx, x, y, unit, alpha, cameraZoom, civilizations);
+            const displayTile = this.getUnitDisplayTile(unit, movementAnimations);
+            const unitPos = squareToScreen(displayTile.col, displayTile.row);
+            this.drawUnit(ctx, unitPos.x, unitPos.y, unit, alpha, cameraZoom, civilizations, combatAnimations);
           }
         }
 
@@ -1178,10 +1221,12 @@ export class MapRenderer {
         const selectedUnitId = gameState.selectedUnit;
         const unitAtTile = units.find(u => u.col === col && u.row === row);
         if (selectedUnitId && unitAtTile && unitAtTile.id === selectedUnitId) {
+          const displayTile = this.getUnitDisplayTile(unitAtTile, movementAnimations);
+          const unitPos = squareToScreen(displayTile.col, displayTile.row);
           const half = scaledTileSize / 2;
           ctx.strokeStyle = '#FF0000';
           ctx.lineWidth = 3;
-          ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+          ctx.strokeRect(unitPos.x - half, unitPos.y - half, scaledTileSize, scaledTileSize);
         }
 
         // Debug coordinates (very high zoom only)
@@ -1198,6 +1243,14 @@ export class MapRenderer {
     if (combatAnimations && combatAnimations.length > 0) {
       this.drawCombatClouds(ctx, combatAnimations, squareToScreen, cameraZoom, canvasSize);
     }
+  }
+
+  /** @inheritdoc getUnitDisplayTile */
+  private getUnitDisplayTile(
+    unit: Unit,
+    movementAnimations?: MovementAnimation[]
+  ): { col: number; row: number } {
+    return getUnitDisplayTile(unit, movementAnimations);
   }
 
   /**
@@ -1555,7 +1608,8 @@ export class MapRenderer {
     centerY: number,
     city: City,
     cameraZoom: number,
-    civilizations: Civilization[]
+    civilizations: Civilization[],
+    combatAnimations?: CombatAnimation[]
   ): void {
     const civ = civilizations.find(c => c.id === city.civilizationId);
     const civColor = civ?.color || (city.civilizationId === 0 ? '#FFD700' : '#FF6347');
@@ -1591,9 +1645,20 @@ export class MapRenderer {
     ctx.textBaseline = 'middle';
     ctx.fillText(String(pop), popX, popY + 0.5);
     
+    // Red hit-flash overlay on a city that took damage.
+    const cityHealthState = this.getCityCombatHealthState(city, combatAnimations);
+    if (cityHealthState.hitFlash > 0) {
+      ctx.save();
+      ctx.globalAlpha = cityHealthState.hitFlash * 0.4;
+      ctx.fillStyle = '#FF0000';
+      const flashSize = size + 4;
+      ctx.fillRect(centerX - flashSize / 2, centerY - flashSize / 2, flashSize, flashSize);
+      ctx.restore();
+    }
+
     // Show HP bar if city has taken damage or has more than 1 HP
-    const cityHP = (city as any).hitPoints || (city as any).population || 1;
-    const cityMaxHP = (city as any).population || 1;
+    const cityHP = cityHealthState.displayHealth;
+    const cityMaxHP = cityHealthState.maxHealth;
     if (cityHP < cityMaxHP) {
       // Draw damaged HP bar
       const hpBarWidth = 40 * cameraZoom;
@@ -1728,6 +1793,66 @@ export class MapRenderer {
   }
 
   /**
+   * Resolve the displayed HP and a red hit-flash for a unit in an active combat
+   * animation. The HP bar tweens from its pre-combat value to its post-combat
+   * value; the flash decays over the cloud duration (strongest for the unit that
+   * lost HP, and always shown on the attacked defender).
+   */
+  private getCombatHealthState(
+    unit: Unit,
+    combatAnimations?: CombatAnimation[]
+  ): { displayHealth: number; hitFlash: number } {
+    if (!combatAnimations || combatAnimations.length === 0) {
+      return { displayHealth: unit.health ?? 100, hitFlash: 0 };
+    }
+    const now = performance.now();
+    for (const anim of combatAnimations) {
+      const isAttacker = unit.id === anim.attackerId;
+      const isDefender = unit.id === anim.defenderId;
+      if (!isAttacker && !isDefender) continue;
+      const elapsed = now - anim.startTime;
+      const before = isAttacker ? (anim.attackerHealthBefore ?? unit.health) : (anim.defenderHealthBefore ?? unit.health);
+      const after = isAttacker ? (anim.attackerHealthAfter ?? unit.health) : (anim.defenderHealthAfter ?? unit.health);
+      // Tween the HP bar over ~500ms from the combat start.
+      const hpTween = Math.min(1, elapsed / 500);
+      const displayHealth = MathUtils.lerp(before, after, MathUtils.fade(hpTween));
+      const flash = elapsed < anim.duration ? 1 - (elapsed / anim.duration) : 0;
+      // The defender is the "attacked" unit — always flashes while under attack,
+      // and the unit that lost HP (the attacker on a failed attack) flashes too.
+      const lostHp = before > after;
+      return { displayHealth, hitFlash: lostHp || isDefender ? flash : 0 };
+    }
+    return { displayHealth: unit.health ?? 100, hitFlash: 0 };
+  }
+
+  /**
+   * Resolve the displayed HP and a red hit-flash for a city in an active combat
+   * animation (city attacks only).
+   */
+  private getCityCombatHealthState(
+    city: City,
+    combatAnimations?: CombatAnimation[]
+  ): { displayHealth: number; maxHealth: number; hitFlash: number } {
+    const cityMaxHP = city.population || 1;
+    const baseHP = city.hitPoints ?? cityMaxHP;
+    if (!combatAnimations || combatAnimations.length === 0) {
+      return { displayHealth: baseHP, maxHealth: cityMaxHP, hitFlash: 0 };
+    }
+    const now = performance.now();
+    for (const anim of combatAnimations) {
+      if (!anim.cityAttack || anim.cityId !== city.id) continue;
+      const elapsed = now - anim.startTime;
+      const before = anim.cityHealthBefore ?? baseHP;
+      const after = anim.cityHealthAfter ?? baseHP;
+      const hpTween = Math.min(1, elapsed / 500);
+      const displayHealth = MathUtils.lerp(before, after, MathUtils.fade(hpTween));
+      const flash = elapsed < anim.duration ? 1 - (elapsed / anim.duration) : 0;
+      return { displayHealth, maxHealth: cityMaxHP, hitFlash: before > after ? flash : 0 };
+    }
+    return { displayHealth: baseHP, maxHealth: cityMaxHP, hitFlash: 0 };
+  }
+
+  /**
    * Draws a unit on the map with civilization colors and unit icons.
    * Handles animations for active units and special states like sleeping.
    *
@@ -1746,11 +1871,13 @@ export class MapRenderer {
     unit: Unit,
     alpha: number,
     cameraZoom: number,
-    civilizations: Civilization[]
+    civilizations: Civilization[],
+    combatAnimations?: CombatAnimation[]
   ): void {
     ctx.save();
     ctx.globalAlpha = alpha;
 
+    const healthState = this.getCombatHealthState(unit, combatAnimations);
     const zoomFactor = typeof cameraZoom === 'number' ? Math.min(Math.max(cameraZoom, 0.5), 1.5) : 1;
     const radius = Math.round(20 * zoomFactor);
 
@@ -1827,8 +1954,19 @@ export class MapRenderer {
       ctx.fillText(sleepIcon, centerX, centerY + 22);
     }
 
+    // Red hit-flash overlay on a unit that took damage or is being attacked.
+    if (healthState.hitFlash > 0) {
+      ctx.save();
+      ctx.globalAlpha = alpha * healthState.hitFlash * 0.5;
+      ctx.beginPath();
+      ctx.fillStyle = '#FF0000';
+      ctx.arc(centerX, centerY, innerRadius, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Show health indicator as a small bar below the unit circle
-    const unitHealth = unit.health ?? 100;
+    const unitHealth = healthState.displayHealth;
     if (unitHealth < 100) {
       const hpBarWidth = innerRadius * 1.6;
       const hpBarHeight = Math.max(3, 3 * zoomFactor);

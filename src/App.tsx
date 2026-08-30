@@ -191,7 +191,12 @@ function App() {
       // Clean up the URL so a page refresh doesn't loop.
       window.history.replaceState(null, '', window.location.pathname);
     }
-  }, []);
+    // `?noanim` disables all movement/combat/camera animations (instant). Used by
+    // the e2e suite and tests to keep runs deterministic.
+    if (params.has('noanim')) {
+      actions.updateSettings({ enableAnimations: false, animationSpeed: 0, cameraGlideSpeed: 0 });
+    }
+  }, [actions]);
 
   useEffect(() => {
     if (!quickstartRef.current || gameEngine || !showGameSetup) return;
@@ -436,7 +441,9 @@ function App() {
       try {
         const text = await file.text();
         const saveData = JSON.parse(text);
-        if (!saveData || saveData.version !== 1) {
+        // Accept saved-state versions 1 and 2 — the engine's `loadGame` supports
+        // both, so the menu Load Game must too.
+        if (!saveData || (saveData.version !== 1 && saveData.version !== 2)) {
           showToast('Invalid or incompatible save file.', 'error');
           setActiveMenu(null);
           return;
