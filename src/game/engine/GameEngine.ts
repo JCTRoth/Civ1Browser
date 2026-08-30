@@ -122,6 +122,12 @@ export default class GameEngine {
   aiManager: AIManager;
   barbarianManager: BarbarianManager; // Dedicated aggressive AI for the phantom barbarian civ
   unitTurnQueue: UnitTurnQueue; // Unit turn queue for managing unit order
+  /** Monotonic per-(civ,type) unit-id suffix counters. Kept so a unit id is
+   *  NEVER reused after its unit dies — the old `${type}_${civ}_${count}` scheme
+   *  reused ids once a unit was removed (count = live-array length shrank), so a
+   *  removal-by-id could delete a brand-new unit that inherited the corpse's id
+   *  (units silently going missing). */
+  private unitIdCounters: Map<string, number> = new Map();
   diplomacyManager: DiplomacyManager; // Civ I–style diplomacy system
 
   // Human-readable recap of the most recent auto-end (what was skipped), used
@@ -1113,11 +1119,33 @@ export default class GameEngine {
   }
 
   /**
+   * Generates a unique unit id for a civ/type in the `type_civId_index` format
+   * used across the codebase. The index is monotonic per (civ, type) and always
+   * greater than the highest index of any LIVE unit of that (civ, type) — so an
+   * id is never reused after a unit dies (which would otherwise make
+   * removal-by-id delete the corpse AND a newly spawned unit sharing the id).
+   */
+  private nextUnitId(civId: number, type: string): string {
+    const key = `${civId}:${type}`;
+    const prefix = `${type}_${civId}_`;
+    let maxSuffix = -1;
+    for (const u of this.units) {
+      if (u.civilizationId !== civId || u.type !== type || typeof u.id !== 'string') continue;
+      if (!u.id.startsWith(prefix)) continue;
+      const n = parseInt(u.id.slice(prefix.length), 10);
+      if (Number.isInteger(n) && n > maxSuffix) maxSuffix = n;
+    }
+    const next = Math.max(this.unitIdCounters.get(key) ?? -1, maxSuffix) + 1;
+    this.unitIdCounters.set(key, next);
+    return `${prefix}${next}`;
+  }
+
+  /**
    * Create a single unit
    */
   private createUnit(civId: number, type: string, col: number, row: number) {
     const unitProps: { movement: number; attack: number; defense: number; icon?: string; hitPoints?: number; name?: string; type?: string; maintenance?: number } = UNIT_PROPS[type] || { movement: 1, attack: 1, defense: 1, icon: '⚔️' };
-    const unitId = `${type}_${civId}_${this.units.filter(u => u.civilizationId === civId).length}`;
+    const unitId = this.nextUnitId(civId, type);
     
     const unit = {
       id: unitId,
@@ -2495,7 +2523,11 @@ export default class GameEngine {
       }
       setTimeout(() => {
         this.units = this.units.filter(u => u.id !== defender.id);
-        
+
+        // Sync the store so the defeated unit actually disappears (the engine
+        // removed it here; without this the store would keep a stale copy).
+        this.onStateChange?.('UNIT_REMOVED', { unit: defender });
+
         // Phase 3.2: If a scout died, reassign zones
         if (defender.type === 'scout') {
           this.onScoutDeath(defender);
@@ -2569,7 +2601,10 @@ export default class GameEngine {
         }
         setTimeout(() => {
           this.units = this.units.filter(u => u.id !== attacker.id);
-          
+
+          // Sync the store so the defeated unit actually disappears.
+          this.onStateChange?.('UNIT_REMOVED', { unit: attacker });
+
           // Phase 3.2: If a scout died, reassign zones
           if (attacker.type === 'scout') {
             this.onScoutDeath(attacker);
@@ -2699,6 +2734,7 @@ export default class GameEngine {
       }
       setTimeout(() => {
         this.units = this.units.filter(u => u.id !== attacker.id);
+        this.onStateChange?.('UNIT_REMOVED', { unit: attacker });
       }, 1200);
       console.log(`[COMBAT] ${attacker.type} destroyed attacking city ${city.name}`);
     }

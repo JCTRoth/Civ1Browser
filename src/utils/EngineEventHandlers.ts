@@ -128,6 +128,9 @@ export class EngineEventRouter {
       case 'VILLAGE_RESULT':
         this.onVillageResult(eventData);
         break;
+      case 'UNIT_REMOVED':
+        this.onUnitRemoved();
+        break;
       default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
@@ -313,6 +316,14 @@ export class EngineEventRouter {
         }
       }, animation.duration + animation.deathBlinkDuration + 200);
     }
+  }
+
+  private onUnitRemoved() {
+    // A unit was removed from the engine after a delayed combat removal —
+    // refresh the store so the dead unit actually disappears (the renderer
+    // only hides it via isDefeated until this sync lands).
+    this.actions.updateUnits(this.gameEngine.getAllUnits());
+    this.actions.updateVisibility();
   }
 
   private onCityAttacked(eventData: Record<string, unknown>) {
