@@ -195,7 +195,7 @@ describe('serializeCityCompact', () => {
   });
 
   it('falls back to productionProgress when productionStored is missing', () => {
-    const compact = serializeCityCompact({ id: 'c', name: 'X', civilizationId: 0, col: 1, row: 1, population: 1, productionProgress: 12 });
+    const compact = serializeCityCompact({ id: 'c', name: 'X', civilizationId: 0, col: 1, row: 1, population: 1, production: 0, food: 0, gold: 0, science: 0, productionProgress: 12 });
     expect(compact.productionStored).toBe(12);
   });
 });

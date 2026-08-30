@@ -72,8 +72,8 @@ describe('Civ1 trade routes', () => {
 
   it('canEstablishTradeRoute: only a caravan on a different city', async () => {
     const e = await setup();
-    const home = addCity(e, 'c0', 0, 'Home', 5, 5);
-    const dest = addCity(e, 'c1', 1, 'Dest', 15, 5);
+    addCity(e, 'c0', 0, 'Home', 5, 5);
+    addCity(e, 'c1', 1, 'Dest', 15, 5);
     const caravan = addCaravan(e, 'car1', 0, 15, 5, 'c0');
 
     expect(e.canEstablishTradeRoute(caravan.id)).toBe(true);
@@ -114,14 +114,14 @@ describe('Civ1 trade routes', () => {
   it('a foreign destination pays a higher lump sum than a domestic one', async () => {
     const e = await setup();
     // Domestic route (both civ 0).
-    const homeA = addCity(e, 'a0', 0, 'A', 5, 5);
-    const destA = addCity(e, 'a1', 0, 'A1', 15, 5);
+    addCity(e, 'a0', 0, 'A', 5, 5);
+    addCity(e, 'a1', 0, 'A1', 15, 5);
     const carA = addCaravan(e, 'carA', 0, 15, 5, 'a0');
     const rA = e.establishTradeRoute(carA.id);
 
     // Foreign route (dest civ 1), same population & distance.
-    const homeB = addCity(e, 'b0', 0, 'B', 5, 10);
-    const destB = addCity(e, 'b1', 1, 'B1', 15, 10);
+    addCity(e, 'b0', 0, 'B', 5, 10);
+    addCity(e, 'b1', 1, 'B1', 15, 10);
     const carB = addCaravan(e, 'carB', 0, 15, 10, 'b0');
     const rB = e.establishTradeRoute(carB.id);
 
@@ -144,7 +144,7 @@ describe('Civ1 trade routes', () => {
   it('routeTrade adds per-turn trade to the city commerce', async () => {
     const e = await setup();
     const home = addCity(e, 'c0', 0, 'Home', 5, 5, 2);
-    const dest = addCity(e, 'c1', 1, 'Dest', 15, 5, 4);
+    addCity(e, 'c1', 1, 'Dest', 15, 5, 4);
     addCaravan(e, 'car1', 0, 15, 5, 'c0');
     e.establishTradeRoute('car1');
 
@@ -157,7 +157,7 @@ describe('Civ1 trade routes', () => {
   it('a caravan moving onto an enemy city tile delivers automatically', async () => {
     const e = await setup();
     const [homePos, destPos] = findLandTiles(e, 2);
-    const home = addCity(e, 'c0', 0, 'Home', homePos.col, homePos.row);
+    addCity(e, 'c0', 0, 'Home', homePos.col, homePos.row);
     const dest = addCity(e, 'c1', 1, 'Dest', destPos.col, destPos.row);
     const car = addCaravan(e, 'car1', 0, homePos.col, homePos.row, 'c0');
     car.movesRemaining = 2;

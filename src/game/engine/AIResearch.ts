@@ -167,8 +167,15 @@ export class AIResearch {
     const available = AIResearch.getAvailableTechnologies(civ);
     if (available.length === 0) return null;
 
-    const personality: Personality = civ.personality || {
-      aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5
+    // Normalize the civ's optional personality traits to a full Personality
+    // (defaulting any missing trait to 5) so scoring is always well-defined.
+    const personality: Personality = {
+      aggression: civ.personality?.aggression ?? 5,
+      expansion: civ.personality?.expansion ?? 5,
+      diplomacy: civ.personality?.diplomacy ?? 5,
+      science: civ.personality?.science ?? 5,
+      military: civ.personality?.military ?? 5,
+      economy: civ.personality?.economy ?? 5,
     };
 
     const scored = available.map(techId => AIResearch.scoreTechnology(

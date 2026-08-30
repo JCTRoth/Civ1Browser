@@ -67,8 +67,10 @@ export interface MapState {
   width: number;
   height: number;
   tiles: Tile[];
-  visibility: boolean[];
-  revealed: boolean[];
+  // Fog-of-war arrays are only populated for some maps (the engine's MapData
+  // mirrors this, so generated maps that don't fill them still type-check).
+  visibility?: boolean[];
+  revealed?: boolean[];
   getTile?(col: number, row: number): Tile | undefined;
   getUnitAt?(col: number, row: number): unknown;
   grid?: { getNeighbors(col: number, row: number): Array<{ col: number; row: number }> };
@@ -86,6 +88,9 @@ interface Tile {
   col: number;
   row: number;
   type?: string;
+  /** Legacy flags: some maps/saves set these alongside `improvement`. */
+  hasRoad?: boolean;
+  hasRiver?: boolean;
 }
 
 /** Outcome of a Civ1 village (goody hut) encounter. */
@@ -385,6 +390,8 @@ export interface Civilization {
     expansion?: number;
     science?: number;
     diplomacy?: number;
+    military?: number;
+    economy?: number;
   };
   /** AI priorities / strategy state (set by AI systems at runtime). */
   priorities?: Record<string, unknown>;

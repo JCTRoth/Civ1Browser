@@ -107,6 +107,9 @@ const CityModal: React.FC<CityModalProps> = ({
                     <li>Food: {selectedCity.yields?.food ?? 0}</li>
                     <li>Production: {logic.getProductionPerTurn()}</li>
                     <li>Trade: {selectedCity.yields?.trade ?? 0}</li>
+                    {logic.getRouteTrade() > 0 && (
+                      <li>Route trade: +{logic.getRouteTrade()}</li>
+                    )}
                     <li>Science: {selectedCity.science ?? 0}</li>
                     <li>Gold: {selectedCity.gold ?? 0}</li>
                   </ul>
@@ -409,6 +412,11 @@ const CityModal: React.FC<CityModalProps> = ({
                           <small className="resource-desc">
                             {resources.trade.afterCorruption} trade after corruption. Distributed as luxuries, taxes, and science.
                           </small>
+                          {resources.trade.routeTrade > 0 && (
+                            <small className="resource-desc text-info d-block mt-1">
+                              <i className="bi bi-arrow-left-right"></i> Includes +{resources.trade.routeTrade} trade from routes.
+                            </small>
+                          )}
                         </div>
                       </div>
 
@@ -525,6 +533,60 @@ const CityModal: React.FC<CityModalProps> = ({
                 ) : (
                   <div className="city-buildings-empty">No buildings constructed yet</div>
                 )}
+              </div>
+            </Tab>
+            <Tab eventKey="trade" title="Trade Routes">
+              <div className="city-trade-routes-content">
+                {(() => {
+                  const routes = logic.getTradeRoutes();
+                  const routeTrade = logic.getRouteTrade();
+                  return (
+                    <>
+                      <p className="hex-detail-city-info">
+                        <strong>Trade routes:</strong> {routes.length}/3
+                        {routeTrade > 0 && (
+                          <span className="ms-2 text-info">
+                            <i className="bi bi-arrow-left-right"></i> +{routeTrade} trade/turn
+                          </span>
+                        )}
+                      </p>
+                      <p className="small text-muted">
+                        A Caravan establishes a permanent route when it delivers to another city
+                        (lump-sum Gold + Science). Each route adds per-turn trade to both cities.
+                        At most 3 routes; a stronger new route replaces the weakest.
+                      </p>
+                      {routes.length > 0 ? (
+                        <div className="d-flex flex-column gap-2">
+                          {routes.map((route, i) => {
+                            const destCiv = gameEngine.civilizations?.find(
+                              (c: Civilization) => c.id === route.civilizationId,
+                            );
+                            const isForeign = route.civilizationId !== selectedCity.civilizationId;
+                            return (
+                              <div key={i} className="p-2 rounded bg-dark border border-secondary d-flex justify-content-between align-items-center">
+                                <div>
+                                  <div>
+                                    <strong>{route.cityName}</strong>
+                                    {isForeign && <span className="text-warning ms-2 small">foreign ×2</span>}
+                                  </div>
+                                  <div className="small text-muted">
+                                    {destCiv?.name ?? `Civ ${route.civilizationId}`} · {route.distance} tiles away
+                                  </div>
+                                </div>
+                                <div className="text-info fw-semibold">+{route.trade} trade/turn</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-muted">
+                          No trade routes yet. Build a Caravan (requires Trade) and deliver it to
+                          another city to establish a route.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </Tab>
             <Tab eventKey="raw" title="Raw JSON">

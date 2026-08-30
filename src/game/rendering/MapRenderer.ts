@@ -2094,7 +2094,7 @@ export class MapRenderer {
     const isEnemyAtUnit = targetUnit && targetUnit.civilizationId !== unit.civilizationId;
     
     // Check for enemy city at destination
-    const cities = (gameState as Record<string, unknown>).cities as City[] || [];
+    const cities = (gameState as unknown as Record<string, unknown>).cities as City[] || [];
     const targetCity = cities.find((c: City) => c.col === lastPathStep.col && c.row === lastPathStep.row);
     const isEnemyAtCity = targetCity && targetCity.civilizationId !== unit.civilizationId;
     const isEnemyAtDestination = isEnemyAtUnit || isEnemyAtCity;

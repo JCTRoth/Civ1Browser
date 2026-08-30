@@ -7,7 +7,7 @@
 
 import { AIUtility, scanAreaForEnemies, findInterceptPosition, findPatrolWaypoint, type ThreatAlert } from './AIUtility';
 import { EnemySearcher } from './EnemySearcher';
-import { UNIT_PROPS, TERRAIN_PROPS } from '@/utils/Constants';
+import { UNIT_PROPS, TERRAIN_PROPS, IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES } from '@/utils/Constants';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import { SettlementEvaluator, MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
 import { AIStrategySelector } from './AIStrategySelector';
@@ -911,6 +911,16 @@ export class AIManager {
         console.log(`[AI-SETTLER] Settler ${unit.id} heading to settlement (${cached.col},${cached.row})`);
         return { col: cached.col, row: cached.row };
       }
+      // Civ1 income strategy: no settlement worth founding — walk to the
+      // nearest friendly worked tile (grassland/plains/desert) lacking a road
+      // and build a road there to boost the city's commerce → tax + science.
+      if (!unit.workTarget) {
+        const tradeRoad = this.findTradeRoadTarget(unit);
+        if (tradeRoad) {
+          console.log(`[AI-SETTLER] Settler ${unit.id} heading to worked tile (${tradeRoad.col},${tradeRoad.row}) to build a trade road`);
+          return tradeRoad;
+        }
+      }
     }
 
     // Special handling for scouts: use EnemySearcher to find enemies
@@ -1392,6 +1402,25 @@ export class AIManager {
         this.gameEngine.canBuildImprovement(unit.id, 'mine')) {
       return 'mine';
     }
+
+    // Civ1 income strategy: a road on a tile a city WORKS grants +1 trade on
+    // grassland/plains/desert (IMPROVEMENT_PROPERTIES.road.tradeBonusTerrains).
+    // More trade → more tax + science, so building roads on worked tiles is a
+    // direct income boost. Ranks right after mines (production) and before
+    // irrigation/generic road so the strategy actually fires.
+    const roadDef = IMPROVEMENT_PROPERTIES[IMPROVEMENT_TYPES.ROAD];
+    const workedByCity = this.gameEngine.cities.some((c: City) =>
+      c.civilizationId === civId && c.workingTiles?.has(`${unit.col},${unit.row}`)
+    );
+    // Skip tiles that already carry a road (canonical `tile.improvement` or
+    // legacy `tile.road`/`tile.hasRoad` flags from older saves).
+    const hasRoad = tile.improvement === IMPROVEMENT_TYPES.ROAD
+      || (tile as { road?: boolean; hasRoad?: boolean }).road === true
+      || (tile as { road?: boolean; hasRoad?: boolean }).hasRoad === true;
+    if (workedByCity && !hasRoad && roadDef?.tradeBonusTerrains?.includes(terrain) &&
+        !tile.improvement && this.gameEngine.canBuildImprovement(unit.id, 'road')) {
+      return 'road';
+    }
     const hasFreshWater = this.gameEngine.squareGrid.getNeighbors(unit.col, unit.row).some((neighbor: { col: number; row: number }) => {
       const neighborTile = this.gameEngine.getTileAt(neighbor.col, neighbor.row);
       const neighborTerrain = neighborTile?.terrain || neighborTile?.type;
@@ -1404,6 +1433,61 @@ export class AIManager {
     if (this.gameEngine.canBuildImprovement(unit.id, 'railroad')) return 'railroad';
     if (this.gameEngine.canBuildImprovement(unit.id, 'road')) return 'road';
     return null;
+  }
+
+  /**
+   * Civ1 income strategy: find the nearest tile a friendly city WORKS that has
+   * no improvement yet and where a road grants +1 trade (grassland/plains/
+   * desert — see IMPROVEMENT_PROPERTIES.road.tradeBonusTerrains). Roads on
+   * worked tiles raise the city's commerce → more tax + science, so an idle
+   * settler walks there to build the road instead of wandering. Respects the
+   * civ's improvement budget so settlers don't over-improve.
+   */
+  private findTradeRoadTarget(unit: Unit): { col: number; row: number } | null {
+    const civId = unit.civilizationId;
+    const roadDef = IMPROVEMENT_PROPERTIES[IMPROVEMENT_TYPES.ROAD];
+    if (!roadDef?.tradeBonusTerrains) return null;
+
+    // Same improvement budget as chooseImprovementForSettler (~2 per city).
+    const friendlyCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civId);
+    if (friendlyCities.length === 0) return null;
+    const budget = Math.max(2, friendlyCities.length * 2);
+    const ownImprovements = (this.gameEngine.map?.tiles ?? []).filter((t: MapTile) =>
+      !!t.improvement && ['road', 'railroad', 'mines', 'irrigation', 'fortress'].includes(t.improvement) &&
+      this.gameEngine.cities.some((c: City) =>
+        c.civilizationId === civId &&
+        this.gameEngine.squareGrid.squareDistance(t.col, t.row, c.col, c.row) <= 4
+      )
+    ).length;
+    if (ownImprovements >= budget) return null;
+
+    let best: { col: number; row: number } | null = null;
+    let bestDist = Infinity;
+    for (const city of friendlyCities) {
+      if (!city.workingTiles || city.workingTiles.size === 0) continue;
+      for (const key of city.workingTiles) {
+        const parts = key.split(',');
+        const col = Number(parts[0]);
+        const row = Number(parts[1]);
+        if (!Number.isFinite(col) || !Number.isFinite(row)) continue;
+        const tile = this.gameEngine.getTileAt(col, row);
+        if (!tile) continue;
+        const terrain = tile.terrain || tile.type || '';
+        // Only grassland/plains/desert give the +1 trade from a road.
+        if (!roadDef.tradeBonusTerrains.includes(terrain)) continue;
+        // Skip tiles that already have a road (canonical `tile.improvement` or
+        // legacy `tile.road`/`tile.hasRoad` flags) or any other improvement.
+        if (tile.improvement) continue;
+        if ((tile as { road?: boolean; hasRoad?: boolean }).road === true
+            || (tile as { road?: boolean; hasRoad?: boolean }).hasRoad === true) continue;
+        const dist = this.gameEngine.squareGrid.squareDistance(unit.col, unit.row, col, row);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { col, row };
+        }
+      }
+    }
+    return best;
   }
 
   /**

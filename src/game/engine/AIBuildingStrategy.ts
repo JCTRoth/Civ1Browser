@@ -7,6 +7,7 @@
  */
 
 import { BUILDING_PROPERTIES, BUILDING_PREREQUISITES, WONDER_PROPERTIES } from '@/data/BuildingConstants';
+import type { BuildingProperties } from '../../data/GameConstants';
 import {
   type StrategyProfile,
   type Personality,
@@ -68,8 +69,15 @@ export class AIBuildingStrategy {
   ): BuildingPlan[] {
     const plans: BuildingPlan[] = [];
     const cityBuildings: string[] = city.buildings || [];
-    const personality: Personality = civ.personality || {
-      aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5
+    // Normalize the civ's optional personality traits to a full Personality
+    // (defaulting any missing trait to 5) so building choices are stable.
+    const personality: Personality = {
+      aggression: civ.personality?.aggression ?? 5,
+      expansion: civ.personality?.expansion ?? 5,
+      diplomacy: civ.personality?.diplomacy ?? 5,
+      science: civ.personality?.science ?? 5,
+      military: civ.personality?.military ?? 5,
+      economy: civ.personality?.economy ?? 5,
     };
 
     for (const [buildingType, props] of Object.entries(BUILDING_PROPERTIES)) {
@@ -104,7 +112,7 @@ export class AIBuildingStrategy {
    */
   private static scoreBuilding(
     buildingType: string,
-    props: Record<string, unknown>,
+    props: BuildingProperties,
     city: City,
     personality: Personality,
     strategy: StrategyProfile,

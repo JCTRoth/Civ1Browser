@@ -619,7 +619,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         return state;
       }
 
-      const newVisibility = [...map.visibility];
+      const newVisibility = [...(map.visibility || new Array(map.tiles.length).fill(false))];
       const newRevealed = [...(map.revealed || new Array(map.tiles.length).fill(false))];
 
       setVisibilityAreaInternal(newVisibility, newRevealed, centerCol, centerRow, radius, map.width, map.height);

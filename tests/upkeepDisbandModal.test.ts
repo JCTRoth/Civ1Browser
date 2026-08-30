@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
 import { EngineEventRouter } from '@/utils/EngineEventHandlers';
 import { useGameStore } from '@/stores/GameStore';
-import type { GameEngine as IGameEngine } from '@/../types/game';
 
 /**
  * Upkeep-disbanded modal:
@@ -28,7 +27,7 @@ describe('Upkeep-disbanded modal', () => {
       startingGold: 100
     });
 
-    router = new EngineEventRouter(engine as unknown as IGameEngine);
+    router = new EngineEventRouter(engine);
     engine.onStateChange = (type: string, data?: any) => {
       router.handle(type, data);
     };

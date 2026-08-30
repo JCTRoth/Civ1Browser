@@ -3,7 +3,7 @@
 import { ModalUtils } from './ModalUtils';
 import { UNIT_PROPS } from '@/utils/Constants';
 import {CityUtils} from "@/utils/CityUtils";
-import type { City, Civilization, ProductionItem } from '../../../../types/game';
+import type { City, Civilization, ProductionItem, TradeRoute } from '../../../../types/game';
 import GameEngine from '@/game/engine/GameEngine';
 
 export class CityModalLogic {
@@ -160,5 +160,14 @@ export class CityModalLogic {
 
   getCityResources() {
     return CityUtils.calculateCityResources(this.city, this.currentPlayer);
+  }
+
+  getTradeRoutes(): TradeRoute[] {
+    return Array.isArray(this.city.tradeRoutes) ? this.city.tradeRoutes : [];
+  }
+
+  /** Total per-turn trade contributed by this city's permanent trade routes. */
+  getRouteTrade(): number {
+    return this.getTradeRoutes().reduce((total: number, r: TradeRoute) => total + (r.trade ?? 0), 0);
   }
 }

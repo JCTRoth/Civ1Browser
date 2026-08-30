@@ -1,6 +1,7 @@
 import { useGameStore } from '../stores/GameStore';
 import { firstUnresearchedInPath } from './ResearchPath';
-import type { GameEngine, Technology, Unit, City, Civilization, VillageOutcome } from '../../types/game';
+import type GameEngine from '../game/engine/GameEngine';
+import type { Technology, Unit, City, Civilization, VillageOutcome } from '../../types/game';
 
 // The human player is always civilization 0 (mirrors the store's fog of war).
 const HUMAN_PLAYER_ID = 0;

@@ -60,8 +60,13 @@ export const CityUtils = {
         const productionProduced = city.yields?.production ?? city.production ?? 0;
         const productionSurplus = productionProduced; // Simplified - no maintenance cost calculation yet
 
-        // Calculate trade and its distribution
-        const totalTrade = city.yields?.trade ?? 0;
+        // Calculate trade and its distribution: tile trade plus per-turn income
+        // from permanent trade routes (established by delivered Caravans).
+        const routeTrade = (city.tradeRoutes ?? []).reduce(
+          (total: number, r) => total + (r.trade ?? 0),
+          0,
+        );
+        const totalTrade = (city.yields?.trade ?? 0) + routeTrade;
 
         // Use the civ's actual Tax/Science/Luxury rates (fallback 50/50/0).
         const luxuryRate = currentPlayer?.luxuryRate ?? 0;      // percentage
@@ -105,7 +110,8 @@ export const CityUtils = {
             trade: {
                 total: totalTrade,
                 afterCorruption: tradeAfterCorruption,
-                corruption: corruption
+                corruption: corruption,
+                routeTrade: routeTrade
             },
             luxuries: {
                 amount: actualLuxuries,
