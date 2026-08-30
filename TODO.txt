@@ -3,8 +3,14 @@ TOODO:
 * Implement Human and Human (on one computer) against AI vs AI game modes.
 * Implement End of game statistics that show the player how they did, enconmics, military, and science wise.
 * Implement Civ1 ingame statistics screen that shows the player greatest cities in the worl, and there rank in the world wide demographics.
+* High score system for single player games, including a list of high scores, and the ability to submit high scores to a server.
 
 Far further development of the game engine is planned, including:
 
+* Splitting up the game into client and server so that the game can be played over network.
 * Networked multiplayer is not yet implemented, but the game engine is designed to support it in the future.
+* Lobby system for multiplayer games, including a list of available games, and the ability to create and join games.
 * Replay to play replays, I think it would make sense to use the save game, turn log, and map download do the replay stuff.
+* Hall of fame for multiplayer games, including a list of high scores, and the ability to submit high scores to a server.
+
+* Database backup and restore system, including the ability to backup and restore the database, and the ability to export and import the database.

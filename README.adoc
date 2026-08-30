@@ -439,10 +439,28 @@ Low corruption, medium costs, no senate interference, effective espionage.
 === Setup Instructions
 
 1. **Clone the repository**:
-+
+We are using Git LFS for large assets, +
+ so ensure you have it installed.
+Ubuntu/Debian:
+```bash
+sudo apt install git-lfs
+```
+Fedora:
+```bash
+sudo dnf install git-lfs
+```
+Windows:
+```powershell
+winget install -e --id GitHub.GitLFS
+```
+OR download and install from
+https://git-lfs.com/
+
+**Clone Repository**:
 [source,bash]
 ----
 git clone https://github.com/JCTRoth/Civ1Browser.git
+git lfs pull
 cd Civ1Browser
 ----
 
