@@ -14,7 +14,7 @@ import {
   computeCityGarrisonStrength,
   type CityThreatAssessment
 } from './AIStrategy';
-import { canBuildUnit, type StrategyProfile, type AIState, createDefaultAIState, type BuildingPlan } from './AITypes';
+import { canBuildUnit, type StrategyProfile, type AIState, resolveAICivStrategy, type BuildingPlan } from './AITypes';
 import { AIBuildingStrategy } from './AIBuildingStrategy';
 import type { City, Civilization, Unit } from '../../../types/game';
 import GameEngine from './GameEngine';
@@ -588,12 +588,11 @@ export class AutoProduction {
    */
   private getStrategyForCiv(civilizationId: number): StrategyProfile {
     const civ = this.gameEngine.civilizations?.[civilizationId];
-    if (civ?.productionProfile) return civ.productionProfile;
     const storage = typeof this.gameEngine.getPlayerStorage === 'function'
       ? this.gameEngine.getPlayerStorage(civilizationId)
       : undefined;
-    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
-    return aiState.strategyProfile ?? 'balanced_growth';
+    const aiState: AIState | undefined = storage?.turnData?.aiState;
+    return resolveAICivStrategy(civ, aiState);
   }
 
   private isDefensiveUnitType(unitType: string): boolean {

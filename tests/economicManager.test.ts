@@ -457,3 +457,40 @@ describe('EconomicManager tile-based commerce', () => {
     expect(econ.calculateCityTrade(city)).toBe(10); // max(10, floor 2)
   });
 });
+
+describe('EconomicManager AI budget keeping (raiseTaxForAI)', () => {
+  function setup(gold: number, unitCount: number, overrides: any = {}) {
+    const civ = makeCiv(0, {
+      taxRate: 50, scienceRate: 40, luxuryRate: 10,
+      resources: { food: 0, production: 0, trade: 0, science: 0, gold },
+      ...overrides,
+    });
+    const city = makeCity(0, 10); // trade 10 → commerce 10
+    const units = Array.from({ length: unitCount }, (_, i) => ({
+      id: `u${i}`, civilizationId: 0, maintenance: 1,
+    }));
+    const engine = makeEngine({ civilizations: [civ], cities: [city], units });
+    const econ = new EconomicManager(engine);
+    (econ as any).raiseTaxForAI(civ, [city]);
+    return civ;
+  }
+
+  it('keeps rates summed to 100 and invests in science when the treasury is healthy', () => {
+    // gold 100 ≫ reserve (1 turn of upkeep=2) → healthy → tax drifts to the
+    // floor and science gets the surplus.
+    const civ = setup(100, 2);
+    expect(civ.taxRate + civ.scienceRate + civ.luxuryRate).toBe(100);
+    expect(civ.taxRate).toBeLessThanOrEqual(50);
+    expect(civ.scienceRate).toBeGreaterThanOrEqual(40);
+  });
+
+  it('raises tax to cover upkeep (cutting science) when the treasury is in deficit', () => {
+    // gold −10 < 0 → deficit → tax rises to cover upkeep (6 with 6 units) while
+    // science is cut below the healthy level.
+    const civ = setup(-10, 6);
+    expect(civ.taxRate + civ.scienceRate + civ.luxuryRate).toBe(100);
+    expect(civ.taxRate).toBeGreaterThan(30);
+    expect(civ.scienceRate).toBeLessThan(50);
+  });
+});
+

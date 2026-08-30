@@ -22,6 +22,7 @@ import { UNIT_PROPS } from '../../utils/Constants';
 import { TERRAIN_PROPERTIES, TERRAIN_TYPES, SPECIAL_RESOURCES } from '../../data/TerrainConstants';
 import { IMPROVEMENT_PROPERTIES } from '../../data/TileImprovementConstants';
 import type { City, Civilization, Unit } from '../../../types/game';
+import { resolveAICivStrategy, type StrategyProfile } from './AITypes';
 import GameEngine from './GameEngine';
 
 /** Minimal shape of a map tile as read by the economy (terrain + resource + improvement). */
@@ -83,8 +84,6 @@ export const CAPTURED_CITY_UNHAPPY = 3;
 export const CITY_RADIUS = 2;
 /** Minimum yields of the city-center tile (Civ1 rule). */
 export const CITY_CENTER_MIN = { food: 2, production: 1, trade: 1 };
-/** Tax rate the AI drifts back down to when its treasury is healthy. */
-export const AI_BALANCED_TAX = 40;
 /**
  * Minimum science rate the AI keeps whenever it can afford to (unless it is
  * genuinely bankrupt) so AI-vs-AI games don't lock into 0% science forever.
@@ -92,6 +91,21 @@ export const AI_BALANCED_TAX = 40;
 export const AI_SCIENCE_FLOOR = 20;
 /** Absolute floor the AI never drops tax below while commerce exists. */
 export const AI_MIN_TAX = 10;
+/**
+ * Turns of upkeep the AI keeps as a treasury reserve (cushion), per strategy.
+ * Military / defensive civs hold a bigger war chest; science / wonder civs
+ * invest the surplus instead of hoarding gold.
+ */
+export const AI_RESERVE_TURNS: Record<StrategyProfile, number> = {
+  military_expansion: 2,
+  defensive_turtle: 2,
+  balanced_growth: 1,
+  early_expansion: 1,
+  wonder_rush: 1,
+  science_focus: 1,
+};
+/** Fraction of the reserve shortfall the AI tries to rebuild each turn. */
+export const AI_RESERVE_REBUILD = 0.1;
 
 const clamp = (v: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, v));
@@ -189,8 +203,14 @@ export class EconomicManager {
    * A city's commerce: real tile-based trade (after recompute) with the
    * city-center floor as a safety net.
    */
+  /** Per-turn trade points a city receives from its active Civ1 trade routes. */
+  routeTrade(city: City): number {
+    if (!Array.isArray(city.tradeRoutes)) return 0;
+    return city.tradeRoutes.reduce((total: number, r) => total + (r.trade ?? 0), 0);
+  }
+
   cityCommerce(city: City): number {
-    return Math.max(city?.yields?.trade ?? 0, CITY_CENTER_COMMERCE);
+    return Math.max(city?.yields?.trade ?? 0, CITY_CENTER_COMMERCE) + this.routeTrade(city);
   }
 
   /**
@@ -766,11 +786,29 @@ export class EconomicManager {
     const luxuryNeed = this.luxuryNeedPct(civ, cities);
     const luxury = Math.min(luxuryNeed, 100 - AI_MIN_TAX - AI_SCIENCE_FLOOR);
 
-    // ── Tax target: cover this turn's upkeep (treasury cushions it). While
-    //    the treasury is non-negative keep the science floor; in a genuine
-    //    deficit let tax take science's share (luxury still wins). ──
-    const taxNeed = Math.ceil((Math.max(0, upkeep - Math.max(0, gold)) / commerce) * 100);
-    const scienceAllowance = gold < 0 ? 0 : AI_SCIENCE_FLOOR;
+    // ── Treasury reserve: keep a cushion of a few turns of upkeep. Below it,
+    //    raise tax a little to rebuild; at/above it, invest the surplus in
+    //    science. The cushion scales with strategy (military/defensive hold a
+    //    war chest, science civs invest instead of hoarding). ──
+    const strategy = resolveAICivStrategy(civ);
+    const reserveTurns = AI_RESERVE_TURNS[strategy] ?? 1;
+    const reserveTarget = Math.max(0, upkeep * reserveTurns);
+    const healthy = gold >= reserveTarget;
+    const inDeficit = gold < 0;
+
+    // Science the AI protects while taxing. A real deficit sacrifices science
+    // (recover the treasury first); otherwise keep the floor so research never
+    // locks to zero.
+    const scienceAllowance = inDeficit ? 0 : AI_SCIENCE_FLOOR;
+
+    // ── Tax target: cover this turn's upkeep (the treasury cushions it), and
+    //    when merely below the reserve (not in a real deficit) add a gentle
+    //    contribution to rebuild the cushion. Deficit recovery matches the
+    //    legacy policy exactly — tax rises to cover upkeep only. ──
+    const baseNeed = Math.ceil((Math.max(0, upkeep - Math.max(0, gold)) / commerce) * 100);
+    const shortfall = Math.max(0, reserveTarget - gold);
+    const rebuildPct = (healthy || inDeficit) ? 0 : Math.ceil(((shortfall * AI_RESERVE_REBUILD) / commerce) * 100);
+    const taxNeed = baseNeed + rebuildPct;
     const targetTax = Math.max(
       AI_MIN_TAX,
       Math.min(gov.maxTaxRate, 100 - luxury - scienceAllowance, taxNeed),

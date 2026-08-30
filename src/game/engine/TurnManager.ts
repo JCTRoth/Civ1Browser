@@ -21,7 +21,7 @@ export enum TurnPhase {
 }
 
 import { AIResearch } from './AIResearch';
-import { createDefaultAIState } from './AITypes';
+import { createDefaultAIState, resolveAICivStrategy } from './AITypes';
 import { serializeCities } from '../../utils/CitySnapshots';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import type { ProcessTurnResult } from './EconomicManager';
@@ -419,7 +419,7 @@ export class TurnManager {
       try {
         const storage = this.gameEngine.getPlayerStorage?.(civilizationId);
         const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
-        const strategy = aiState.strategyProfile ?? 'balanced_growth';
+        const strategy = resolveAICivStrategy(civ, aiState);
 
         const cities = this.gameEngine.cities?.filter((c) => c.civilizationId === civilizationId) ?? [];
         const gameState = {
@@ -962,7 +962,7 @@ hasLibrary: cities.some((c) => c.buildings?.includes('library')),
         try {
           const storage = this.gameEngine.getPlayerStorage?.(civ.id);
           const aiState = storage?.turnData?.aiState ?? createDefaultAIState();
-          const strategy = aiState.strategyProfile ?? 'balanced_growth';
+          const strategy = resolveAICivStrategy(civ, aiState);
 
           const cities = this.gameEngine.cities?.filter((c) => c.civilizationId === civ.id) ?? [];
           const gameState = {

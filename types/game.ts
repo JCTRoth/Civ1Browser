@@ -125,6 +125,38 @@ export interface DisbandNotice {
 }
 
 /**
+ * A permanent Civ1 trade route connecting this city to another city.
+ * Established when a Caravan delivers; adds per-turn trade to the city. A city
+ * holds at most MAX_TRADE_ROUTES (3); a better new route replaces the weakest.
+ */
+export interface TradeRoute {
+  /** Id of the OTHER city this route connects to. */
+  cityId: string;
+  /** Name of the other city. */
+  cityName: string;
+  /** Civilization of the other city. */
+  civilizationId: number;
+  /** Per-turn trade points this route adds to this city. */
+  trade: number;
+  /** Tile distance between the two cities. */
+  distance: number;
+  /** Round the route was established. */
+  round?: number;
+}
+
+/** Shown after a Caravan establishes a trade route (lump-sum payout). */
+export interface TradeRouteResult {
+  homeCityName: string;
+  destCityName: string;
+  destCivId: number;
+  gold: number;
+  science: number;
+  foreign: boolean;
+  intercontinental: boolean;
+  distance: number;
+}
+
+/**
  * An AI-initiated diplomatic proposal (ceasefire, peace, alliance, tribute)
  * awaiting the human player's accept/reject decision in the negotiation
  * screen. Surfaced via `showIncomingDiplomacyOffer`; cleared once the player
@@ -284,6 +316,8 @@ export interface City {
   setProduction?: (item: ProductionItem) => void;
   /** Set of unit IDs supported by this city (used by City.ts legacy class). */
   supportedUnitIds?: Set<string>;
+  /** Permanent Civ1 trade routes (from delivered Caravans); max 3. */
+  tradeRoutes?: TradeRoute[];
   /** Max population cap (used by City.ts legacy class). */
   maxPopulation?: number;
   /** Civilization object (used by City.ts legacy class). */
@@ -363,7 +397,7 @@ export interface UIState {
   showTechTree: boolean;
   showDiplomacy: boolean;
   showGameMenu: boolean;
-  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | 'statistics' | 'village' | 'upkeep-disbanded' | null;
+  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | 'statistics' | 'village' | 'upkeep-disbanded' | 'trade-route-result' | null;
   sidebarCollapsed: boolean;
   notifications: Notification[];
   goToMode: boolean; // When true, next click will set destination for selected unit
@@ -446,6 +480,8 @@ export interface GameStoreState {
   villageResult: VillageResult | null;
   /** Info for the "unit disbanded to cover upkeep" modal. */
   disbandNotice: DisbandNotice | null;
+  /** Info for the "trade route established" modal. */
+  tradeRouteResult: TradeRouteResult | null;
   /** Civ auto-selected when the diplomacy screen opens (diplomat contact / AI offer). */
   diplomacyFocusCivId: number | null;
   /** Pending AI→player proposal awaiting a response in the diplomacy screen. */
@@ -503,6 +539,10 @@ export interface GameActions {
   showUpkeepDisbanded: (notice: DisbandNotice) => void;
   /** Dismiss the upkeep-disbanded modal. */
   clearUpkeepDisbanded: () => void;
+  /** Show the "trade route established" modal (Caravan delivery). */
+  showTradeRouteResult: (result: TradeRouteResult) => void;
+  /** Dismiss the trade-route-result modal. */
+  clearTradeRouteResult: () => void;
   /** Open the Civ I–style negotiation screen, optionally focused on a civ. */
   openDiplomacy: (focusCivId?: number | null) => void;
   /** Consume the diplomacy focus hint without changing the open dialog. */

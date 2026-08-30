@@ -135,6 +135,22 @@ export function getCivProductionProfile(civilizationId: number): StrategyProfile
 }
 
 /**
+ * Resolve the AI strategy that should drive BOTH production and research for
+ * a civ, so every AI decision follows the same strategy. The civ's FIXED
+ * production profile (assigned per civ at game start) is the source of truth
+ * for its strategic identity — a military_expansion civ must research military
+ * techs, not silently fall back to the generic 'balanced_growth' default. The
+ * AI-state strategy (possibly re-evaluated by AIStrategySelector) is only a
+ * fallback for civs without a fixed profile.
+ */
+export function resolveAICivStrategy(
+  civ: { productionProfile?: StrategyProfile } | null | undefined,
+  aiState?: { strategyProfile?: StrategyProfile } | null,
+): StrategyProfile {
+  return civ?.productionProfile ?? aiState?.strategyProfile ?? 'balanced_growth';
+}
+
+/**
  * Deterministic AI personality (aggression/diplomacy/military/…) derived from
  * the civ's production profile. The engine's civs are plain objects and never
  * got a `personality`, which made `processAIDiplomacy` fall back to an all-5

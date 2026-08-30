@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import GameEngine from '@/game/engine/GameEngine';
 import { AutoProduction } from '@/game/engine/AutoProduction';
-import { canBuildBuilding } from '@/game/engine/AITypes';
+import { canBuildBuilding, resolveAICivStrategy } from '@/game/engine/AITypes';
 import { BUILDING_PROPERTIES, BUILDING_TYPES } from '@/data/BuildingConstants';
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -185,5 +185,30 @@ describe('industrial building tech-gating', () => {
     ]) {
       expect(canBuildBuilding(ancient, type, BUILDING_PROPERTIES[type], [], {})).toBe(false);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// 5. Research follows the AI strategy
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('AI strategy resolution (research follows production profile)', () => {
+  it('research uses the civ production profile even before the AI state is seeded', () => {
+    // Regression: the TurnManager research path used `aiState.strategyProfile ??
+    // 'balanced_growth'`; a fresh AI state defaults to balanced_growth, so a
+    // military_expansion civ researched as if it were balanced. The resolver
+    // must prefer the civ's fixed production profile.
+    expect(resolveAICivStrategy({ productionProfile: 'military_expansion' }, null)).toBe('military_expansion');
+    expect(resolveAICivStrategy({ productionProfile: 'science_focus' }, { strategyProfile: 'balanced_growth' })).toBe('science_focus');
+    expect(resolveAICivStrategy({ productionProfile: 'early_expansion' }, { strategyProfile: 'defensive_turtle' })).toBe('early_expansion');
+  });
+
+  it('falls back to the AI-state strategy when no profile is set', () => {
+    expect(resolveAICivStrategy(null, { strategyProfile: 'defensive_turtle' })).toBe('defensive_turtle');
+  });
+
+  it('defaults to balanced_growth when nothing is set', () => {
+    expect(resolveAICivStrategy(null, null)).toBe('balanced_growth');
+    expect(resolveAICivStrategy(undefined, undefined)).toBe('balanced_growth');
   });
 });

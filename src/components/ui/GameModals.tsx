@@ -44,6 +44,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   const incomingDiplomacyOffer = useGameStore(state => state.incomingDiplomacyOffer);
   const diplomacyFocusCivId = useGameStore(state => state.diplomacyFocusCivId);
   const disbandNotice = useGameStore(state => state.disbandNotice);
+  const tradeRouteResult = useGameStore(state => state.tradeRouteResult);
 
   const selectedCity = cities.find(c => c.id === selectedCityId);
 
@@ -111,7 +112,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
 
   // Dialogs that defer auto-end while open; closing one re-checks auto-end
   // (city management + diplomacy, where the player may still be deciding).
-  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report', 'village', 'upkeep-disbanded'];
+  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report', 'village', 'upkeep-disbanded', 'trade-route-result'];
 
   const handleCloseDialog = () => {
     const closing = useGameStore.getState().uiState.activeDialog;
@@ -1784,6 +1785,51 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     </Modal>
   );
 
+  // Trade-route result: a Caravan delivered — lump-sum gold + science now,
+  // plus a permanent per-turn route between the two cities.
+  const renderTradeRouteResult = () => (
+    <Modal
+      show={uiState.activeDialog === 'trade-route-result'}
+      onHide={handleCloseDialog}
+      centered
+      size="lg"
+    >
+      <Modal.Header closeButton className="bg-dark text-white">
+        <Modal.Title>
+          <i className="bi bi-arrow-left-right text-success"></i> Trade Route Established
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="bg-dark text-white">
+        {tradeRouteResult ? (
+          <>
+            <p className="mb-2">
+              Your Caravan delivered to <strong>{tradeRouteResult.destCityName}</strong> from{' '}
+              {tradeRouteResult.homeCityName} ({tradeRouteResult.distance} tiles away).
+            </p>
+            <div className="mb-2 fs-5">
+              <span className="text-warning me-4">🪙 +{tradeRouteResult.gold} Gold</span>
+              <span className="text-info">🔬 +{tradeRouteResult.science} Science</span>
+            </div>
+            {tradeRouteResult.foreign && (
+              <div className="text-success"><small>Foreign city — bonus doubled.</small></div>
+            )}
+            {tradeRouteResult.intercontinental && (
+              <div className="text-info"><small>Intercontinental (across water) — bonus doubled.</small></div>
+            )}
+            <p className="mb-0 mt-2 text-muted">
+              <small>Both cities now share a permanent trade route, adding trade every turn (up to 3 routes per city; a better route replaces a weaker one).</small>
+            </p>
+          </>
+        ) : (
+          <p>Your Caravan established a trade route!</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer className="bg-dark">
+        <Button variant="primary" onClick={handleCloseDialog}>OK</Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
   return (
     <>
       {renderGameMenu()}
@@ -1799,6 +1845,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <StatisticsModal show={uiState.activeDialog === 'statistics'} onHide={handleCloseDialog} />
       <VillageModal show={uiState.activeDialog === 'village'} onHide={handleVillageClose} />
       {renderUpkeepDisbanded()}
+      {renderTradeRouteResult()}
       {renderCityProduction()}
       {renderCityPurchase()}
     </>

@@ -32,12 +32,15 @@ import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
 import { AIResearch } from './AIResearch';
 import { MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
-import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem } from '../../../types/game';
+import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem, TradeRoute } from '../../../types/game';
 
 
 
 /** Civ1 "Bridge Building" tech — mapped to the existing Engineering tech. */
 const BRIDGE_BUILDING_TECH = 'engineering';
+
+/** Max permanent trade routes a city can hold (Civ1). */
+export const MAX_TRADE_ROUTES = 3;
 
 
 interface GameSettings {
@@ -1622,6 +1625,160 @@ export default class GameEngine {
   }
 
   /**
+   * Whether a Caravan is on a valid city tile and can establish a trade route.
+   * Requires: a caravan unit, standing on a city, with a home city that differs
+   * from the destination.
+   */
+  canEstablishTradeRoute(unitId: string): boolean {
+    const unit = this.units.find((u: Unit) => u.id === unitId);
+    if (!unit || unit.type !== 'caravan') return false;
+    const dest = this.getCityAt(unit.col, unit.row);
+    if (!dest) return false;
+    const home = this.getCaravanHomeCity(unit);
+    if (!home) return false;
+    return home.id !== dest.id;
+  }
+
+  /**
+   * Resolve the home city of a Caravan for trade-route math. Prefers the
+   * caravan's `homeCityId` (set when the city produced it); a "NONE"-home
+   * caravan (e.g. a hut mercenary) falls back to its nearest friendly city.
+   */
+  private getCaravanHomeCity(caravan: Unit): City | null {
+    if (caravan.homeCityId) {
+      const byId = this.cities.find((c: City) => c.id === caravan.homeCityId);
+      if (byId) return byId;
+    }
+    let nearest: City | null = null;
+    let best = Infinity;
+    for (const c of this.cities) {
+      if (c.civilizationId !== caravan.civilizationId) continue;
+      const d = this.squareGrid?.squareDistance
+        ? this.squareGrid.squareDistance(c.col, c.row, caravan.col, caravan.row)
+        : Infinity;
+      if (d < best) {
+        best = d;
+        nearest = c;
+      }
+    }
+    return nearest;
+  }
+
+  /**
+   * Civ1 trade route: a Caravan standing on a city tile delivers. The caravan
+   * is consumed and the civ receives a lump sum of Gold AND Science scaled by
+   * population and distance (foreign ×2, intercontinental ×2), and both cities
+   * get a permanent per-turn trade route (max 3, weakest replaced).
+   */
+  establishTradeRoute(unitId: string): { success: boolean; gold?: number; science?: number; reason?: string } {
+    const unit = this.units.find((u: Unit) => u.id === unitId);
+    if (!unit) return { success: false, reason: 'unit_not_found' };
+    if (unit.type !== 'caravan') return { success: false, reason: 'not_caravan' };
+    const dest = this.getCityAt(unit.col, unit.row);
+    if (!dest) return { success: false, reason: 'not_on_city' };
+    const home = this.getCaravanHomeCity(unit);
+    if (!home) return { success: false, reason: 'no_home_city' };
+    if (home.id === dest.id) return { success: false, reason: 'same_city' };
+
+    const distance = this.squareGrid?.squareDistance
+      ? Math.max(1, this.squareGrid.squareDistance(home.col, home.row, dest.col, dest.row))
+      : 1;
+    const base = (home.population || 1) + (dest.population || 1);
+    const foreign = dest.civilizationId !== unit.civilizationId;
+    const intercontinental = this.pathCrossesWater(home.col, home.row, dest.col, dest.row);
+    let multiplier = 1;
+    if (foreign) multiplier *= 2;
+    if (intercontinental) multiplier *= 2;
+    const payout = Math.max(1, Math.round(base * (1 + distance / 4) * multiplier));
+    const routeTrade = Math.max(1, Math.round(base / 4));
+
+    // Lump-sum Gold + Science to the delivering civ.
+    const civ = this.civilizations?.[unit.civilizationId];
+    if (civ?.resources) {
+      civ.resources.gold = (civ.resources.gold ?? 0) + payout;
+      civ.resources.science = (civ.resources.science ?? 0) + payout;
+    }
+
+    this.addTradeRoute(home, {
+      cityId: dest.id,
+      cityName: dest.name,
+      civilizationId: dest.civilizationId,
+      trade: routeTrade,
+      distance,
+    });
+    this.addTradeRoute(dest, {
+      cityId: home.id,
+      cityName: home.name,
+      civilizationId: home.civilizationId,
+      trade: routeTrade,
+      distance,
+    });
+
+    // The caravan is consumed by the delivery.
+    this.units = this.units.filter((u: Unit) => u.id !== unitId);
+    this.unitTurnQueue?.removeUnit(unitId);
+
+    console.log(`[TRADE] Caravan delivered: ${home.name} → ${dest.name} (+${payout} gold/science, ${distance} tiles, foreign:${foreign}, water:${intercontinental})`);
+    if (this.onStateChange) {
+      this.onStateChange('TRADE_ROUTE_ESTABLISHED', {
+        caravan: unit,
+        homeCity: home,
+        destCity: dest,
+        gold: payout,
+        science: payout,
+        foreign,
+        intercontinental,
+        distance,
+      });
+    }
+    this.checkAndEndTurnIfNoMoves();
+    return { success: true, gold: payout, science: payout };
+  }
+
+  /**
+   * Add a trade route to a city, capping at MAX_TRADE_ROUTES and replacing the
+   * weakest existing route when the new one is stronger.
+   */
+  private addTradeRoute(city: City, route: TradeRoute): void {
+    if (!Array.isArray(city.tradeRoutes)) city.tradeRoutes = [];
+    const existing = city.tradeRoutes;
+    if (existing.length < MAX_TRADE_ROUTES) {
+      existing.push(route);
+      return;
+    }
+    let weakestIdx = 0;
+    for (let i = 1; i < existing.length; i++) {
+      if ((existing[i].trade ?? 0) < (existing[weakestIdx].trade ?? 0)) weakestIdx = i;
+    }
+    if (route.trade > (existing[weakestIdx].trade ?? 0)) {
+      existing[weakestIdx] = route;
+    }
+  }
+
+  /**
+   * Rough Civ1 intercontinental check: whether the straight line between the
+   * two cities crosses any water tile (they are on different landmasses).
+   */
+  private pathCrossesWater(fromCol: number, fromRow: number, toCol: number, toRow: number): boolean {
+    const dx = Math.abs(toCol - fromCol);
+    const dy = Math.abs(toRow - fromRow);
+    const sx = fromCol < toCol ? 1 : -1;
+    const sy = fromRow < toRow ? 1 : -1;
+    let err = dx - dy;
+    let x = fromCol;
+    let y = fromRow;
+    for (let guard = 0; guard < 2000; guard++) {
+      const tile = this.getTileAt(x, y);
+      if (tile && this.isWaterTerrain(tile)) return true;
+      if (x === toCol && y === toRow) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x += sx; }
+      if (e2 < dx) { err += dx; y += sy; }
+    }
+    return false;
+  }
+
+  /**
    * Get all units
    */
   getAllUnits() {
@@ -1753,6 +1910,12 @@ export default class GameEngine {
       return false;
     }
 
+    // Caravans may always enter a city tile (to establish a trade route),
+    // even when a garrison defends it — they deliver, they don't fight.
+    if (unit.type === 'caravan' && this.getCityAt(targetCol, targetRow)) {
+      return true;
+    }
+
     // Check if there's another unit at target (combat or stacking rules).
     // `getUnitAt` returns the FIRST unit on a tile, so when the attacker shares
     // its tile with an enemy the attacker itself may come back first and the
@@ -1848,6 +2011,11 @@ export default class GameEngine {
         && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
       if (stackedEnemy) targetUnit = stackedEnemy;
     }
+
+    // A Caravan entering a city tile delivers instead of fighting its garrison.
+    if (unit.type === 'caravan' && this.getCityAt(targetCol, targetRow)) {
+      targetUnit = null;
+    }
     if (targetUnit && targetUnit.civilizationId !== unit.civilizationId) {
       // Combat. combatUnit auto-declares war at its start, so we must NOT gate
       // on 'not_at_war' here — that pre-check made UI attacks impossible while
@@ -1871,9 +2039,11 @@ export default class GameEngine {
       return { success, reason: success ? 'combat_victory' : 'combat_defeat' };
     }
     
-    // Check if there's an enemy city at target
+    // Check if there's an enemy city at target. Caravans are EXCLUDED — they
+    // may enter an enemy city to establish a trade route (they deliver and are
+    // consumed); they never attack or capture.
     const targetCity = this.getCityAt(targetCol, targetRow);
-    if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
+    if (targetCity && targetCity.civilizationId !== unit.civilizationId && unit.type !== 'caravan') {
       // Civilian units (settlers, workers, diplomats, caravans) cannot
       // attack or capture cities. Block the move — otherwise a wandering
       // settler rolls a 50/50 capture against a size-1 city (resolveCityCombat
@@ -1885,7 +2055,9 @@ export default class GameEngine {
       // is rejected and the scout stays put.
       const isScout = unit.type === 'scout';
       const civilianTypes = new Set(['settler', 'worker', 'caravan', 'diplomat']);
-      if (civilianTypes.has(unit.type)) {
+      // Caravans are allowed to enter enemy cities to establish trade routes
+      // (they never capture — they deliver and are consumed).
+      if (civilianTypes.has(unit.type) && unit.type !== 'caravan') {
         console.log(`[moveUnit] Civilian ${unit.type} cannot attack enemy city — blocked`);
         return { success: false, reason: 'civilian_cannot_attack_city' };
       }
@@ -2080,6 +2252,12 @@ export default class GameEngine {
       // Civ1 village (goody hut) resolution — a military unit entering the
       // tile claims the village and rolls an outcome.
       this.resolveVillage(unit, targetTile);
+
+      // Civ1 trade route: a Caravan that reaches a city tile delivers now
+      // (consumes the caravan, pays gold + science, opens a permanent route).
+      if (unit.type === 'caravan' && this.canEstablishTradeRoute(unit.id)) {
+        this.establishTradeRoute(unit.id);
+      }
 
       // Update turn done status
       this.updateUnitTurnsDoneFlag(unit);

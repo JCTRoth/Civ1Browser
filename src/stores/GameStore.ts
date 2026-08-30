@@ -133,6 +133,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   // Info for the "unit disbanded to cover upkeep" modal
   disbandNotice: null,
 
+  // Info for the "trade route established" modal (Caravan delivery)
+  tradeRouteResult: null,
+
   // Civ auto-selected when the diplomacy negotiation screen opens (set by
   // diplomat contact or an AI-initiated offer).
   diplomacyFocusCivId: null,
@@ -394,6 +397,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     clearUpkeepDisbanded: () => set(state => ({
       disbandNotice: null,
+      uiState: { ...state.uiState, activeDialog: null }
+    })),
+
+    showTradeRouteResult: (result) => set(state => ({
+      tradeRouteResult: result,
+      uiState: { ...state.uiState, activeDialog: 'trade-route-result' }
+    })),
+
+    clearTradeRouteResult: () => set(state => ({
+      tradeRouteResult: null,
       uiState: { ...state.uiState, activeDialog: null }
     })),
 
@@ -698,7 +711,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       lastResearchedTech: null,
       uiState: createInitialUIState(),
       combatAnimations: [],
-      disbandNotice: null
+      disbandNotice: null,
+      tradeRouteResult: null
     })),
 
     resetFogOfWar: () => set(state => {

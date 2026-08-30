@@ -16,6 +16,7 @@ import { AIResearch } from './AIResearch';
 import { computeAggression, planBulkAttack, BULK_ATTACK_STRENGTH_RATIO, type KnownTarget, type AggressionAssessment } from './AIAggression';
 import {
   createDefaultAIState,
+  resolveAICivStrategy,
   type AIState,
   type AggressionState,
   type StrategyProfile,
@@ -143,7 +144,7 @@ export class AIManager {
     // ─── Phase 2: Technology research ──────────────────────────────────
     if (!civ.currentResearch) {
       // selectResearch returns the chosen techId (string) or null.
-      const techChoice = AIResearch.selectResearch(civ, aiState.strategyProfile, gameState);
+      const techChoice = AIResearch.selectResearch(civ, resolveAICivStrategy(civ, aiState), gameState);
       if (techChoice) {
         this.gameEngine.log('ai', `Research — ${civ.name} selects ${techChoice} (${aiState.strategyProfile})`, { civilizationId, action: 'research', tech: techChoice, strategy: aiState.strategyProfile });
         console.log(`[AI] Research selected: ${techChoice}`);
@@ -320,7 +321,7 @@ export class AIManager {
           // tile) merged back into the capital, leaving civs at 1 city forever.
           let settlement: { col: number; row: number; score: number } | null = null;
           try {
-            settlement = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
+            settlement = this.findBestSettlementForSettler(unit, resolveAICivStrategy(civ, aiState));
           } catch (error) {
             console.error('[AI-SETTLER] Error in settlement search:', error);
           }
@@ -648,7 +649,10 @@ export class AIManager {
     // spot (or found at current tile if nothing is better).
     let settlement: { col: number; row: number; score: number } | null = null;
     try {
-      settlement = this.findBestSettlementForSettler(unit, aiState.strategyProfile);
+      settlement = this.findBestSettlementForSettler(
+        unit,
+        resolveAICivStrategy(this.gameEngine.civilizations?.[_civilizationId], aiState),
+      );
     } catch (error) {
       console.error('[AI-SETTLER] Error re-evaluating settlement:', error);
     }

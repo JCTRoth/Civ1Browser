@@ -134,6 +134,9 @@ export class EngineEventRouter {
       case 'UNIT_DISBANDED':
         this.onUnitDisbanded(eventData);
         break;
+      case 'TRADE_ROUTE_ESTABLISHED':
+        this.onTradeRouteEstablished(eventData);
+        break;
       default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
@@ -344,6 +347,39 @@ export class EngineEventRouter {
       civId: unit.civilizationId,
       unitType: unit.type,
       unitName: unit.name || unit.type,
+    });
+  }
+
+  private onTradeRouteEstablished(eventData: Record<string, unknown>) {
+    // The caravan is consumed and the cities got a new route — refresh the store.
+    this.actions.updateUnits(this.gameEngine.getAllUnits());
+    this.actions.updateCities(this.gameEngine.getAllCities());
+    this.actions.updateVisibility();
+
+    const home = eventData?.homeCity as { name: string } | undefined;
+    const dest = eventData?.destCity as { name: string; civilizationId: number } | undefined;
+    const caravan = eventData?.caravan as Unit | undefined;
+    if (!home || !dest) return;
+
+    const gold = Number(eventData?.gold ?? 0);
+    const science = Number(eventData?.science ?? 0);
+    this.actions.addNotification({
+      type: 'success',
+      message: `Trade route: ${home.name} → ${dest.name} (+${gold} gold, +${science} science)`,
+    });
+
+    // Only surface the payout modal for the human player.
+    const civ = caravan ? this.gameEngine?.civilizations?.[caravan.civilizationId] : undefined;
+    if (civ?.isHuman !== true) return;
+    this.actions.showTradeRouteResult({
+      homeCityName: home.name,
+      destCityName: dest.name,
+      destCivId: dest.civilizationId,
+      gold,
+      science,
+      foreign: !!eventData?.foreign,
+      intercontinental: !!eventData?.intercontinental,
+      distance: Number(eventData?.distance ?? 0),
     });
   }
 
