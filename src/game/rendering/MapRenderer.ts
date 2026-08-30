@@ -2,16 +2,17 @@
  * MapRenderer - Core rendering engine for Civilization 1 game maps
  *
  * This module provides comprehensive canvas-based rendering for the game world,
- * including terrain layers, dynamic game objects (units, cities), and minimap
- * visualization. It handles camera transformations, fog of war, and performance
- * optimizations through offscreen rendering and viewport culling.
+ * including terrain layers and dynamic game objects (units, cities). It handles
+ * camera transformations, fog of war, and performance optimizations through
+ * offscreen rendering and viewport culling.
  *
  * Key features:
  * - Terrain rendering with improvements and resources
  * - Dynamic content overlay (units, cities, selection highlights)
- * - Minimap with fog of war and viewport indicator
  * - Camera-aware viewport culling for performance
  * - Offscreen terrain layer caching
+ *
+ * The minimap is rendered separately by MiniMapRenderer.
  */
 
 import { Constants } from '@/utils/Constants';
@@ -194,30 +195,6 @@ export interface RenderPulsingUnitsParams {
 }
 
 /**
- * Parameters for rendering the minimap.
- */
-export interface RenderMinimapParams {
-  /** Minimap canvas 2D rendering context */
-  ctx: CanvasRenderingContext2D;
-  /** Current map state */
-  map: MapState;
-  /** Minimap width in CSS pixels */
-  cssWidth: number;
-  /** Minimap height in CSS pixels */
-  cssHeight: number;
-  /** Current camera state */
-  camera: CameraState;
-  /** Array of all units in the game */
-  units: Unit[];
-  /** Array of all cities in the game */
-  cities: City[];
-  /** Array of all civilizations */
-  civilizations: Civilization[];
-  /** When true, ignore fog-of-war (show all tiles/units) */
-  ignoreFog?: boolean;
-}
-
-/**
  * Options for drawing terrain symbols (improvements, resources, etc.).
  */
 interface DrawTerrainSymbolOptions {
@@ -249,18 +226,6 @@ interface CanvasSize {
   width: number;
   /** Canvas height in pixels */
   height: number;
-}
-
-/**
- * State of fog of war for minimap rendering.
- */
-interface MinimapFogState {
-  /** Whether the map has revealed tiles data */
-  hasRevealed: boolean;
-  /** Whether the map has visibility data */
-  hasVisibility: boolean;
-  /** Whether any tiles have been revealed */
-  anyRevealed: boolean;
 }
 
 /**
@@ -305,7 +270,7 @@ interface DynamicContentParams {
  * Core rendering engine for Civilization 1 game maps.
  *
  * Handles all canvas-based rendering including terrain, units, cities,
- * minimap, and various visual effects. Uses performance optimizations
+ * and various visual effects. Uses performance optimizations
  * like viewport culling and offscreen rendering.
  */
 export class MapRenderer {
@@ -721,24 +686,6 @@ export class MapRenderer {
         this.drawUnitWithPulse(ctx, x, y, unit, pulseValue, cameraZoom, civilizations, combat.alpha);
       }
     });
-  }
-
-  /**
-   * Renders the minimap showing the entire map with fog of war and viewport indicator.
-   * Displays terrain, cities, units, and the current camera viewport.
-   *
-   * @param params - Parameters for minimap rendering
-   */
-  renderMinimap(params: RenderMinimapParams): void {
-    const { ctx, map, cssWidth, cssHeight, camera, units, cities, civilizations, ignoreFog } = params;
-    this.resetMinimapCanvas(ctx, cssWidth, cssHeight);
-
-    const fogState = ignoreFog ? { visibility: null, revealed: null } as any : this.getMinimapFogState(map);
-
-    this.drawMinimapTerrain(ctx, map, cssWidth, cssHeight, fogState);
-    this.drawMinimapCities(ctx, map, cities, cssWidth, cssHeight);
-    this.drawMinimapUnits(ctx, map, units, civilizations, cssWidth, cssHeight, !!ignoreFog);
-    this.drawMinimapViewport(ctx, map, camera, cssWidth, cssHeight);
   }
 
   /**
@@ -1396,208 +1343,6 @@ export class MapRenderer {
    */
   private isOutsideViewport(x: number, y: number, canvasWidth: number, canvasHeight: number, margin: number = this.tileSize * 2): boolean {
     return x < -margin || x > canvasWidth + margin || y < -margin || y > canvasHeight + margin;
-  }
-
-  /**
-   * Resets the minimap canvas by clearing it and filling with background color.
-   * @param ctx - Minimap canvas context
-   * @param width - Canvas width
-   * @param height - Canvas height
-   */
-  private resetMinimapCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(0, 0, width, height);
-  }
-
-  /**
-   * Determines the fog of war state for minimap rendering.
-   * Checks if the map has revealed and visibility data available.
-   *
-   * @param map - Current map state
-   * @returns Fog state information for minimap rendering
-   */
-  private getMinimapFogState(map: MapState): MinimapFogState {
-    const hasRevealed = Array.isArray(map.revealed) && map.revealed.length === map.tiles.length;
-    const hasVisibility = Array.isArray(map.visibility) && map.visibility.length === map.tiles.length;
-    const anyRevealed = hasRevealed ? map.revealed.some(Boolean) : false;
-    return { hasRevealed, hasVisibility, anyRevealed };
-  }
-
-  /**
-   * Draws the terrain layer on the minimap with fog of war effects.
-   * Each tile is represented as a small rectangle colored by terrain type.
-   *
-   * @param ctx - Minimap canvas context
-   * @param map - Current map state
-   * @param width - Minimap width in pixels
-   * @param height - Minimap height in pixels
-   * @param fogState - Fog of war state information
-   */
-  private drawMinimapTerrain(
-    ctx: CanvasRenderingContext2D,
-    map: MapState,
-    width: number,
-    height: number,
-    fogState: MinimapFogState
-  ): void {
-    const tileWidth = width / map.width;
-    const tileHeight = height / map.height;
-
-    for (let row = 0; row < map.height; row++) {
-      for (let col = 0; col < map.width; col++) {
-        const tileIndex = this.getTileIndex(row, col, map.width);
-        const tile = map.tiles?.[tileIndex];
-        if (!tile) continue;
-
-        // Default to black for unexplored tiles when fog data is available
-        if (fogState.hasRevealed) {
-          const explored = map.revealed?.[tileIndex] ?? false;
-          if (!explored) {
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
-            continue;
-          }
-        }
-
-        const terrainProps = this.resolveTerrain(tile.type);
-        ctx.fillStyle = terrainProps.color;
-        ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
-
-        // Apply semi-transparent overlay for explored but not currently visible tiles
-        if (fogState.hasRevealed) {
-          const visible = map.visibility?.[tileIndex] ?? false;
-          if (!visible) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth + 1, tileHeight + 1);
-          }
-        }
-      }
-    }
-  }
-
-  /**
-   * Draws cities on the minimap as colored rectangles.
-   * Only shows cities that are currently visible to the player.
-   *
-   * @param ctx - Minimap canvas context
-   * @param map - Current map state
-   * @param cities - Array of all cities
-   * @param width - Minimap width in pixels
-   * @param height - Minimap height in pixels
-   */
-  private drawMinimapCities(
-    ctx: CanvasRenderingContext2D,
-    map: MapState,
-    cities: City[],
-    width: number,
-    height: number
-  ): void {
-    if (!Array.isArray(cities) || cities.length === 0) {
-      return;
-    }
-
-    const tileWidth = width / map.width;
-    const tileHeight = height / map.height;
-
-    for (const city of cities) {
-      const tileIndex = this.getTileIndex(city.row, city.col, map.width);
-      const isVisible = map.visibility ? map.visibility[tileIndex] : false;
-      if (!isVisible) continue;
-
-      const x = city.col * tileWidth;
-      const y = city.row * tileHeight;
-      ctx.fillStyle = city.civilizationId === 0 ? '#FFD700' : '#FF6347';
-      ctx.fillRect(x, y, tileWidth * 2, tileHeight * 2);
-    }
-  }
-
-  /**
-   * Draws units on the minimap as small colored rectangles.
-   * Uses civilization colors and only shows visible units.
-   *
-   * @param ctx - Minimap canvas context
-   * @param map - Current map state
-   * @param units - Array of all units
-   * @param civilizations - Array of all civilizations
-   * @param width - Minimap width in pixels
-   * @param height - Minimap height in pixels
-   */
-  private drawMinimapUnits(
-    ctx: CanvasRenderingContext2D,
-    map: MapState,
-    units: Unit[],
-    civilizations: Civilization[],
-    width: number,
-    height: number,
-    ignoreFog: boolean = false
-  ): void {
-    if (!Array.isArray(units) || units.length === 0) {
-      return;
-    }
-
-    const tileWidth = width / map.width;
-    const tileHeight = height / map.height;
-
-    for (const unit of units) {
-      const tileIndex = this.getTileIndex(unit.row, unit.col, map.width);
-      const isVisible = ignoreFog ? true : (map.visibility ? map.visibility[tileIndex] : false);
-      
-      // Only draw units on visible tiles (fog of war)
-      if (!isVisible) continue;
-
-      const x = unit.col * tileWidth;
-      const y = unit.row * tileHeight;
-      const civ = civilizations.find(c => c.id === unit.civilizationId);
-      ctx.fillStyle = civ?.color || '#FF0000';
-      ctx.fillRect(x, y, Math.max(1, tileWidth / 2), Math.max(1, tileHeight / 2));
-    }
-  }
-
-  /**
-   * Draws the current camera viewport rectangle on the minimap.
-   * Shows what portion of the map is currently visible in the main view.
-   *
-   * @param ctx - Minimap canvas context
-   * @param map - Current map state
-   * @param camera - Current camera state
-   * @param width - Minimap width in pixels
-   * @param height - Minimap height in pixels
-   */
-  private drawMinimapViewport(
-    ctx: CanvasRenderingContext2D,
-    map: MapState,
-    camera: CameraState,
-    width: number,
-    height: number
-  ): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const tileSize = Constants.HEX_SIZE || this.tileSize;
-    const cssPerTileX = width / map.width;
-    const cssPerTileY = height / map.height;
-    const cameraTileX = camera.x / tileSize;
-    const cameraTileY = camera.y / tileSize;
-    const viewportTilesW = (window.innerWidth / camera.zoom) / tileSize;
-    const viewportTilesH = (window.innerHeight / camera.zoom) / tileSize;
-    const viewportX = cameraTileX * cssPerTileX;
-    const viewportY = cameraTileY * cssPerTileY;
-    const viewportW = viewportTilesW * cssPerTileX;
-    const viewportH = viewportTilesH * cssPerTileY;
-    const rectX = Math.max(0, viewportX);
-    const rectY = Math.max(0, viewportY);
-    const rectW = Math.min(width, viewportX + viewportW) - rectX;
-    const rectH = Math.min(height, viewportY + viewportH) - rectY;
-
-    if (rectW <= 0 || rectH <= 0) {
-      return;
-    }
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(rectX, rectY, rectW, rectH);
   }
 
   /**

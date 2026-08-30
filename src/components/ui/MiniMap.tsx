@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useGameStore } from '@/stores/GameStore';
 import { TILE_SIZE } from '@/data/TerrainData';
-import { MapRenderer } from '@/game/rendering/MapRenderer';
+import { MiniMapRenderer } from '@/game/rendering/MiniMapRenderer';
 import GameEngine from '@/game/engine/GameEngine';
 import '../../styles/miniMap.css';
 
@@ -30,7 +30,7 @@ interface MiniMapProps {
 const MiniMap: React.FC<MiniMapProps> = ({ gameEngine = null }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRendererRef = useRef<MapRenderer>(new MapRenderer());
+  const miniMapRendererRef = useRef<MiniMapRenderer>(new MiniMapRenderer());
   const [sizeKey, setSizeKey] = useState(0); // bump to force redraw on resize
   const camera = useGameStore(state => state.camera);
   const actions = useGameStore(state => state.actions);
@@ -87,7 +87,7 @@ const MiniMap: React.FC<MiniMapProps> = ({ gameEngine = null }) => {
       console.log('[MiniMap] Developer mode: Showing all units/cities');
     }
 
-    mapRendererRef.current.renderMinimap({
+    miniMapRendererRef.current.renderMinimap({
       ctx,
       map: dataSource,
       cssWidth,

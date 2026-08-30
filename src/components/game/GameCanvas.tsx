@@ -3,6 +3,7 @@ import { useGameStore } from '@/stores/GameStore';
 import { useShallow } from 'zustand/react/shallow';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { MapRenderer, TerrainRenderGrid, TerrainTileRenderInfo, UnitPathStep } from '@/game/rendering/MapRenderer';
+import { MiniMapRenderer } from '@/game/rendering/MiniMapRenderer';
 import { TerrainTextureManager } from '@/game/rendering/TerrainTextureManager';
 import type { City, GameState, MapState, Unit } from '../../../types/game';
 import GameEngine from '@/game/engine/GameEngine';
@@ -34,6 +35,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const terrainBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const terrainTypesHashRef = useRef<string>('');
   const mapRendererRef = useRef<MapRenderer>(new MapRenderer());
+  const miniMapRendererRef = useRef<MiniMapRenderer>(new MiniMapRenderer());
   const textureManagerRef = useRef<TerrainTextureManager | null>(null);
   const gameState = useGameStore(useShallow(state => state.gameState));
   const mapData = useGameStore(state => state.map);
@@ -671,7 +673,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     }
 
     if (minimap) {
-      mapRendererRef.current.renderMinimap({
+      miniMapRendererRef.current.renderMinimap({
         ctx,
         map: mapData as MapState,
         cssWidth: rect.width,
