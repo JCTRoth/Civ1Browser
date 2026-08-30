@@ -130,6 +130,9 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   // Last village (goody hut) outcome, shown by the village-result modal
   villageResult: null,
 
+  // Info for the "unit disbanded to cover upkeep" modal
+  disbandNotice: null,
+
   // Civ auto-selected when the diplomacy negotiation screen opens (set by
   // diplomat contact or an AI-initiated offer).
   diplomacyFocusCivId: null,
@@ -381,6 +384,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
     clearVillageResult: () => set(state => ({
       villageResult: null,
+      uiState: { ...state.uiState, activeDialog: null }
+    })),
+
+    showUpkeepDisbanded: (notice) => set(state => ({
+      disbandNotice: notice,
+      uiState: { ...state.uiState, activeDialog: 'upkeep-disbanded' }
+    })),
+
+    clearUpkeepDisbanded: () => set(state => ({
+      disbandNotice: null,
       uiState: { ...state.uiState, activeDialog: null }
     })),
 
@@ -684,7 +697,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       techProgress: {},
       lastResearchedTech: null,
       uiState: createInitialUIState(),
-      combatAnimations: []
+      combatAnimations: [],
+      disbandNotice: null
     })),
 
     resetFogOfWar: () => set(state => {

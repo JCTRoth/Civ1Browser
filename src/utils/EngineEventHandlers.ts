@@ -131,6 +131,9 @@ export class EngineEventRouter {
       case 'UNIT_REMOVED':
         this.onUnitRemoved();
         break;
+      case 'UNIT_DISBANDED':
+        this.onUnitDisbanded(eventData);
+        break;
       default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
@@ -324,6 +327,24 @@ export class EngineEventRouter {
     // only hides it via isDefeated until this sync lands).
     this.actions.updateUnits(this.gameEngine.getAllUnits());
     this.actions.updateVisibility();
+  }
+
+  private onUnitDisbanded(eventData: Record<string, unknown>) {
+    // The disbanded unit is already gone from the engine — keep the store in sync.
+    this.actions.updateUnits(this.gameEngine.getAllUnits());
+    // Only surface a modal for the human player, and only for the upkeep
+    // (bankruptcy) disband — manual disbands are player-initiated and need no
+    // reminder.
+    if (eventData?.reason !== 'upkeep_deficit') return;
+    const unit = eventData?.unit as Unit | undefined;
+    if (!unit) return;
+    const civ = this.gameEngine?.civilizations?.[unit.civilizationId];
+    if (civ?.isHuman !== true) return;
+    this.actions.showUpkeepDisbanded({
+      civId: unit.civilizationId,
+      unitType: unit.type,
+      unitName: unit.name || unit.type,
+    });
   }
 
   private onCityAttacked(eventData: Record<string, unknown>) {

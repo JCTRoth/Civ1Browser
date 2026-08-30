@@ -115,6 +115,16 @@ export interface VillageResult {
 }
 
 /**
+ * Data shown by the upkeep-disbanded modal: a unit was scrapped because the
+ * treasury could not cover its upkeep (bankruptcy).
+ */
+export interface DisbandNotice {
+  civId: number;
+  unitType: string;
+  unitName: string;
+}
+
+/**
  * An AI-initiated diplomatic proposal (ceasefire, peace, alliance, tribute)
  * awaiting the human player's accept/reject decision in the negotiation
  * screen. Surfaced via `showIncomingDiplomacyOffer`; cleared once the player
@@ -353,7 +363,7 @@ export interface UIState {
   showTechTree: boolean;
   showDiplomacy: boolean;
   showGameMenu: boolean;
-  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | 'statistics' | 'village' | null;
+  activeDialog: 'city' | 'tech' | 'diplomacy' | 'diplomacy-report' | 'game-menu' | 'help' | 'pause' | 'city-production' | 'city-purchase' | 'city-citizens' | 'city-details' | 'hex-details' | 'rates' | 'government' | 'statistics' | 'village' | 'upkeep-disbanded' | null;
   sidebarCollapsed: boolean;
   notifications: Notification[];
   goToMode: boolean; // When true, next click will set destination for selected unit
@@ -434,6 +444,8 @@ export interface GameStoreState {
   combatAnimations: CombatAnimation[];
   /** Last village (goody hut) outcome for the village-result modal. */
   villageResult: VillageResult | null;
+  /** Info for the "unit disbanded to cover upkeep" modal. */
+  disbandNotice: DisbandNotice | null;
   /** Civ auto-selected when the diplomacy screen opens (diplomat contact / AI offer). */
   diplomacyFocusCivId: number | null;
   /** Pending AI→player proposal awaiting a response in the diplomacy screen. */
@@ -487,6 +499,10 @@ export interface GameActions {
   showVillageResult: (result: VillageResult) => void;
   /** Dismiss the village result modal. */
   clearVillageResult: () => void;
+  /** Show the "unit disbanded to cover upkeep" modal. */
+  showUpkeepDisbanded: (notice: DisbandNotice) => void;
+  /** Dismiss the upkeep-disbanded modal. */
+  clearUpkeepDisbanded: () => void;
   /** Open the Civ I–style negotiation screen, optionally focused on a civ. */
   openDiplomacy: (focusCivId?: number | null) => void;
   /** Consume the diplomacy focus hint without changing the open dialog. */

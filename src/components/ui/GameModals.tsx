@@ -43,6 +43,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
   const civilizations = useGameStore(state => state.civilizations);
   const incomingDiplomacyOffer = useGameStore(state => state.incomingDiplomacyOffer);
   const diplomacyFocusCivId = useGameStore(state => state.diplomacyFocusCivId);
+  const disbandNotice = useGameStore(state => state.disbandNotice);
 
   const selectedCity = cities.find(c => c.id === selectedCityId);
 
@@ -110,7 +111,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
 
   // Dialogs that defer auto-end while open; closing one re-checks auto-end
   // (city management + diplomacy, where the player may still be deciding).
-  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report', 'village'];
+  const AUTO_END_BLOCKING_DIALOGS = ['city-details', 'city-production', 'city-purchase', 'city-citizens', 'diplomacy', 'diplomacy-report', 'village', 'upkeep-disbanded'];
 
   const handleCloseDialog = () => {
     const closing = useGameStore.getState().uiState.activeDialog;
@@ -1745,6 +1746,44 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
     </div>
   );
 
+  // Upkeep-disbanded notice: a unit was scrapped because the treasury could
+  // not cover its upkeep. Inform the player and point at how to balance the
+  // budget.
+  const renderUpkeepDisbanded = () => (
+    <Modal
+      show={uiState.activeDialog === 'upkeep-disbanded'}
+      onHide={handleCloseDialog}
+      centered
+      size="lg"
+    >
+      <Modal.Header closeButton className="bg-dark text-white">
+        <Modal.Title>
+          <i className="bi bi-exclamation-triangle-fill text-warning"></i> Unit disbanded — upkeep not covered
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body className="bg-dark text-white">
+        <p className="mb-2">
+          <strong>{disbandNotice ? disbandNotice.unitName : 'A unit'}</strong> was disbanded because
+          your treasury could not pay its upkeep (gold ran out).
+        </p>
+        <p className="mb-1"><strong>To balance your budget you can:</strong></p>
+        <ul className="mb-0">
+          <li>Raise the <strong>tax rate</strong> (📊 Rates) to earn more gold per turn.</li>
+          <li>Lower <strong>luxury</strong> spending — keep only what your cities need to avoid disorder.</li>
+          <li>Disband units you don't need: right-click a unit → <em>Disband</em>.</li>
+          <li>Build <strong>Marketplace</strong> / <strong>Bank</strong> in your cities for more trade &amp; gold.</li>
+          <li>Build fewer expensive units — each unit costs upkeep every turn.</li>
+        </ul>
+      </Modal.Body>
+      <Modal.Footer className="bg-dark">
+        <Button variant="outline-warning" onClick={() => actions.showDialog('rates')}>
+          <i className="bi bi-graph-up"></i> Open Rates
+        </Button>
+        <Button variant="primary" onClick={handleCloseDialog}>OK</Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
   return (
     <>
       {renderGameMenu()}
@@ -1759,6 +1798,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
       <GovernmentModal show={uiState.activeDialog === 'government'} onHide={handleCloseDialog} gameEngine={gameEngine} />
       <StatisticsModal show={uiState.activeDialog === 'statistics'} onHide={handleCloseDialog} />
       <VillageModal show={uiState.activeDialog === 'village'} onHide={handleVillageClose} />
+      {renderUpkeepDisbanded()}
       {renderCityProduction()}
       {renderCityPurchase()}
     </>
