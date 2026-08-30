@@ -231,6 +231,10 @@ export const BUILDING_PROPERTIES: Record<string, BuildingProperties> = {
         name: 'Hospital',
         cost: 120,
         maintenance: 1,
+        // Hospital is a Renaissance-era health/happiness building — it must not
+        // be buildable from turn 1. Gated behind Engineering (the health-&
+        // infrastructure line that follows Construction/Aqueduct).
+        requiredTechnology: 'engineering',
         effects: {
             health: 2,
             happiness: 1

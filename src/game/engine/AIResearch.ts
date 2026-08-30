@@ -126,6 +126,7 @@ const KEY_UNLOCK_SCORES: Record<string, number> = {
   republic: 16,         // Best mid-game government
   currency: 10,         // Marketplace
   construction: 12,     // Aqueduct — required for city growth
+  engineering: 10,      // Hospital — health/happiness for big cities
   iron_working: 10,     // Legion
   gunpowder: 14,        // Musketeer — major military leap
   masonry: 8,           // City Walls

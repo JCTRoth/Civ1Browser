@@ -156,6 +156,19 @@ describe('industrial building tech-gating', () => {
     )).toBe(true);
   });
 
+  it('hospital requires engineering (not buildable from turn 1)', () => {
+    const hospitalProps = BUILDING_PROPERTIES[BUILDING_TYPES.HOSPITAL];
+    expect(hospitalProps?.requiredTechnology).toBe('engineering');
+    // A civ with only the starting techs cannot build a Hospital — the queue
+    // must fall back to sensible early items (settlers / units) instead.
+    expect(canBuildBuilding(
+      { technologies: ['irrigation', 'mining', 'roads'] }, 'hospital', hospitalProps, [], {},
+    )).toBe(false);
+    expect(canBuildBuilding(
+      { technologies: ['irrigation', 'mining', 'roads', 'engineering'] }, 'hospital', hospitalProps, [], {},
+    )).toBe(true);
+  });
+
   it('power/hydro/nuclear plants and mass transit are tech-gated', () => {
     expect(BUILDING_PROPERTIES[BUILDING_TYPES.POWER_PLANT]?.requiredTechnology).toBe('electricity');
     expect(BUILDING_PROPERTIES[BUILDING_TYPES.HYDRO_PLANT]?.requiredTechnology).toBe('electronics');
