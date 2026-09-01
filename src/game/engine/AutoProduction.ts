@@ -200,13 +200,15 @@ export class AutoProduction {
         // Skip unit items when the civ can't afford to maintain more units.
         // (Fall back to a building so the city still has something to do.)
         if (unitCapExhausted && item.type === 'unit') {
-          // Scouts are cheap and essential for exploration — never block them
-          // behind the army-upkeep cap, or a new city would queue settlers/
-          // defenders forever and never field a scout.
-          if (item.itemType === 'scout') {
-            const scoutResult = this.gameEngine.productionManager.setCityProduction(cityId, item, true);
-            if (!scoutResult || scoutResult.success === false) break;
-            plannedTypes.push('scout');
+          // Scouts and settlers are cheap and grow the economy — never block
+          // them behind the army-upkeep cap. A scout is the civ's eyes on the
+          // map; a settler founds a new city that adds free unit support and
+          // tax income, so it pays for itself instead of straining the budget.
+          // (Settler count is still limited by the expansion params.)
+          if (item.itemType === 'scout' || item.itemType === 'settler') {
+            const growthResult = this.gameEngine.productionManager.setCityProduction(cityId, item, true);
+            if (!growthResult || growthResult.success === false) break;
+            plannedTypes.push(item.itemType);
             added++;
             continue;
           }

@@ -671,27 +671,40 @@ export class EconomicManager {
     civ.resources.food = 0;
 
     // Treasury: tax income minus upkeep. Ordinary deficits are allowed to go
-    // negative (the AI auto-tax / player rate adjustment recovers them);
-    // only a catastrophic deficit (can't pay ~3 turns of upkeep) disbands
-    // units — most expensive first — and the debt is then forgiven so the
-    // civ gets a fresh start instead of a permanent death spiral.
+    // negative (the AI auto-tax / player rate adjustment recovers them). The
+    // AI proactively keeps at least AI_MIN_GOLD_RESERVE (8) gold: when it is
+    // below that floor while running a deficit (upkeep > income), it disbands
+    // its most expensive units until upkeep ≤ income, so the treasury stops
+    // running into minus. A catastrophic deficit (can't pay ~3 turns of
+    // upkeep) still triggers disbanding for human civs too. Disbanded debts
+    // are forgiven (the AI recovers to the 8-gold floor) for a fresh start.
     civ.resources.gold = (civ.resources.gold ?? 0) + taxTotal;
     const upkeep = this.totalUpkeep(civId);
     civ.resources.gold -= upkeep;
     let deficit = 0;
     let disbanded = 0;
-    if (civ.resources.gold < -upkeep * 3) {
-      deficit = -civ.resources.gold;
+    const isAI = civ.isHuman !== true;
+    const cityCount = cities.length;
+    const maxDisbandable = (): number => {
+      const totalUnits = (this.gameEngine?.units ?? []).filter(
+        (u: Unit) => u.civilizationId === civId,
+      ).length;
+      return Math.max(0, totalUnits - cityCount);
+    };
+    // Disbanding is a LAST RESORT, not the first-line tool. With the
+    // production planner (sustainableUnits uses the real tax rate) the AI
+    // doesn't over-build, so it rarely needs to disband. Only when the AI is
+    // actually bankrupt (gold below zero — it can't even cover this turn's
+    // upkeep and has no surplus to recover) does it shed its most expensive
+    // units to survive. A positive-but-below-floor treasury is rebuilt by the
+    // tax planner's reserve contribution instead of by disbanding.
+    const aiNeedsDisband = isAI && civ.resources.gold < 0 && upkeep >= taxTotal;
+    const catastrophic = civ.resources.gold < -upkeep * 3;
+    if (aiNeedsDisband || catastrophic) {
+      deficit = Math.max(0, (isAI ? AI_MIN_GOLD_RESERVE : 0) - civ.resources.gold);
       // Disband just enough units (expensive first) to bring upkeep ≤ income,
       // but never below one garrison unit per city — a civ that loses every
       // unit to bankruptcy is defenceless and can never recover.
-      const cityCount = cities.length;
-      const maxDisbandable = (): number => {
-        const totalUnits = (this.gameEngine?.units ?? []).filter(
-          (u: Unit) => u.civilizationId === civId,
-        ).length;
-        return Math.max(0, totalUnits - cityCount);
-      };
       let unitsToRemove = Math.min(
         maxDisbandable(),
         Math.max(0, this.totalUpkeep(civId) - taxTotal),
@@ -705,8 +718,9 @@ export class EconomicManager {
           Math.max(0, this.totalUpkeep(civId) - taxTotal),
         );
       }
-      // Forgive the accumulated deficit so the civ recovers.
-      civ.resources.gold = 0;
+      // Forgive the accumulated deficit so the civ recovers — the AI back up
+      // to the 8-gold floor, a human to zero after a catastrophe.
+      civ.resources.gold = Math.max(civ.resources.gold, isAI ? AI_MIN_GOLD_RESERVE : 0);
     }
 
     return {
@@ -761,7 +775,14 @@ export class EconomicManager {
     const cityCount = cities.length;
     const luxuryPct = this.luxuryNeedPct(civ, cities);
     const maxIncome = this.maxTaxIncome(civ);
-    const affordable = Math.floor(maxIncome * (1 - luxuryPct / 100));
+    // Use the civ's ACTUAL tax rate (not an assumed 100%) so the production
+    // cap reflects the real income available for upkeep after the science and
+    // luxury split. Assuming 100% tax over-estimated the affordable army, so
+    // the AI over-built units it couldn't maintain and then had to disband
+    // them. Planning with the real tax rate means the AI simply never builds
+    // an army it can't afford — disbanding becomes a rare last resort.
+    const taxRate = (civ.taxRate ?? 50) / 100;
+    const affordable = Math.floor(maxIncome * taxRate * (1 - luxuryPct / 100));
     return Math.max(cityCount, affordable);
   }
 
@@ -786,10 +807,17 @@ export class EconomicManager {
     const commerce = cities.reduce((t: number, c: City) => t + this.cityCommerce(c), 0);
     if (commerce <= 0) return;
 
-    // ── Luxury needed to prevent disorder (the most valuable use of
-    //    commerce — a disorder city contributes nothing). Never spend more on
-    //    luxury than leaves room for the tax + science floors. ──
-    const luxuryNeed = this.luxuryNeedPct(civ, cities);
+    // ── Luxury: keep it at exactly 0% while every city is content. Only when
+    //    at least one city is actually in (or approaching) disorder do we
+    //    spend commerce on luxury — and then only what that city needs. A
+    //    content empire puts ALL its commerce into tax + science instead of
+    //    wasting it on happiness. Never spend more on luxury than leaves room
+    //    for the tax + science floors. ──
+    const anyCityProblem = cities.some((c: City) => {
+      const h = this.cityHappiness(c, civ);
+      return h.disorder || h.unhappiness >= h.happiness;
+    });
+    const luxuryNeed = anyCityProblem ? this.luxuryNeedPct(civ, cities) : 0;
     const luxury = Math.min(luxuryNeed, 100 - AI_MIN_TAX - AI_SCIENCE_FLOOR);
 
     // ── Treasury reserve: keep a cushion of a few turns of upkeep. Below it,

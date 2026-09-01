@@ -14,9 +14,14 @@ commerce, pays upkeep, and (only in a deep crisis) disbands units.
 
 Every turn the AI recomputes a target rate split and moves toward it gradually:
 
-- **Luxury first** — `luxuryNeedPct()` is the amount needed to stop disorder
-  (a disordered city produces 0 commerce, so happiness is the highest-value use
-  of commerce). Luxury is capped so it never leaves room below the floors.
+- **Luxury stays at 0% while cities are content.** The AI only spends commerce
+  on luxury when at least one city is actually in (or approaching) disorder
+  (`cityHappiness`: `disorder || unhappiness >= happiness`); otherwise the
+  luxury rate is kept at exactly **0%** and all commerce goes to tax + science.
+  When a city does have a problem, `luxuryNeedPct()` returns the amount needed
+  to stop the disorder (a disordered city produces 0 commerce, so happiness is
+  then the highest-value use of commerce). Luxury is capped so it never leaves
+  room below the floors.
 - **Floors** — `AI_MIN_TAX = 10` (tax never drops below this while commerce
   exists) and `AI_SCIENCE_FLOOR = 20` (science protected unless in a real
   deficit).
@@ -50,8 +55,14 @@ The AI always aims to keep **at least 8 gold** in the treasury:
 
 - Treasury each turn: `gold += taxIncome − upkeep`. **Ordinary** deficits are
   allowed to go negative — the auto-tax recovers them next turn.
-- **Catastrophic deficit** (`gold < −upkeep * 3`) triggers emergency
-  `disbandUnitsToCoverDeficit()`:
+- **Disbanding is a LAST RESORT, not the first-line tool.** The AI is *planned*
+  (via the real-income army cap in §5) so it doesn't over-build, which means it
+  rarely needs to disband.
+- It fires only when the AI is genuinely **bankrupt** (`gold < 0`, i.e. it
+  can't cover this turn's upkeep) **and** has no surplus (`upkeep ≥ taxIncome`)
+  to recover on its own. A positive-but-below-floor treasury is rebuilt by the
+  tax planner's reserve contribution, *not* by disbanding.
+- When it does fire, `disbandUnitsToCoverDeficit()`:
   - Disbands the **most expensive** units first (by maintenance, then shield
     cost), so cheap scouts/warriors survive.
   - **Scouts are kept last** — they're the civ's eyes on the map and nearly
@@ -59,21 +70,37 @@ The AI always aims to keep **at least 8 gold** in the treasury:
   - Defeated units (health ≤ 0, awaiting death animation) are never disbanded.
   - **Never below one garrison per city** (`maxDisbandable = units − cities`),
     so a bankrupt civ isn't left defenceless.
-- After disbanding, the accumulated debt is **forgiven** (`gold = 0`) so the
-  civ gets a fresh start instead of a permanent death spiral.
+- **Catastrophic deficit** (`gold < −upkeep * 3`) triggers the same disband
+  routine for any civ (including a human after a catastrophe).
+- After disbanding, the treasury is **forgiven back to the 8-gold floor**
+  (`gold = max(gold, 8)` for the AI, `0` for a human) so the civ gets a fresh
+  start instead of a permanent death spiral.
+- Verified: a 40-round AI-vs-AI simulation holds **both** civs at or above the
+  8-gold floor with **zero** disband events (previously one civ ran to −12 and
+  disbanded repeatedly).
 
-## 5. Prevention: sustainable army cap — `sustainableUnits()` + AutoProduction
+## 5. Prevention by planning: real-income army cap — `sustainableUnits()` + AutoProduction
 
-The best way to stay in budget is to never over-produce in the first place:
+The real fix is to never over-produce in the first place:
 
-- `sustainableUnits(civ) = max(cityCount, affordable)`, where `affordable` is
-  the full-tax income left after the luxury the civ must keep for happiness.
-- `AutoProduction.ensureProductionQueue()` refuses to queue more military units
-  once `currentUnits + queuedUnits >= sustainableUnits` (this stops the
-  "produce → disband for upkeep" churn in AI-vs-AI). It falls back to buildings;
-  if no building is available it queues the already-chosen unit (or, for a
-  brand-new city, a settler/scout) so the queue never looks empty.
-- **Scouts are exempt** from the unit cap (cheap, essential for exploration).
+- `sustainableUnits(civ)` now plans the army against the civ's **actual tax
+  income** (`maxTaxIncome × current taxRate`, after the luxury it must keep
+  for happiness) instead of an assumed 100% tax. Assuming 100% tax
+  over-estimated the affordable army, so the AI built units it couldn't
+  maintain and then had to disband them. Planning with the real tax rate means
+  the AI simply never builds an army it can't afford — disbanding becomes a
+  rare last resort.
+- `AutoProduction.ensureProductionQueue()` refuses to queue more **military**
+  units once `currentUnits + queuedUnits >= sustainableUnits`. It falls back
+  to buildings; if no building is available it queues the already-chosen unit
+  (or, for a brand-new city, a settler/scout) so the queue never looks empty.
+- **Scouts and settlers are exempt** from the military cap — they're cheap and
+  grow the economy (a settler founds a city that adds free support + income),
+  so expansion never stalls. Settler count is still bounded by the per-profile
+  expansion params.
+- Urgent defenders (a city under threat) are still produced via
+  `determineProductionItem` regardless of the cap — only queue *follow-ups* are
+  capped, so immediate defense is never blocked.
 - `determineProductionItem()` also checks a **gold crisis**
   (`gold < −upkeep`): in a crisis it only allows the minimum settler count (1),
   so the civ doesn't add more upkeep it can't afford.

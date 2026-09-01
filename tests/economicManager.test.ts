@@ -492,5 +492,25 @@ describe('EconomicManager AI budget keeping (raiseTaxForAI)', () => {
     expect(civ.taxRate).toBeGreaterThan(30);
     expect(civ.scienceRate).toBeLessThan(50);
   });
+
+  it('keeps luxury at 0% while every city is content', () => {
+    // population-1 city (despotism tolerance 2) → no unhappiness → content.
+    const civ = setup(100, 2);
+    expect(civ.luxuryRate).toBe(0);
+  });
+
+  it('spends on luxury only when a city is in (or near) disorder', () => {
+    const civ = makeCiv(0, {
+      taxRate: 50, scienceRate: 40, luxuryRate: 10,
+      resources: { food: 0, production: 0, trade: 0, science: 0, gold: 100 },
+    });
+    // population 10 > tolerance 2 → 8 unhappy; no luxury/building → disorder.
+    const city = makeCity(0, 10, 10);
+    const engine = makeEngine({ civilizations: [civ], cities: [city], units: [] });
+    const econ = new EconomicManager(engine);
+    (econ as any).raiseTaxForAI(civ, [city]);
+    expect(civ.taxRate + civ.scienceRate + civ.luxuryRate).toBe(100);
+    expect(civ.luxuryRate).toBeGreaterThan(0);
+  });
 });
 
