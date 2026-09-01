@@ -3316,12 +3316,15 @@ export default class GameEngine {
 
     const hasActiveUnitsWithMoves = activeUnitsWithMoves.length > 0 || !queueEmpty;
 
-    // A human player still has "stuff to build" when any of their cities has a
-    // non-empty production queue (extra items queued behind the current one).
-    // Don't auto-end the turn in that case — the player may want to review or
-    // adjust the city's queued production before ending the turn.
+    // A human player still has "stuff to build" when any MANUALLY-managed city
+    // (Auto Production OFF) has a non-empty production queue — extra items the
+    // player queued by hand, which they may want to review before ending the
+    // turn. Cities with Auto Production ON are excluded: their queue is
+    // auto-filled and there is nothing for the player to review, so an
+    // auto-filled queue must NOT block auto-end-turn.
     const hasCitiesWithProductionQueued = this.cities.some(
       (c: City) => c.civilizationId === this.activePlayer
+        && c.autoProduction !== true
         && Array.isArray(c.buildQueue)
         && c.buildQueue.length > 0
     );

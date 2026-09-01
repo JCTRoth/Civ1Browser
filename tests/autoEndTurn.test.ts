@@ -325,12 +325,14 @@ describe('Auto End Turn defers while a city still has production queued', () => 
     (engine as any).unitTurnQueue?.clearQueue?.(0);
   };
 
-  it('does NOT auto-end when a human city has a non-empty production queue', () => {
+  it('does NOT auto-end when a MANUALLY-managed human city has a non-empty production queue', () => {
     clearMovableHumanUnits();
 
-    // Give one human city queued production (stuff still to build).
+    // Give one MANUALLY-managed human city (Auto Production OFF) queued
+    // production (stuff the player still needs to review).
     const humanCity = engine.cities.find((c: any) => c.civilizationId === 0);
     expect(humanCity).toBeTruthy();
+    (humanCity as any).autoProduction = false;
     (humanCity as any).buildQueue = [
       { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 },
       { type: 'building', itemType: 'granary', name: 'Granary', cost: 60 }
