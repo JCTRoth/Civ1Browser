@@ -639,8 +639,8 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
         }
         case 'accept_counter': {
           if (counterProposal) {
-            const cpResult = dm.processProposal(counterProposal as any);
-            const cpAction = (counterProposal as any).action.replace(/_/g, ' ');
+            const cpResult = dm.processProposal({ ...counterProposal, action: counterProposal.action as DiplomatAction });
+            const cpAction = counterProposal.action.replace(/_/g, ' ');
             addDiploLog(cpResult.accepted
               ? `You accepted their counter-proposal: ${cpAction}.`
               : `Counter-proposal could not be executed.`);

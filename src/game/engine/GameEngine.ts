@@ -26,6 +26,7 @@ import { AIManager } from './AIManager';
 import { BarbarianManager } from './BarbarianManager';
 import { UnitTurnQueue } from './UnitTurnQueue';
 import { DiplomacyManager } from './DiplomacyManager';
+import type { DiplomatAction } from './DiplomacyTypes';
 import { canBuildUnit, getCivProductionProfile, getCivPersonality } from './AITypes';
 import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
@@ -63,6 +64,11 @@ export interface MapTile {
   col: number;
   row: number;
   type?: string;
+  /** Legacy improvement flags (some saves set these alongside `improvement`). */
+  road?: boolean;
+  railroad?: boolean;
+  hasRoad?: boolean;
+  hasRiver?: boolean;
 }
 
 interface MapData {
@@ -84,7 +90,7 @@ export interface PlayerTurnStorage {
   lastKnownCities: Map<string, City>; // Last known enemy city positions
   enemyLocations: Map<number, EnemyLocation[]>; // Enemy locations per civilization [enemyCivId -> locations]
   scoutZones: Array<{ minCol: number; maxCol: number; minRow: number; maxRow: number }>; // Scout assignment zones
-  turnData: Record<string, any>; // Custom per-turn data storage
+  turnData: Record<string, unknown>; // Custom per-turn data storage
 }
 
 /**
@@ -463,7 +469,7 @@ export default class GameEngine {
   toggleAutoProduction(cityId: string, enabled: boolean) {
     const city = this.cities.find(c => c.id === cityId);
     if (city) {
-      (city as any).autoProduction = enabled;
+      city.autoProduction = enabled;
       console.log(`[GameEngine] Auto-production ${enabled ? 'enabled' : 'disabled'} for city ${cityId}`);
       
       // If enabling and city has no current production, set one immediately
@@ -719,7 +725,7 @@ export default class GameEngine {
   /**
    * Initialize the game engine with settings
    */
-  async initialize(settings = {}) {
+  async initialize(settings: Partial<GameSettings> & { devMode?: boolean } = {}) {
     console.log('Initializing game engine...');
     
     // Merge custom settings
@@ -739,7 +745,7 @@ export default class GameEngine {
     this.diplomacyManager.reset();
     
     // Set dev mode from settings
-    this.devMode = (settings as any).devMode || false;
+    this.devMode = settings.devMode || false;
     console.log(`[GameEngine] Developer mode: ${this.devMode ? 'ENABLED' : 'DISABLED'}`);
     
     // Validate playerCivilization index
@@ -1158,7 +1164,7 @@ export default class GameEngine {
       id: unitId,
       civilizationId: civId,
       type: type,
-      name: (unitProps as any).name || type,
+      name: unitProps.name || type,
       col: col,
       row: row,
       health: 100,
@@ -1787,9 +1793,10 @@ export default class GameEngine {
    */
   getAllUnits() {
     // Prefer units managed by the map/unitManager when available
+    const unitMap = this.map as (MapData & { getAllUnits?: () => Unit[] }) | null;
     try {
-      if ((this as any).map && typeof (this as any).map.getAllUnits === 'function') {
-        return (this as any).map.getAllUnits();
+      if (unitMap && typeof unitMap.getAllUnits === 'function') {
+        return unitMap.getAllUnits();
       }
     } catch (e) {
       // fall back
@@ -1803,12 +1810,13 @@ export default class GameEngine {
    */
   getAllCities() {
     // Prefer cities managed by the map/cityManager when available
+    const cityMap = this.map as (MapData & { getCities?: () => City[]; getAllCities?: () => City[] }) | null;
     try {
-      if ((this as any).map && typeof (this as any).map.getCities === 'function') {
-        return (this as any).map.getCities();
+      if (cityMap && typeof cityMap.getCities === 'function') {
+        return cityMap.getCities();
       }
-      if ((this as any).map && typeof (this as any).map.getAllCities === 'function') {
-        return (this as any).map.getAllCities();
+      if (cityMap && typeof cityMap.getAllCities === 'function') {
+        return cityMap.getAllCities();
       }
     } catch (e) {
       console.warn('[GameEngine] getAllCities fallback triggered due to error:', e);
@@ -1821,7 +1829,7 @@ export default class GameEngine {
   private settlerDestinationInEnemyZoC(unit: Unit, col: number, row: number): boolean {
     if (unit.type !== 'settler') return false;
     return this.units.some((enemy) => {
-      if (enemy.civilizationId === unit.civilizationId || (enemy as any).isDefeated) return false;
+      if (enemy.civilizationId === unit.civilizationId || enemy.isDefeated) return false;
       const enemyAttack = enemy.attack ?? UNIT_PROPS[enemy.type]?.attack ?? 0;
       if (enemyAttack <= 0) return false;
       return this.squareGrid?.squareDistance(col, row, enemy.col, enemy.row) === 1;
@@ -1896,7 +1904,7 @@ export default class GameEngine {
 
     const targetTerrain = this.getTerrainKey(targetTile);
     const isTargetWater = this.isWaterTerrain(targetTile);
-    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || (unit as any).isNaval || (unit as any).naval);
+    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || unit.isNaval || (unit as { naval?: boolean }).naval);
 
     if (unit.type === 'settler' && isTargetWater) {
       return false;
@@ -1928,7 +1936,7 @@ export default class GameEngine {
     const targetUnit = this.getUnitAt(targetCol, targetRow);
     if (targetCol === unit.col && targetRow === unit.row) {
       const stackedEnemy = this.units.find(u => u.col === targetCol && u.row === targetRow
-        && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
+        && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !u.isDefeated);
       if (stackedEnemy) {
         if (unit.type === 'settler') {
           return false;
@@ -1992,7 +2000,7 @@ export default class GameEngine {
 
     const targetTerrain = this.getTerrainKey(targetTile);
     const isTargetWater = this.isWaterTerrain(targetTile);
-    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || (unit as any).isNaval || (unit as any).naval);
+    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || unit.isNaval || (unit as { naval?: boolean }).naval);
 
     if (unit.type === 'settler' && isTargetWater) {
       return { success: false, reason: 'settler_cannot_enter_ocean' };
@@ -2012,7 +2020,7 @@ export default class GameEngine {
     let targetUnit = this.getUnitAt(targetCol, targetRow);
     if (targetCol === unit.col && targetRow === unit.row) {
       const stackedEnemy = this.units.find(u => u.col === targetCol && u.row === targetRow
-        && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
+        && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !u.isDefeated);
       if (stackedEnemy) targetUnit = stackedEnemy;
     }
 
@@ -2072,7 +2080,7 @@ export default class GameEngine {
           (u: Unit) => u.civilizationId === targetCity.civilizationId
             && u.col === targetCity.col
             && u.row === targetCity.row
-            && (u as any).isDefeated !== true
+            && u.isDefeated !== true
             && u.id !== unit.id,
         );
         if (cityDefenders.length > 0) {
@@ -2273,7 +2281,7 @@ export default class GameEngine {
       try {
         // Determine sight range (unit may define it, otherwise check UNIT_PROPS, default to 1)
         let sightRange = 1; // Default to 1 tile radius
-        if (typeof (unit as any).sightRange === 'number') sightRange = (unit as any).sightRange;
+        if (typeof unit.sightRange === 'number') sightRange = unit.sightRange;
         else if (UNIT_PROPS && UNIT_PROPS[String(unit.type).toLowerCase()] && typeof UNIT_PROPS[String(unit.type).toLowerCase()].sightRange === 'number') {
           sightRange = UNIT_PROPS[String(unit.type).toLowerCase()].sightRange;
         }
@@ -2697,8 +2705,8 @@ export default class GameEngine {
       console.log(`[COMBAT MOVEMENT] ${attacker.type} (${attacker.id}) defeated ${defender.type} (${defender.id}) and moved from (${fromCol},${fromRow}) to (${defender.col},${defender.row})`);
 
       // Mark defender as defeated and delay removal (5 seconds to show black X)
-      (defender as any).isDefeated = true;
-      (defender as any).defeatTimestamp = Date.now();
+      defender.isDefeated = true;
+      defender.defeatTimestamp = Date.now();
       
       if (this.onStateChange) {
         this.onStateChange('UNIT_DEFEATED', { unit: defender });
@@ -2738,7 +2746,7 @@ export default class GameEngine {
         const stillDefended = this.units.some(
           (u: Unit) => u.civilizationId === originalCiv
             && u.col === cityHere.col && u.row === cityHere.row
-            && (u as any).isDefeated !== true
+            && u.isDefeated !== true
             && u.id !== defender.id,
         );
         if (!stillDefended) {
@@ -2775,8 +2783,8 @@ export default class GameEngine {
       
       if (attacker.health <= 0) {
         // Mark attacker as defeated and delay removal (5 seconds to show black X)
-        (attacker as any).isDefeated = true;
-        (attacker as any).defeatTimestamp = Date.now();
+        attacker.isDefeated = true;
+        attacker.defeatTimestamp = Date.now();
         
         if (this.onStateChange) {
           this.onStateChange('UNIT_DEFEATED', { unit: attacker });
@@ -2870,7 +2878,7 @@ export default class GameEngine {
       // only (see AutoProduction). Barbarians become a real faction in the
       // game the moment they hold a city.
       if (attacker.civilizationId === BARBARIAN_CIV_ID) {
-        (city as any).barbarianScoutBuilt = false;
+        city.barbarianScoutBuilt = false;
         city.autoProduction = true;
         this.ensureBarbarianCivilization();
       }
@@ -2909,8 +2917,8 @@ export default class GameEngine {
     // the population from conventional ground attacks).
     attacker.health = Math.max(0, (attacker.health ?? 100) - 25);
     if (attacker.health <= 0) {
-      (attacker as any).isDefeated = true;
-      (attacker as any).defeatTimestamp = Date.now();
+      attacker.isDefeated = true;
+      attacker.defeatTimestamp = Date.now();
       if (this.onStateChange) {
         this.onStateChange('UNIT_DEFEATED', { unit: attacker });
       }
@@ -3918,7 +3926,7 @@ export default class GameEngine {
         result = this.diplomacyManager.processProposal({
           fromCivId: diplomat.civilizationId,
           toCivId: targetCivId,
-          action: action as any,
+          action: action as DiplomatAction,
           goldAmount: action === 'demand_tribute' ? 50 : undefined,
         });
         diplomat.movesRemaining = 0;
@@ -4458,7 +4466,7 @@ export default class GameEngine {
   getSaveJSON(): string | null {
     try {
       // Serialize playerStorage (per-player visibility, explored, AI state)
-      const playerStorageSerialized: Record<number, any> = {};
+      const playerStorageSerialized: Record<number, unknown> = {};
       for (const [civId, storage] of this.playerStorage.entries()) {
         playerStorageSerialized[civId] = {
           civilizationId: storage.civilizationId,
@@ -4473,7 +4481,7 @@ export default class GameEngine {
       }
 
       // Serialize scout memory discoveries
-      const scoutDiscoveries: Record<number, any[]> = {};
+      const scoutDiscoveries: Record<number, unknown[]> = {};
       if (this.scoutMemory) {
         const allCivIds = this.civilizations.map(c => c.id);
         for (const civId of allCivIds) {
@@ -4643,7 +4651,15 @@ export default class GameEngine {
       if (saveData.version >= 2 && saveData.playerStorage) {
         for (const [civIdStr, stored] of Object.entries(saveData.playerStorage)) {
           const civId = Number(civIdStr);
-          const storage = stored as any;
+          const storage = stored as {
+            visibility?: boolean[];
+            explored?: boolean[];
+            lastKnownUnits?: Array<[string, Unit]>;
+            lastKnownCities?: Array<[string, City]>;
+            enemyLocations?: Array<[string, EnemyLocation[]]>;
+            scoutZones?: Array<{ minCol: number; maxCol: number; minRow: number; maxRow: number }>;
+            turnData?: unknown;
+          };
           this.initializePlayerStorage(civId);
           const current = this.playerStorage.get(civId);
           if (current) {

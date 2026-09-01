@@ -35,7 +35,15 @@ export interface BuildingProperties {
     name: string;
     cost: number;
     maintenance: number;
-    effects: Record<string, any>;
+    effects: {
+      food?: number;
+      production?: number;
+      trade?: number;
+      gold?: number;
+      science?: number;
+      happiness?: number;
+      [key: string]: unknown;
+    };
     description?: string;
     requiredTechnology?: string;
     icon?: string;

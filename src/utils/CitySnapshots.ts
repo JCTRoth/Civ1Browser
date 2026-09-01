@@ -17,7 +17,6 @@ export interface CitySnapshot {
   row: number;
   population: number;
   hitPoints?: number;
-  maxHitPoints?: number;
   disorder?: boolean;
   capturedTurns?: number;
   trade?: number;
@@ -52,7 +51,6 @@ export function serializeCity(city: City): CitySnapshot {
     row: city?.row ?? 0,
     population: city?.population ?? 0,
     hitPoints: city?.hitPoints,
-    maxHitPoints: city?.maxHitPoints,
     disorder: city?.disorder,
     capturedTurns: city?.capturedTurns,
     trade: city?.trade,

@@ -1,4 +1,5 @@
-AVOID TO USE `any` TYPE IN TYPESCRIPT USE SPECIFIC TYPES INSTEAD
+Use specific types: Always define explicit types, interfaces, or generic constraints for all variables, parameters, and return types
+Avoid `any`: The `any` type is strictly forbidden. If the type is truly uncertain, use `unknown` combined with type narrowing or type guards instead.
 Put interfaces and types in the `types/` folder, and import them from there
 Always define function parameter with types and return types
 Keep TSX components purely presentational (JSX only)

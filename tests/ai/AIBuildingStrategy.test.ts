@@ -9,6 +9,10 @@ interface TestCity {
   col: number;
   row: number;
   population: number;
+  production: number;
+  food: number;
+  gold: number;
+  science: number;
   buildings: string[];
 }
 
@@ -19,6 +23,10 @@ const makeCity = (overrides: Record<string, unknown> = {}): TestCity => ({
   col: 5,
   row: 5,
   population: 4,
+  production: 0,
+  food: 0,
+  gold: 0,
+  science: 0,
   buildings: [],
   ...overrides,
 } as TestCity);
@@ -26,14 +34,20 @@ const makeCity = (overrides: Record<string, unknown> = {}): TestCity => ({
 interface TestCiv {
   id: number;
   name: string;
-  technologies: Set<string>;
+  color: string;
+  isAlive: boolean;
+  resources: { food: number; production: number; trade: number; science: number; gold: number };
+  technologies: string[];
   personality: Personality;
 }
 
 const makeCiv = (overrides: Record<string, unknown> = {}): TestCiv => ({
   id: 1,
   name: 'TestCiv',
-  technologies: new Set<string>(['pottery', 'masonry']),
+  color: '#ff0000',
+  isAlive: true,
+  resources: { food: 0, production: 0, trade: 0, science: 0, gold: 0 },
+  technologies: ['pottery', 'masonry'],
   personality: {
     aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5,
   } as Personality,
@@ -81,7 +95,7 @@ describe('AIBuildingStrategy.evaluateBuildings', () => {
 
   it('should prioritize city_walls when under threat', () => {
     const city = makeCity();
-    const civ = makeCiv({ technologies: new Set(['pottery', 'masonry']) });
+    const civ = makeCiv({ technologies: ['pottery', 'masonry'] });
     const plans = AIBuildingStrategy.evaluateBuildings(
       city, civ, 'defensive_turtle',
       baseBuildingGameState({ isUnderThreat: true })
@@ -96,7 +110,7 @@ describe('AIBuildingStrategy.evaluateBuildings', () => {
 
   it('should return sorted results (highest priority first)', () => {
     const city = makeCity();
-    const civ = makeCiv({ technologies: new Set(['pottery', 'masonry', 'writing', 'bronze_working']) });
+    const civ = makeCiv({ technologies: ['pottery', 'masonry', 'writing', 'bronze_working'] });
     const plans = AIBuildingStrategy.evaluateBuildings(city, civ, 'balanced_growth', baseBuildingGameState());
 
     for (let i = 1; i < plans.length; i++) {
@@ -118,7 +132,7 @@ describe('AIBuildingStrategy.evaluateWonders', () => {
 
   it('should exclude already-built wonders', () => {
     const city = makeCity();
-    const civ = makeCiv({ technologies: new Set(['ceremonial_burial', 'masonry', 'pottery']) });
+    const civ = makeCiv({ technologies: ['ceremonial_burial', 'masonry', 'pottery'] });
     const plans = AIBuildingStrategy.evaluateWonders(
       city, civ, 'wonder_rush',
       baseWonderGameState({ builtWonders: ['pyramids'] })

@@ -97,7 +97,7 @@ export class Pathfinding {
     startRow: number,
     targetCol: number,
     targetRow: number,
-    getTileAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => MapTile | null,
     unitType: string,
     mapWidth: number,
     mapHeight: number
@@ -218,7 +218,7 @@ export class Pathfinding {
     startCol: number,
     startRow: number,
     maxMovement: number,
-    getTileAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => MapTile | null,
     unitType: string,
     mapWidth: number,
     mapHeight: number,

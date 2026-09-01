@@ -10,10 +10,10 @@ import GameEngine from './GameEngine';
 /** A production item that can be queued in a city's build queue. */
 interface ProductionItem {
   // Matches types/game.ProductionItem — built dynamically with string types.
-  type?: string;
-  itemType?: string;
-  name?: string;
-  cost?: number;
+  type: string;
+  itemType: string;
+  name: string;
+  cost: number;
   shields?: number;
 }
 
@@ -42,7 +42,7 @@ export class ProductionManager {
   private canBuildItem(cityId: string, item: ProductionItem | string): { ok: boolean; reason?: string } {
     try {
       const city: City | undefined = this.gameEngine.cities?.find((c) => c.id === cityId)
-        || (this.gameEngine.map && typeof (this.gameEngine.map as any).getCity === 'function' && (this.gameEngine.map as any).getCity(cityId))
+        || (this.gameEngine.map && typeof (this.gameEngine.map as { getCity?: (id: string) => City | undefined }).getCity === 'function' && (this.gameEngine.map as unknown as { getCity: (id: string) => City | undefined }).getCity(cityId))
         || undefined;
       if (!city) return { ok: true }; // City not found — don't block in validation
       const civ: Civilization | undefined = this.gameEngine.civilizations?.[city.civilizationId];
@@ -50,7 +50,7 @@ export class ProductionManager {
       const rawTechs = civ?.technologies;
       if (Array.isArray(rawTechs)) {
         for (const t of rawTechs) techs.add(String(t));
-      } else if (rawTechs && typeof (rawTechs as any)[Symbol.iterator] === 'function') {
+      } else if (rawTechs && typeof rawTechs[Symbol.iterator] === 'function') {
         for (const t of rawTechs as Iterable<string>) techs.add(String(t));
       }
 
@@ -93,8 +93,8 @@ export class ProductionManager {
     }
     // Try city manager if available
     try {
-      if (this.gameEngine.map && typeof (this.gameEngine.map as any).getCity === 'function') {
-        const cityRaw: City | undefined = (this.gameEngine.map as any).getCity(cityId) || this.gameEngine.cities.find((c) => c.id === cityId);
+      if (this.gameEngine.map && typeof (this.gameEngine.map as { getCity?: (id: string) => City | undefined }).getCity === 'function') {
+        const cityRaw: City | undefined = (this.gameEngine.map as unknown as { getCity: (id: string) => City | undefined }).getCity(cityId) || this.gameEngine.cities.find((c) => c.id === cityId);
           if (!cityRaw) return { success: false, reason: 'city_not_found' };
           const city = cityRaw;
 
@@ -102,8 +102,8 @@ export class ProductionManager {
           if (!Array.isArray(city.buildQueue)) city.buildQueue = [];
           console.log('[ProductionManager] After buildQueue init', { cityId, buildQueue: city.buildQueue, city });
 
-          if (queue && typeof (city as any).queueProduction === 'function') {
-            (city as any).queueProduction(item);
+          if (queue && typeof (city as { queueProduction?: (item: ProductionItem) => void }).queueProduction === 'function') {
+            (city as { queueProduction: (item: ProductionItem) => void }).queueProduction(item);
             console.log('[ProductionManager] city.queueProduction executed', { cityId, buildQueue: city.buildQueue });
             // If no current production, start the first queued item with carried over progress
             if (!city.currentProduction && city.buildQueue.length > 0) {
@@ -112,8 +112,8 @@ export class ProductionManager {
               city.carriedOverProgress = 0;
               console.log('[ProductionManager] started queued item as currentProduction', { cityId, currentProduction: city.currentProduction, productionProgress: city.productionProgress });
             }
-          } else if (!queue && typeof (city as any).setProduction === 'function') {
-            (city as any).setProduction(item);
+          } else if (!queue && typeof (city as { setProduction?: (item: ProductionItem) => void }).setProduction === 'function') {
+            (city as { setProduction: (item: ProductionItem) => void }).setProduction(item);
           } else if (queue && Array.isArray(city.buildQueue)) {
             city.buildQueue.push(item);
             console.log('[ProductionManager] pushed to city.buildQueue', { cityId, buildQueue: city.buildQueue });
@@ -171,7 +171,7 @@ export class ProductionManager {
   purchaseCityProduction(cityId: string, item: ProductionItem, civId?: number): ProductionResult {
     try {
       console.log('[ProductionManager] purchaseCityProduction called', { cityId, item, civId });
-      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as any).getCity === 'function' ? (this.gameEngine.map as any).getCity(cityId) : undefined);
+      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as { getCity?: (id: string) => City | undefined }).getCity === 'function' ? (this.gameEngine.map as unknown as { getCity: (id: string) => City | undefined }).getCity(cityId) : undefined);
       if (!city) return { success: false, reason: 'city_not_found' };
 
       // Purchasing must respect tech requirements too.
@@ -187,7 +187,7 @@ export class ProductionManager {
       }
 
       // Find civilization / owner
-      const civ: Civilization | undefined = civId !== undefined ? this.gameEngine.civilizations[civId] : this.gameEngine.civilizations[city.civilizationId] || this.gameEngine.civilizations[(city as any).civId] || undefined;
+      const civ: Civilization | undefined = civId !== undefined ? this.gameEngine.civilizations[civId] : this.gameEngine.civilizations[city.civilizationId] || this.gameEngine.civilizations[(city as { civId?: number }).civId] || undefined;
       if (!civ || !civ.resources) return { success: false, reason: 'civ_not_found' };
 
       const cost: number = item.cost || (item.shields || 0);
@@ -220,7 +220,7 @@ export class ProductionManager {
   removeCityQueueItem(cityId: string, index: number): ProductionResult {
     try {
       console.log('[ProductionManager] removeCityQueueItem called', { cityId, index });
-      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as any).getCity === 'function' ? (this.gameEngine.map as any).getCity(cityId) : undefined);
+      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as { getCity?: (id: string) => City | undefined }).getCity === 'function' ? (this.gameEngine.map as unknown as { getCity: (id: string) => City | undefined }).getCity(cityId) : undefined);
       if (!city) return { success: false, reason: 'city_not_found' };
 
       if (!Array.isArray(city.buildQueue)) {
@@ -256,7 +256,7 @@ export class ProductionManager {
    */
   moveCityQueueItem(cityId: string, fromIndex: number, toIndex: number): ProductionResult {
     try {
-      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as any).getCity === 'function' ? (this.gameEngine.map as any).getCity(cityId) : undefined);
+      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as { getCity?: (id: string) => City | undefined }).getCity === 'function' ? (this.gameEngine.map as unknown as { getCity: (id: string) => City | undefined }).getCity(cityId) : undefined);
       if (!city) return { success: false, reason: 'city_not_found' };
 
       const buildQueue = city.buildQueue;
@@ -283,7 +283,7 @@ export class ProductionManager {
   removeCurrentProduction(cityId: string): ProductionResult {
     try {
       console.log('[ProductionManager] removeCurrentProduction called', { cityId });
-      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as any).getCity === 'function' ? (this.gameEngine.map as any).getCity(cityId) : undefined);
+      const city: City | undefined = this.gameEngine.cities.find(c => c.id === cityId) || (this.gameEngine.map && typeof (this.gameEngine.map as { getCity?: (id: string) => City | undefined }).getCity === 'function' ? (this.gameEngine.map as unknown as { getCity: (id: string) => City | undefined }).getCity(cityId) : undefined);
       if (!city) return { success: false, reason: 'city_not_found' };
 
       const removed = city.currentProduction;

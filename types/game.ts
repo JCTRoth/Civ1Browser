@@ -239,6 +239,8 @@ export interface Unit {
   workTurns?: number;
   /** Whether this unit has been defeated (killed) but still needs visual cleanup. */
   isDefeated?: boolean;
+  /** When the unit was defeated (performance.now()), used to delay visual removal. */
+  defeatTimestamp?: number;
   /** Whether this unit is a naval unit. */
   isNaval?: boolean;
   /** Unit sight range for fog of war. */

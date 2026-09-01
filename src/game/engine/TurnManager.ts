@@ -585,7 +585,8 @@ hasLibrary: cities.some((c) => c.buildings?.includes('library')),
    */
   private resetUnitsForPlayer(playerId: number): void {
     // Access UNIT_PROPS from Constants or global scope
-    const UNIT_PROPS = (this.gameEngine.constructor as any).UNIT_PROPS || (globalThis as any).UNIT_PROPS;
+    const UNIT_PROPS = (this.gameEngine.constructor as typeof GameEngine).UNIT_PROPS
+      || (globalThis as { UNIT_PROPS?: typeof GameEngine['UNIT_PROPS'] }).UNIT_PROPS;
     const units = this.gameEngine.units.filter((u) => u.civilizationId === playerId);
     
     console.log(`[TurnManager] Resetting moves for ${units.length} units of player ${playerId}`);
@@ -774,8 +775,11 @@ hasLibrary: cities.some((c) => c.buildings?.includes('library')),
   }
 
   private createProducedUnit(city: City, unitType: string, eventType = 'UNIT_PRODUCED', isPurchased = false): boolean {
-    const unitProps = (this.gameEngine.constructor as any).UNIT_PROPS?.[unitType]
-      ?? { movement: 1, attack: 0, defense: 1 };
+    const unitProps = ((this.gameEngine.constructor as typeof GameEngine).UNIT_PROPS?.[unitType]
+      ?? { movement: 1, attack: 0, defense: 1 }) as {
+        movement: number; attack: number; defense: number;
+        hitPoints?: number; maintenance?: number; icon?: string;
+      };
     const isSettler = unitType === 'settler';
     const isChieftain = String(this.gameEngine.gameSettings?.difficulty ?? '').toUpperCase() === 'CHIEFTAIN';
     const population = Number(city.population ?? 1);

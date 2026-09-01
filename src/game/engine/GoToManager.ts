@@ -1,6 +1,6 @@
 import { Unit } from '../../../types/game';
 import { Pathfinding } from './Pathfinding';
-import GameEngine from './GameEngine';
+import GameEngine, { type MapTile } from './GameEngine';
 import type { TurnManager } from './TurnManager';
 
 /**
@@ -26,7 +26,7 @@ export class GoToManager {
     unit: Unit,
     targetCol: number,
     targetRow: number,
-    getTileAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => MapTile | null,
     mapWidth: number,
     mapHeight: number
   ): { success: boolean; path: Array<{ col: number; row: number }> } {

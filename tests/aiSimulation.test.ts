@@ -69,7 +69,7 @@ describe('AI scout enemy search integration', () => {
         attack: 0,
         defense: 0,
         icon: 'scout',
-        orders: 'none',
+        orders: null,
         homeCityId: '',
         areTurnsDone: false,
         isSkipped: false,

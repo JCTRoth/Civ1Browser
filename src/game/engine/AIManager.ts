@@ -326,7 +326,7 @@ export class AIManager {
             console.error('[AI-SETTLER] Error in settlement search:', error);
           }
           if (!this.gameEngine.units.includes(unit)) break; // consumed by founding
-          (unit as any)._aiSettlement = settlement;
+          unit._aiSettlement = settlement;
 
           if (!settlement) {
             // No founding spot worth walking to: join a friendly city rather
@@ -356,7 +356,7 @@ export class AIManager {
         // The engine's moveUnit handles same-tile combat, but AI target selection
         // only scans neighbouring tiles — detect the stacked enemy here.
         const stackedEnemy = this.gameEngine.units.find(u => u.col === unit.col && u.row === unit.row
-          && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !(u as any).isDefeated);
+          && u.id !== unit.id && u.civilizationId !== unit.civilizationId && !u.isDefeated);
         if (stackedEnemy) {
           console.log(`[AI] Unit ${unit.id} attacks stacked enemy ${stackedEnemy.type} on the same tile`);
           this.gameEngine.log('ai', `Attack — ${civ.name} ${unit.type}(${unit.id}) attacks enemy ${stackedEnemy.type} at (${unit.col},${unit.row})`, { civilizationId, action: 'attack', unitId: unit.id, unitType: unit.type, targetType: stackedEnemy.type, targetCol: unit.col, targetRow: unit.row });
@@ -481,8 +481,8 @@ export class AIManager {
             // Route around tiles that were previously blocked (an enemy/allied
             // unit or impassable spot that made moveUnit fail), so findPath does
             // not keep routing through the same blocker every turn.
-            : ((unit as any)._blockedScoutTargets instanceof Set
-                ? new Set<string>((unit as any)._blockedScoutTargets)
+            : (unit._blockedScoutTargets instanceof Set
+                ? new Set<string>(unit._blockedScoutTargets)
                 : new Set<string>());
           const path = this.gameEngine.squareGrid.findPath(unit.col, unit.row, target.col, target.row, obstacles, this.gameEngine.getPassabilityFilter?.());
           if (path.length > 1) {
@@ -657,7 +657,7 @@ export class AIManager {
       console.error('[AI-SETTLER] Error re-evaluating settlement:', error);
     }
     if (!this.gameEngine.units.includes(unit)) return true; // consumed by founding
-    (unit as any)._aiSettlement = settlement;
+    unit._aiSettlement = settlement;
 
     // If findBestSettlementForSettler already founded at the current tile, the
     // settler is gone — signal the caller to break.
@@ -812,18 +812,18 @@ export class AIManager {
       // Combat (enemy within scan radius, handled above) and retreat still
       // preempt the sticky target.
       const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
-      const committed = (unit as any)._aiCommittedTarget as { target: { col: number; row: number }; round: number } | undefined;
+      const committed = unit._aiCommittedTarget;
       if (committed) {
         if (committed.target.col === unit.col && committed.target.row === unit.row) {
-          delete (unit as any)._aiCommittedTarget; // reached — pick something new
+          delete unit._aiCommittedTarget; // reached — pick something new
         } else if (roundNumber - committed.round < 4 && this.isCommittedTargetValid(unit, committed.target)) {
           return committed.target;
         } else {
-          delete (unit as any)._aiCommittedTarget; // stale or invalid — re-evaluate
+          delete unit._aiCommittedTarget; // stale or invalid — re-evaluate
         }
       }
       const remember = (target: { col: number; row: number } | null): { col: number; row: number } | null => {
-        if (target) (unit as any)._aiCommittedTarget = { target, round: roundNumber };
+        if (target) unit._aiCommittedTarget = { target, round: roundNumber };
         return target;
       };
 
@@ -906,7 +906,7 @@ export class AIManager {
     // found (and no improvement to build) the settler falls through and
     // explores like any other civilian.
     if (unit.type === 'settler') {
-      const cached = (unit as any)._aiSettlement;
+      const cached = unit._aiSettlement;
       if (cached) {
         console.log(`[AI-SETTLER] Settler ${unit.id} heading to settlement (${cached.col},${cached.row})`);
         return { col: cached.col, row: cached.row };
@@ -1067,7 +1067,7 @@ export class AIManager {
                   (u: Unit) => u.civilizationId === targetCity.civilizationId
                     && u.col === targetCity.col
                     && u.row === targetCity.row
-                    && (u as any).isDefeated !== true
+                    && u.isDefeated !== true
                     && u.id !== unit.id,
                 );
                 if (cityDefenders.length === 0) {
@@ -1526,7 +1526,7 @@ export class AIManager {
     // Keep a settlement destination stable across turns. The search window is
     // centred on the moving settler, so recomputing the maximum every turn can
     // make the destination drift and cause a produced settler to wander.
-    const lockedTarget = (unit as any)._lastSettlementTarget as { col: number; row: number } | undefined;
+    const lockedTarget = unit._lastSettlementTarget;
     const blockedTargets = this.getBlockedSettlementTargets(unit);
 
     // A target that repeatedly sends the settler back and forth is no longer
@@ -1538,8 +1538,8 @@ export class AIManager {
       const previousPosition = history[history.length - 2];
       if (lastPosition !== previousPosition) {
         blockedTargets.add(this.settlementTargetKey(lockedTarget));
-        (unit as any)._blockedSettlementTargets = blockedTargets;
-        delete (unit as any)._lastSettlementTarget;
+        unit._blockedSettlementTargets = blockedTargets;
+        delete unit._lastSettlementTarget;
         // Clear history so the next evaluation starts fresh and doesn't
         // immediately re-trigger oscillation with stale position data.
         history.length = 0;
@@ -1570,7 +1570,7 @@ export class AIManager {
     }
     if (lockedTarget) {
       // A city, unit, visibility, or terrain change invalidated the old site.
-      delete (unit as any)._lastSettlementTarget;
+      delete unit._lastSettlementTarget;
     }
 
     // First, check if current location is a good settlement spot
@@ -1600,7 +1600,8 @@ export class AIManager {
       unit.col,
       unit.row,
       (col, row) => this.gameEngine.getTileAt(col, row),
-      (col, row) => this.gameEngine.getCityAt(col, row) || blockedTargets.has(`${col},${row}`),
+      (col, row) => this.gameEngine.getCityAt(col, row)
+        || (blockedTargets.has(`${col},${row}`) ? { id: `${col},${row}`, civilizationId: -1, col, row } : null),
       (col, row) => this.gameEngine.getUnitAt(col, row),
       weights,
       MIN_CITY_CENTER_DISTANCE, // keep complete workable areas separate
@@ -1696,7 +1697,7 @@ export class AIManager {
       }
 
       // Store target to detect oscillation on next evaluation
-      (unit as any)._lastSettlementTarget = { col: bestLocation.col, row: bestLocation.row };
+      unit._lastSettlementTarget = { col: bestLocation.col, row: bestLocation.row };
 
       return bestLocation;
     }
@@ -1752,7 +1753,7 @@ export class AIManager {
       unit.row,
       target.col,
       target.row,
-      this.getSettlerPathObstacles((unit as any).id, target),
+      this.getSettlerPathObstacles((unit as Unit).id, target),
       this.gameEngine.getPassabilityFilter?.(),
     );
     return Array.isArray(path) && path.length > 0;
@@ -1941,9 +1942,9 @@ export class AIManager {
         if (lockedDist <= 24) {
           return { col: locked.col, row: locked.row };
         }
-        delete (unit as any)._probeTarget; // went stale (unit was diverted far away)
+        delete unit._probeTarget; // went stale (unit was diverted far away)
       } else {
-        delete (unit as any)._probeTarget; // became impassable / occupied
+        delete unit._probeTarget; // became impassable / occupied
       }
     }
 
@@ -1983,8 +1984,8 @@ export class AIManager {
       const bearing = this.getExplorationBearing(unit);
       const pick = AIUtility.pickRandomExplorationTarget(unit, candidates, bearing);
       if (pick) {
-        (unit as any)._probeTarget = { col: pick.col, row: pick.row };
-        (unit as any)._exploreTarget = { col: pick.col, row: pick.row };
+        unit._probeTarget = { col: pick.col, row: pick.row };
+        unit._exploreTarget = { col: pick.col, row: pick.row };
         return { col: pick.col, row: pick.row };
       }
     }
@@ -2004,8 +2005,8 @@ export class AIManager {
    * leg of the exploration heads out in a fresh random direction.
    */
   private getExplorationBearing(unit: { col: number; row: number }): { dx: number; dy: number } {
-    const u = unit as any;
-    const prev = u._exploreTarget as { col: number; row: number } | undefined;
+    const u = unit as Unit;
+    const prev = u._exploreTarget;
     if (!u._exploreBearing || (prev && u.col === prev.col && u.row === prev.row)) {
       u._exploreBearing = this.rollExplorationBearing();
     }
@@ -2097,7 +2098,7 @@ export class AIManager {
       const bearing = this.getExplorationBearing(unit);
       const pick = AIUtility.pickRandomExplorationTarget(unit, candidates, bearing);
       if (pick) {
-        (unit as any)._exploreTarget = { col: pick.col, row: pick.row };
+        (unit as Unit)._exploreTarget = { col: pick.col, row: pick.row };
         return { col: pick.col, row: pick.row };
       }
     }
@@ -2112,8 +2113,8 @@ export class AIManager {
   private blacklistScoutTarget(unit: Unit, col: number, row: number): void {
     if (unit.type !== 'scout') return;
     const key = `${col},${row}`;
-    const blocked = (unit as any)._blockedScoutTargets instanceof Set
-      ? (unit as any)._blockedScoutTargets
+    const blocked = unit._blockedScoutTargets instanceof Set
+      ? unit._blockedScoutTargets
       : new Set<string>();
     blocked.add(key);
     // Keep the blacklist bounded so it can never grow without limit.
@@ -2121,7 +2122,7 @@ export class AIManager {
       const toDrop = Array.from(blocked as Set<string>).slice(0, blocked.size - 12);
       toDrop.forEach(k => blocked.delete(k));
     }
-    (unit as any)._blockedScoutTargets = blocked;
+    unit._blockedScoutTargets = blocked;
   }
 
   /**
@@ -2167,7 +2168,7 @@ export class AIManager {
 
           // Skip tiles that previously failed to move into (stuck-target guard).
           const blockedKey = `${col},${row}`;
-          if ((unit as any)._blockedScoutTargets instanceof Set && (unit as any)._blockedScoutTargets.has(blockedKey)) continue;
+          if (unit._blockedScoutTargets instanceof Set && unit._blockedScoutTargets.has(blockedKey)) continue;
 
           const tile = this.gameEngine.getTileAt(col, row);
           if (!tile) continue;
@@ -2203,7 +2204,7 @@ export class AIManager {
         const bearing = this.getExplorationBearing(unit);
         const pick = AIUtility.pickRandomExplorationTarget(unit, candidates, bearing);
         if (pick) {
-          (unit as any)._exploreTarget = { col: pick.col, row: pick.row };
+          unit._exploreTarget = { col: pick.col, row: pick.row };
           console.log(`[AI-SCOUT] Found unexplored tile at (${pick.col},${pick.row}) in zone (of ${candidates.length})`);
           return pick;
         }
@@ -2213,9 +2214,9 @@ export class AIManager {
     // The zone is fully explored as far as we can see, but the blocked-target
     // list may itself be what cripples the scout (a long chain of failed
     // moves). Reset it once it has grown large so exploration can retry.
-    if ((unit as any)._blockedScoutTargets instanceof Set && (unit as any)._blockedScoutTargets.size >= 12) {
-      const wasBlocked = (unit as any)._blockedScoutTargets.size;
-      (unit as any)._blockedScoutTargets = new Set<string>();
+    if (unit._blockedScoutTargets instanceof Set && unit._blockedScoutTargets.size >= 12) {
+      const wasBlocked = unit._blockedScoutTargets.size;
+      unit._blockedScoutTargets = new Set<string>();
       console.log(`[AI-SCOUT] Scout ${unit.id} reset ${wasBlocked} blocked targets to unstick`);
     }
 
@@ -2429,7 +2430,7 @@ export class AIManager {
 
   /** Refresh (and cache) the civ's situational aggression posture. */
   private getAggressionState(civilizationId: number, storage: PlayerTurnStorage, roundNumber: number): AggressionState {
-    const aiState: AIState = storage?.turnData?.aiState ?? createDefaultAIState();
+    const aiState: AIState = (storage?.turnData?.aiState as AIState) ?? createDefaultAIState();
     const cached = aiState.aggression;
     // Re-evaluate a few times per turn so captures/threats flip the posture
     // reasonably quickly without per-unit overhead.
@@ -2503,7 +2504,7 @@ export class AIManager {
   }
 
   private getOffensivePlanTarget(unit: Unit, storage: PlayerTurnStorage): { col: number; row: number } | null {
-    const plan = storage?.turnData?.offensivePlan;
+    const plan = storage?.turnData?.offensivePlan as AIState['offensivePlan'] | undefined;
     if (!plan || !plan.target) {
       return null;
     }
@@ -2954,7 +2955,7 @@ export class AIManager {
     if (!storage.turnData.threatAlerts) {
       storage.turnData.threatAlerts = [];
     }
-    const alerts: ThreatAlert[] = storage.turnData.threatAlerts;
+    const alerts: ThreatAlert[] = storage.turnData.threatAlerts as ThreatAlert[];
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
 
     // Don't duplicate alerts at the same location this round
@@ -2976,7 +2977,7 @@ export class AIManager {
     if (!storage?.turnData?.threatAlerts || !this.gameEngine.squareGrid) return null;
 
     const roundNumber = this.gameEngine.roundManager?.getRoundNumber?.() ?? 0;
-    const alerts: ThreatAlert[] = storage.turnData.threatAlerts;
+    const alerts: ThreatAlert[] = storage.turnData.threatAlerts as ThreatAlert[];
     const ALERT_RESPONSE_RADIUS = 8;
 
     let bestAlert: ThreatAlert | null = null;

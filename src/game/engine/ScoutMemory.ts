@@ -203,17 +203,10 @@ export class ScoutMemory {
   }
 
   /** Restore discoveries from saved data (for load game) */
-  public restoreDiscoveries(data: Record<number, any[]>): void {
+  public restoreDiscoveries(data: Record<number, unknown[]>): void {
     this.discoveries.clear();
     for (const [civId, records] of Object.entries(data)) {
-      this.discoveries.set(Number(civId), records.map(r => ({
-        ...r,
-        col: r.col,
-        row: r.row,
-        type: r.type,
-        lastSeenRound: r.lastSeenRound,
-        confirmationCount: r.confirmationCount,
-      })));
+      this.discoveries.set(Number(civId), records.map((r) => r as DiscoveryRecord));
     }
   }
 

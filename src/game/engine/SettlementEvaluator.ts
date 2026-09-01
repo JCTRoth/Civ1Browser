@@ -1,5 +1,10 @@
 import {Constants, TERRAIN_PROPS} from '@/utils/Constants';
 
+/** Minimal tile/city/unit shapes used by the settlement-evaluator callbacks. */
+type TileLike = { type?: string; terrain?: string; resource?: string | null; improvement?: string | null };
+type CityLike = { id: string; civilizationId: number; col: number; row: number };
+type UnitLike = { id: string; civilizationId: number; col: number; row: number };
+
 interface TileYields {
   food: number;
   shields: number;
@@ -67,7 +72,7 @@ export class SettlementEvaluator {
   private static hasWaterAccess(
     col: number,
     row: number,
-    getTileAt: (col: number, row: number) => any
+    getTileAt: (col: number, row: number) => TileLike | null
   ): boolean {
     if (this.VERBOSE_LOGGING) console.log(`[SettlementEvaluator] hasWaterAccess: Checking water access at (${col}, ${row})`);
 
@@ -103,7 +108,7 @@ export class SettlementEvaluator {
   private static evaluateArea(
     centerCol: number,
     centerRow: number,
-    getTileAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileLike | null,
     weights: SettlementWeights
   ): number {
     if (this.VERBOSE_LOGGING) console.log(`[SettlementEvaluator] evaluateArea: Evaluating 3x3 area around (${centerCol}, ${centerRow}) with weights:`, weights);
@@ -167,8 +172,8 @@ export class SettlementEvaluator {
   private static evaluateAreaWithCityPenalties(
     centerCol: number,
     centerRow: number,
-    getTileAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileLike | null,
+    getCityAt: (col: number, row: number) => CityLike | null,
     weights: SettlementWeights,
     currentCivilizationId?: number
   ): number {
@@ -270,9 +275,9 @@ export class SettlementEvaluator {
   private static isValidSettlementLocation(
     col: number,
     row: number,
-    getTileAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
-    getUnitAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileLike | null,
+    getCityAt: (col: number, row: number) => CityLike | null,
+    getUnitAt: (col: number, row: number) => UnitLike | null,
     settlerCol?: number,
     settlerRow?: number
   ): boolean {
@@ -320,9 +325,9 @@ export class SettlementEvaluator {
   public static findBestSettlementLocation(
     centerCol: number,
     centerRow: number,
-    getTileAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
-    getUnitAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileLike | null,
+    getCityAt: (col: number, row: number) => CityLike | null,
+    getUnitAt: (col: number, row: number) => UnitLike | null,
     weights: SettlementWeights,
     minDistanceFromOtherCities: number = 3,
     currentCivilizationId?: number,
@@ -439,9 +444,9 @@ export class SettlementEvaluator {
   public static scoreLocation(
     col: number,
     row: number,
-    getTileAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
-    getUnitAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileLike | null,
+    getCityAt: (col: number, row: number) => CityLike | null,
+    getUnitAt: (col: number, row: number) => UnitLike | null,
     weights: SettlementWeights,
     currentCivilizationId?: number,
     settlerCol?: number,
@@ -516,9 +521,9 @@ export class SettlementEvaluator {
   public static findBestDeepWaterLocation(
     centerCol: number,
     centerRow: number,
-    getTileAt: (col: number, row: number) => any,
-    getCityAt: (col: number, row: number) => any,
-    getUnitAt: (col: number, row: number) => any,
+    getTileAt: (col: number, row: number) => TileLike | null,
+    getCityAt: (col: number, row: number) => CityLike | null,
+    getUnitAt: (col: number, row: number) => UnitLike | null,
     minDistanceFromOtherCities: number = 3
   ): SettlementScore | null {
     console.log(`[SettlementEvaluator] findBestDeepWaterLocation: Starting coastal search from (${centerCol}, ${centerRow})`);

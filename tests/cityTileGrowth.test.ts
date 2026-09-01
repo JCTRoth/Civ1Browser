@@ -70,7 +70,7 @@ describe('City tile & growth rules (Civ1)', () => {
     civ.cities = [];
 
     city = new City('TestCity', civ as any, centerCol, centerRow);
-    civ.cities.push(city);
+    civ.cities.push(city as unknown as import('../types/game').City);
 
     // Populate map into city's gameMap
     (city as any).gameMap = map;

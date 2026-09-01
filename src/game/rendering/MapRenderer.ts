@@ -1399,42 +1399,6 @@ export class MapRenderer {
   }
 
   /**
-   * Draws a square/rectangle on the canvas with fill and stroke.
-   * Can operate in world coordinates (center-based) or screen coordinates (corner-based).
-   *
-   * @param ctx - Canvas rendering context
-   * @param centerX - X coordinate (center if world coordinates, top-left if screen)
-   * @param centerY - Y coordinate (center if world coordinates, top-left if screen)
-   * @param size - Size of the square (width and height)
-   * @param fillColor - Fill color for the square
-   * @param strokeColor - Stroke/border color
-   * @param isWorldCoordinates - If true, treats coordinates as center point
-   */
-  private drawSquare(
-    ctx: CanvasRenderingContext2D,
-    centerX: number,
-    centerY: number,
-    size: number,
-    fillColor: string,
-    strokeColor: string,
-    isWorldCoordinates: boolean = false
-  ): void {
-    const half = size / 2;
-    const x = isWorldCoordinates ? centerX : centerX - half;
-    const y = isWorldCoordinates ? centerY : centerY - half;
-    const width = size;
-    const height = size;
-
-    ctx.beginPath();
-    ctx.rect(x, y, width, height);
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-
-  /**
    * Draws terrain symbols including base terrain characters, rivers, and improvements.
    * Handles glyph rendering for roads, railroads, and other terrain features.
    *
@@ -1455,7 +1419,7 @@ export class MapRenderer {
     dimmed: boolean,
   ): void {
     try {
-      const symbolScale = this.tileSize / 32;
+      const symbolScale = this.tileSize / 22;
       const villageSize = Math.round(20 * symbolScale);
       ctx.save();
       if (dimmed) ctx.globalAlpha = 0.45;

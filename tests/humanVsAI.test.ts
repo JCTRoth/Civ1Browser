@@ -100,7 +100,7 @@ describe('Human vs AI - 50 Round Test', () => {
         attack: 0,
         defense: 0,
         icon: 'scout',
-        orders: 'none',
+        orders: null,
         homeCityId: aiCapital?.id ?? '',
         areTurnsDone: false,
         isSkipped: false,

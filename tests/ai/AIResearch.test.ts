@@ -6,7 +6,10 @@ import type { Personality } from '@/game/engine/AITypes';
 type TestCiv = {
   id: number;
   name: string;
-  technologies: Set<string> | string[];
+  color: string;
+  isAlive: boolean;
+  resources: { food: number; production: number; trade: number; science: number; gold: number };
+  technologies: string[];
   currentResearch: null;
   personality: Personality;
 };
@@ -14,7 +17,10 @@ type TestCiv = {
 const baseCiv = (overrides: Record<string, unknown> = {}): TestCiv => ({
   id: 1,
   name: 'TestCiv',
-  technologies: new Set<string>(),
+  color: '#ff0000',
+  isAlive: true,
+  resources: { food: 0, production: 0, trade: 0, science: 0, gold: 0 },
+  technologies: [],
   currentResearch: null,
   personality: {
     aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5,
@@ -42,8 +48,7 @@ describe('AIResearch.selectResearch', () => {
   });
 
   it('should return null when all techs are researched', () => {
-    const allTechs = new Set<string>();
-    for (const t of TECHNOLOGIES_DATA) allTechs.add(t.id);
+    const allTechs = TECHNOLOGIES_DATA.map((t) => t.id);
 
     const civ = baseCiv({ technologies: allTechs });
     const result = AIResearch.selectResearch(civ, 'balanced_growth', baseGameState());
@@ -133,7 +138,7 @@ describe('AIResearch.getAvailableTechnologies', () => {
   });
 
   it('should exclude already researched techs', () => {
-    const civ = baseCiv({ technologies: new Set(['pottery']) });
+    const civ = baseCiv({ technologies: ['pottery'] });
     const available = AIResearch.getAvailableTechnologies(civ);
     expect(available).not.toContain('pottery');
   });

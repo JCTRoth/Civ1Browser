@@ -67,7 +67,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const animationFrameRef = useRef<number | null>(null);
   const needsRender = useRef<boolean>(true);
   const cameraPanRafRef = useRef<number | null>(null);
-  const lastGameState = useRef<any>(null);
+  const lastGameState = useRef<Record<string, unknown> | null>(null);
   const animationCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticRenderedRef = useRef<boolean>(false);
   const terrainRebuildNeededRef = useRef<boolean>(false);
@@ -266,7 +266,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       return;
     }
 
-    const engineTiles = (gameEngine as any)?.map?.tiles;
+    const engineTiles = gameEngine?.map?.tiles;
     if (Array.isArray(engineTiles) && engineTiles.length >= totalTiles) {
       const terrainGrid = createTerrainGrid(engineTiles, mapData.width, mapData.height, mapData.visibility, mapData.revealed);
       setTerrain(terrainGrid);
@@ -490,7 +490,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
   // Sync unit paths from RoundManager when turn changes
   useEffect(() => {
-    const roundManager = (gameEngine as any)?.roundManager;
+    const roundManager = gameEngine?.roundManager;
     if (roundManager && typeof roundManager.getAllUnitPaths === 'function') {
       console.log('[GameCanvas] Syncing unit paths from RoundManager on turn change');
       const paths = roundManager.getAllUnitPaths();
@@ -568,64 +568,60 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   }, [camera.x, camera.y, camera.zoom, mapData.height, mapData.width]);
 
   // Helper accessors: support multiple engine shapes (engine.getUnitAt or engine.map.getUnitAt or fallback to engine.units[])
-  const getUnitAtFromEngine = (col: number, row: number) => {
-    if (!gameEngine) return null as any;
+  const getUnitAtFromEngine = (col: number, row: number): Unit | null => {
+    if (!gameEngine) return null;
     try {
-      const direct = (gameEngine as any).getUnitAt;
-      if (typeof direct === 'function') return direct.call(gameEngine, col, row);
-      const mapObj = (gameEngine as any).map;
+      if (typeof gameEngine.getUnitAt === 'function') return gameEngine.getUnitAt(col, row);
+      const mapObj = gameEngine.map as { getUnitAt?: (c: number, r: number) => Unit | null } | null;
       if (mapObj && typeof mapObj.getUnitAt === 'function') return mapObj.getUnitAt(col, row);
-      const unitsArr = (gameEngine as any).units;
+      const unitsArr = gameEngine.units;
       if (Array.isArray(unitsArr)) return unitsArr.find((u: Unit) => u && u.col === col && u.row === row) || null;
     } catch (err) {
       console.error('[GameCanvas] getUnitAtFromEngine error', err);
     }
-    return null as any;
+    return null;
   };
 
-  const getCityAtFromEngine = (col: number, row: number) => {
-    if (!gameEngine) return null as any;
+  const getCityAtFromEngine = (col: number, row: number): City | null => {
+    if (!gameEngine) return null;
     try {
-      const direct = (gameEngine as any).getCityAt;
-      if (typeof direct === 'function') return direct.call(gameEngine, col, row);
-      const mapObj = (gameEngine as any).map;
+      if (typeof gameEngine.getCityAt === 'function') return gameEngine.getCityAt(col, row);
+      const mapObj = gameEngine.map as { getCityAt?: (c: number, r: number) => City | null } | null;
       if (mapObj && typeof mapObj.getCityAt === 'function') return mapObj.getCityAt(col, row);
-      const citiesArr = (gameEngine as any).cities;
+      const citiesArr = gameEngine.cities;
       if (Array.isArray(citiesArr)) return citiesArr.find((c: City) => c && c.col === col && c.row === row) || null;
     } catch (err) {
       console.error('[GameCanvas] getCityAtFromEngine error', err);
     }
-    return null as any;
+    return null;
   };
 
-  const getAllUnitsFromEngine = () => {
-    if (!gameEngine) return [] as any[];
+  const getAllUnitsFromEngine = (): Unit[] => {
+    if (!gameEngine) return [];
     try {
-      const directAll = (gameEngine as any).getAllUnits;
-      if (typeof directAll === 'function') return directAll.call(gameEngine);
-      const unitsArr = (gameEngine as any).units;
+      if (typeof gameEngine.getAllUnits === 'function') return gameEngine.getAllUnits();
+      const unitsArr = gameEngine.units;
       if (Array.isArray(unitsArr)) return unitsArr;
-      const mapObj = (gameEngine as any).map;
+      const mapObj = gameEngine.map as { getAllUnits?: () => Unit[] } | null;
       if (mapObj && typeof mapObj.getAllUnits === 'function') return mapObj.getAllUnits();
     } catch (err) {
       console.error('[GameCanvas] getAllUnitsFromEngine error', err);
     }
-    return [] as any[];
+    return [];
   };
 
-  const getAllCitiesFromEngine = () => {
-    if (!gameEngine) return [] as any[];
+  const getAllCitiesFromEngine = (): City[] => {
+    if (!gameEngine) return [];
     try {
-      const directAll = (gameEngine as any).getAllCities;
-      if (typeof directAll === 'function') return directAll.call(gameEngine);
-      const citiesArr = (gameEngine as any).cities;
+      if (typeof gameEngine.getAllCities === 'function') return gameEngine.getAllCities();
+      const citiesArr = gameEngine.cities;
       if (Array.isArray(citiesArr)) return citiesArr;
-      const mapObj = (gameEngine as any).map;
+      const mapObj = gameEngine.map as { getAllCities?: () => City[] } | null;
       if (mapObj && typeof mapObj.getAllCities === 'function') return mapObj.getAllCities();
     } catch (err) {
       console.error('[GameCanvas] getAllCitiesFromEngine error', err);
     }
-    return [] as any[];
+    return [];
   };
 
   // Compute reachable tiles for a given unit and update local state
@@ -912,7 +908,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           console.log(`[CLICK] Go To destination set for unit ${gotoUnit.id} to (${hex.col}, ${hex.row})`);
           
           // Use GoToManager to calculate and execute path
-          const goToManager = (gameEngine as any)?.goToManager;
+          const goToManager = gameEngine?.goToManager;
           if (goToManager) {
             const pathResult = goToManager.calculatePath(
               gotoUnit,
@@ -1053,7 +1049,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           }
           
           // If the unit has a path and moves, continue following using GoToManager
-          const goToManager = (gameEngine as any)?.goToManager;
+          const goToManager = gameEngine?.goToManager;
           if (goToManager && goToManager.hasPath(unitAt.id) && unitAt.movesRemaining > 0) {
             try {
               const moveResult = goToManager.executeFirstStep(unitAt.id);
@@ -1162,7 +1158,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
                 const pathToFollow: UnitPathStep[] = pathResult.path.slice(1).map((step: { col: number; row: number }) => ({ col: step.col, row: step.row }));
 
                 // Use GoToManager to set the path and execute with animation
-                const goToManager = (gameEngine as any)?.goToManager;
+                const goToManager = gameEngine?.goToManager;
                 if (goToManager) {
                   goToManager.setUnitPath(selectedUnit.id, pathToFollow);
                   
@@ -1203,7 +1199,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
                     return next;
                   });
                   
-                  const roundManager = (gameEngine as any)?.roundManager;
+                  const roundManager = gameEngine?.roundManager;
                   if (roundManager && typeof roundManager.setUnitPath === 'function') {
                     roundManager.setUnitPath(selectedUnit.id, pathToFollow);
                   }
@@ -1557,7 +1553,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           if (result) {
             if (actions?.updateCities) actions.updateCities(getAllCitiesFromEngine());
             if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
-            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.updateMap) actions.updateMap(gameEngine.map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
               message: 'City founded!'
@@ -1577,7 +1573,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           const result = gameEngine.buildImprovement(unit.id, 'road');
           if (result) {
             if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
-            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.updateMap) actions.updateMap(gameEngine.map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
               message: buildStartedMessage(gameEngine, unit, 'road'),
@@ -1597,7 +1593,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           const result = gameEngine.buildImprovement(unit.id, 'irrigation');
           if (result) {
             if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
-            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.updateMap) actions.updateMap(gameEngine.map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
               message: buildStartedMessage(gameEngine, unit, 'irrigation'),
@@ -1617,7 +1613,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           const result = gameEngine.buildImprovement(unit.id, 'mine');
           if (result) {
             if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
-            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.updateMap) actions.updateMap(gameEngine.map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
               message: buildStartedMessage(gameEngine, unit, 'mines'),
@@ -1637,7 +1633,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
           const result = gameEngine.buildImprovement(unit.id, 'railroad');
           if (result) {
             if (actions?.updateUnits) actions.updateUnits(getAllUnitsFromEngine());
-            if (actions?.updateMap) actions.updateMap((gameEngine as any).map);
+            if (actions?.updateMap) actions.updateMap(gameEngine.map);
             if (actions?.addNotification) actions.addNotification({
               type: 'success',
               message: buildStartedMessage(gameEngine, unit, 'railroad'),
@@ -1869,7 +1865,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       // Stop once every animation has fully finished (cloud + death blink).
       const now = performance.now();
       const anyActive = (combatAnimations ?? []).some(a => {
-        const totalDuration = a.duration + ((a as any).deathBlinkDuration ?? 1000);
+        const totalDuration = a.duration + (a.deathBlinkDuration ?? 1000);
         return now - a.startTime < totalDuration;
       });
       if (!anyActive) {

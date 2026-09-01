@@ -15,6 +15,41 @@
  */
 
 import { serializeCity, isCityEvent, isTurnBoundaryEvent } from './CitySnapshots';
+import type { City, Unit } from '../../types/game';
+
+/**
+ * Known engine event-payload fields the logger reads to build messages.
+ * Payloads are heterogeneous (units, cities, nested objects), so every known
+ * field is optional and the index signature keeps arbitrary payloads
+ * assignable. Using this instead of `Record<string, unknown>` lets us read
+ * typed sub-objects without `any` casts.
+ */
+interface EventPayload {
+  city?: City;
+  unit?: Partial<Unit>;
+  attacker?: Partial<Unit>;
+  defender?: Partial<Unit>;
+  item?: { itemType?: string; name?: string; type?: string };
+  cities?: City[];
+  cityId?: string;
+  civilizationId?: number;
+  roundNumber?: number;
+  phase?: string;
+  targetCol?: number;
+  targetRow?: number;
+  aggressorId?: number;
+  targetId?: number;
+  targetCivilizationId?: number;
+  type?: string;
+  taxRate?: number;
+  scienceRate?: number;
+  luxuryRate?: number;
+  civName?: string;
+  reason?: string;
+  category?: string;
+  message?: string;
+  [key: string]: unknown;
+}
 
 interface GameLogEntry {
   ts: string; // ISO timestamp
@@ -84,13 +119,13 @@ class GameLogger {
    * would be a large refactor, so the payload is deliberately `any`.
    */
   record(event: string, data: Record<string, unknown> = {}): void {
-    const message = this.formatMessage(event, data);
+    const message = this.formatMessage(event, data as EventPayload);
     if (message) {
       const detail: Record<string, unknown> = { data: this.sanitize(data) };
       // Attach the full JSON-safe city snapshot on city-related events so the
       // log regularly contains the complete city state, not just a summary.
       if (isCityEvent(event) && data?.city) {
-        detail.city = serializeCity(data.city);
+        detail.city = serializeCity(data.city as City);
       }
       // Turn boundaries carry the active player's full city JSONs (attached by
       // the TurnManager), giving a regular per-player city snapshot in the log.
@@ -102,7 +137,7 @@ class GameLogger {
   }
 
   /** Human-readable message for known engine events. */
-  private formatMessage(event: string, data: Record<string, unknown>): string | null {
+  private formatMessage(event: string, data: EventPayload): string | null {
     switch (event) {
       case 'TURN_START':
         return `▶ Turn start — civ ${data.civilizationId} (round ${data.roundNumber})`;

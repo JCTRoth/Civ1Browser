@@ -340,7 +340,7 @@ export class DiplomacyManager {
   }
 
   /** Sign a treaty between two civs */
-  signTreaty(civA: number, civB: number, treaty: TreatyType, extra?: Record<string, any>): void {
+  signTreaty(civA: number, civB: number, treaty: TreatyType, extra?: { goldPerTurn?: number; targetCivId?: number; [key: string]: unknown }): void {
     const rel = this.getRelation(civA, civB);
     if (!rel) return;
 

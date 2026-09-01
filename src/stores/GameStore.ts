@@ -866,5 +866,5 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 // Dev-only test hook: expose the store so Playwright/console can drive and
 // inspect game state (combat animations, units, camera, etc.).
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  (window as any).__gameStore = useGameStore;
+  window.__gameStore = useGameStore;
 }

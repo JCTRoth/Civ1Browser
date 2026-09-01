@@ -24,6 +24,15 @@ import { preloadAllUnitIcons } from '@/utils/UnitIconLoader';
 import { centerCameraOnTile, getGameViewport } from '@/utils/CameraUtils';
 import { gameLogger } from '@/utils/GameLogger';
 import { gameProgression } from '@/utils/GameProgression';
+import type { TerrainTileRenderInfo } from '@/game/rendering/MapRenderer';
+
+declare global {
+  interface Window {
+    /** Dev-only test hook: exposed engine for Playwright/console driving. */
+    __gameEngine?: GameEngine;
+    __gameStore?: unknown;
+  }
+}
 
 function App() {
   const gameState = useGameStore(state => state.gameState);
@@ -45,7 +54,7 @@ function App() {
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [isEndTurnAutomatic, setIsEndTurnAutomatic] = useState(false);
   const [detailHex, setDetailHex] = useState<{ col: number; row: number } | null>(null);
-  const [terrainData, setTerrainData] = useState<any>(null);
+  const [terrainData, setTerrainData] = useState<TerrainTileRenderInfo | null>(null);
 
   // Turn flash effect on top bar - direct DOM manipulation for reliability
   const turnFlashTrigger = useGameStore(state => state.uiState.turnFlashTrigger);
@@ -149,7 +158,7 @@ function App() {
       // Dev-only test hook: expose the engine so Playwright/console can drive
       // and inspect game state (units, combat, movement). Mirrors __gameStore.
       if (import.meta.env.DEV && typeof window !== 'undefined') {
-        (window as any).__gameEngine = engine;
+        window.__gameEngine = engine;
       }
 
       // Get player's starting settler position
@@ -507,12 +516,8 @@ function App() {
     if (!gameResult) {
       return;
     }
-    // gameEngine is intentionally untyped (useState(null)) — its dynamic
-    // engine API (moveCursor, undoLastAction, …) is not part of the static
-    // GameEngine type; a full typing pass is a separate cleanup.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const isAIVsAI = (gameEngine as any)?.gameSettings?.mapType === 'AI_VS_AI'
-      || (gameEngine as any)?.gameSettings?.mapType === 'AI_VS_AI_SMALL';
+    const isAIVsAI = gameEngine?.gameSettings?.mapType === 'AI_VS_AI'
+      || gameEngine?.gameSettings?.mapType === 'AI_VS_AI_SMALL';
     if (!isAIVsAI) {
       return;
     }
@@ -547,7 +552,7 @@ function App() {
   }, [actions, gameEngine]);
 
   // Handle hex examination (called from canvas)
-  const handleExamineHex = (hex, terrain) => {
+  const handleExamineHex = (hex: { col: number; row: number }, terrain: TerrainTileRenderInfo | null) => {
     setDetailHex(hex);
     setTerrainData(terrain);
     setShowHexDetail(true);
@@ -592,7 +597,7 @@ function App() {
   // processing / AI actions so nothing continues behind the overlay.
   const isPaused = uiState.activeDialog === 'pause';
 
-  const handlePause = () => {
+  const handlePause = useCallback(() => {
     console.log('[App] Pausing game');
     setActiveMenu(null);
     // Halt the game engine first so no AI/turn processing happens mid-transition.
@@ -600,9 +605,9 @@ function App() {
       gameEngine.setPaused(true);
     }
     actions.showDialog('pause');
-  };
+  }, [gameEngine, actions]);
 
-  const handleResume = () => {
+  const handleResume = useCallback(() => {
     console.log('[App] Resuming game');
     if (isPaused) {
       actions.hideDialog();
@@ -610,7 +615,7 @@ function App() {
         gameEngine.setPaused(false);
       }
     }
-  };
+  }, [isPaused, actions, gameEngine]);
 
   // Handle end turn request - show modal (manual button click)
   const handleEndTurnRequest = useCallback(() => {
@@ -656,6 +661,18 @@ function App() {
         event.preventDefault();
       }
 
+      // Move the selected unit one tile in the given direction (Arrow keys).
+      // `moveUnit` is a typed GameEngine method — it validates passability,
+      // movement points and combat, and no-ops (returns a result object) when
+      // the move isn't possible, so it's safe to call on every keypress.
+      const moveSelectedUnit = (dCol: number, dRow: number) => {
+        const selId = gameState.selectedUnit;
+        if (!gameEngine || !selId) return;
+        const unit = gameEngine.units.find(u => u.id === selId);
+        if (!unit) return;
+        gameEngine.moveUnit(selId, unit.col + dCol, unit.row + dRow);
+      };
+
       // Navigation shortcuts
       if (!ctrlKey && !altKey) {
         switch (key) {
@@ -664,37 +681,29 @@ function App() {
               // Shift + Arrow: Scroll map
               setCamera({ y: camera.y - 50 });
             } else {
-              // Arrow Keys: Move cursor
-              if (gameEngine && (gameEngine as any).moveCursor) {
-                (gameEngine as any).moveCursor(0, -1);
-              }
+              // Arrow Keys: Move unit
+              moveSelectedUnit(0, -1);
             }
             break;
           case 'ArrowDown':
             if (shiftKey) {
               setCamera({ y: camera.y + 50 });
             } else {
-              if (gameEngine && (gameEngine as any).moveCursor) {
-                (gameEngine as any).moveCursor(0, 1);
-              }
+              moveSelectedUnit(0, 1);
             }
             break;
           case 'ArrowLeft':
             if (shiftKey) {
               setCamera({ x: camera.x - 50 });
             } else {
-              if (gameEngine && (gameEngine as any).moveCursor) {
-                (gameEngine as any).moveCursor(-1, 0);
-              }
+              moveSelectedUnit(-1, 0);
             }
             break;
           case 'ArrowRight':
             if (shiftKey) {
               setCamera({ x: camera.x + 50 });
             } else {
-              if (gameEngine && (gameEngine as any).moveCursor) {
-                (gameEngine as any).moveCursor(1, 0);
-              }
+              moveSelectedUnit(1, 0);
             }
             break;
           case '+':
@@ -890,9 +899,11 @@ function App() {
           case '8':
           case '9':
             // Select specific city
-            const cityIndex = parseInt(key) - 1;
-            if (gameEngine && gameEngine.selectCityByIndex) {
-              gameEngine.selectCityByIndex(cityIndex);
+            {
+              const cityIndex = parseInt(key) - 1;
+              if (gameEngine && gameEngine.selectCityByIndex) {
+                gameEngine.selectCityByIndex(cityIndex);
+              }
             }
             break;
           case 's':
@@ -905,12 +916,6 @@ function App() {
             // Load game
             if (gameEngine && gameEngine.loadGame) {
               gameEngine.loadGame();
-            }
-            break;
-          case 'z':
-            // Undo last action
-            if (gameEngine && (gameEngine as any).undoLastAction) {
-              (gameEngine as any).undoLastAction();
             }
             break;
           case 'p':
@@ -939,7 +944,7 @@ function App() {
         window.removeEventListener('keydown', handleKeyDown);
       }
     };
-  }, [gameEngine, camera, setCamera, handleEndTurnRequest, activeMenu, showHexDetail, showSettings, isPaused, handlePause, handleResume]);
+  }, [gameEngine, camera, setCamera, handleEndTurnRequest, activeMenu, showHexDetail, showSettings, isPaused, handlePause, handleResume, actions, gameResult, gameState.selectedCity, gameState.selectedUnit]);
 
   if (error) {
     return (

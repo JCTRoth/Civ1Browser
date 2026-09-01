@@ -179,8 +179,8 @@ export class KeyboardHandler {
    */
   private handleFortify(unit: Unit): boolean {
     console.log('[KeyboardHandler] Fortify command');
-    if (this.gameEngine?.fortifyUnit) {
-      const result = this.gameEngine.fortifyUnit(unit.id);
+    if (this.gameEngine?.unitFortify) {
+      const result = this.gameEngine.unitFortify(unit.id);
       console.log('[KeyboardHandler] Fortify result:', result);
       if (result) {
         this.updateGameState();
@@ -229,7 +229,7 @@ export class KeyboardHandler {
   /**
    * Show notification to user
    */
-  private showNotification(type: string, message: string): void {
+  private showNotification(type: 'info' | 'success' | 'warning' | 'error', message: string): void {
     if (this.actions?.addNotification) {
       this.actions.addNotification({ type, message });
     }

@@ -556,8 +556,8 @@ export class EconomicManager {
   unitUpkeep(civId: number): number {
     const units = this.gameEngine?.units?.filter((u: Unit) =>
       u.civilizationId === civId
-      && !(u as any).isDefeated
-      && ((u as any).health == null || (u as any).health > 0),
+      && !u.isDefeated
+      && (u.health == null || u.health > 0),
     ) ?? [];
     const cityCount = (this.gameEngine?.cities ?? []).filter((c: City) => c.civilizationId === civId).length;
     // Free unit support: each city supports one unit free; extra units cost
@@ -595,8 +595,8 @@ export class EconomicManager {
   private disbandUnitsToCoverDeficit(civId: number, deficit: number): number {
     const units = (this.gameEngine?.units ?? []).filter((u: Unit) =>
       u.civilizationId === civId
-      && !(u as any).isDefeated
-      && ((u as any).health == null || (u as any).health > 0),
+      && !u.isDefeated
+      && (u.health == null || u.health > 0),
     );
     const costOf = (u: Unit): number => UNIT_PROPS[u?.type]?.cost ?? 0;
     const isScout = (u: Unit): number => (u?.type === 'scout' ? 1 : 0);

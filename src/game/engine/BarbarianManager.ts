@@ -167,7 +167,7 @@ export class BarbarianManager {
     // 1. Attack an adjacent enemy unit.
     for (const n of neighbors) {
       const enemy = engine.getUnitAt?.(n.col, n.row);
-      if (enemy && enemy.civilizationId !== BARBARIAN_CIV_ID && !(enemy as any).isDefeated) {
+      if (enemy && enemy.civilizationId !== BARBARIAN_CIV_ID && !enemy.isDefeated) {
         console.log(`[BARB] ${unit.type} attacks enemy ${enemy.type} at (${n.col},${n.row})`);
         engine.combatUnit?.(unit, enemy);
         return; // spent the move either way

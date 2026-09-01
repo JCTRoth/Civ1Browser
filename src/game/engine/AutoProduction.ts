@@ -591,7 +591,7 @@ export class AutoProduction {
     const storage = typeof this.gameEngine.getPlayerStorage === 'function'
       ? this.gameEngine.getPlayerStorage(civilizationId)
       : undefined;
-    const aiState: AIState | undefined = storage?.turnData?.aiState;
+    const aiState: AIState | undefined = storage?.turnData?.aiState as AIState | undefined;
     return resolveAICivStrategy(civ, aiState);
   }
 
@@ -689,7 +689,7 @@ export class AutoProduction {
     const storage = typeof this.gameEngine.getPlayerStorage === 'function'
       ? this.gameEngine.getPlayerStorage(city.civilizationId)
       : undefined;
-    const plan = storage?.turnData?.offensivePlan;
+    const plan = storage?.turnData?.offensivePlan as AIState['offensivePlan'] | undefined;
     if (!plan || city.population < 2) {
       return false;
     }
@@ -702,7 +702,7 @@ export class AutoProduction {
   private isAggressivePosture(civilizationId: number): boolean {
     const civ = this.gameEngine.civilizations?.[civilizationId];
     const strategy = this.getStrategyForCiv(civilizationId);
-    return strategy === 'military_expansion' || (((civ as any)?.personality?.aggression ?? 5) >= 7);
+    return strategy === 'military_expansion' || ((civ?.personality?.aggression ?? 5) >= 7);
   }
 
   private isCivAtWar(civilizationId: number): boolean {
@@ -794,7 +794,7 @@ export class AutoProduction {
     ).length;
     if (diplomatCount >= 2) return false;
 
-    const personality = (civ as any).personality ?? { aggression: 5, diplomacy: 5, military: 5 };
+    const personality = civ.personality ?? { aggression: 5, diplomacy: 5, military: 5 };
     const chance = personality.diplomacy >= 7 ? 0.30 : personality.diplomacy >= 5 ? 0.15 : 0.05;
     return Math.random() < chance;
   }
