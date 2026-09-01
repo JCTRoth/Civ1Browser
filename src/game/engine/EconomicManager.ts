@@ -106,6 +106,12 @@ export const AI_RESERVE_TURNS: Record<StrategyProfile, number> = {
 };
 /** Fraction of the reserve shortfall the AI tries to rebuild each turn. */
 export const AI_RESERVE_REBUILD = 0.1;
+/**
+ * Absolute minimum gold the AI always keeps in the treasury. The reserve
+ * target is never allowed below this, so the AI prioritizes staying solvent
+ * (≥ this much gold) before investing commerce in science.
+ */
+export const AI_MIN_GOLD_RESERVE = 8;
 
 const clamp = (v: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, v));
@@ -792,7 +798,9 @@ export class EconomicManager {
     //    war chest, science civs invest instead of hoarding). ──
     const strategy = resolveAICivStrategy(civ);
     const reserveTurns = AI_RESERVE_TURNS[strategy] ?? 1;
-    const reserveTarget = Math.max(0, upkeep * reserveTurns);
+    // Always keep at least AI_MIN_GOLD_RESERVE (8) gold, even when upkeep is
+    // tiny — the AI prioritizes staying solvent before investing in science.
+    const reserveTarget = Math.max(AI_MIN_GOLD_RESERVE, upkeep * reserveTurns);
     const healthy = gold >= reserveTarget;
     const inDeficit = gold < 0;
 

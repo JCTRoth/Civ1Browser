@@ -3076,10 +3076,15 @@ export default class GameEngine {
       return true;
     }
 
-    // Check if too close to another city
-    for (const city of this.cities) {
-      if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
-        return false;
+    // Civ1 minimum city spacing (MIN_CITY_CENTER_DISTANCE) is enforced for AI
+    // civilizations so they spread sensibly; the human player may found a
+    // city directly adjacent to another one.
+    const civIsAI = !!this.civilizations?.[settler.civilizationId]?.isAI;
+    if (civIsAI) {
+      for (const city of this.cities) {
+        if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
+          return false;
+        }
       }
     }
 
@@ -3229,9 +3234,14 @@ export default class GameEngine {
     const tile = this.getTileAt(settler.col, settler.row);
     if (!tile || tile.type === Constants.TERRAIN.OCEAN) return false;
 
-    for (const city of this.cities) {
-      if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
-        return false;
+    // Minimum city spacing applies to AI civilizations only; the human player
+    // may found a city directly adjacent to another one.
+    const civIsAI = !!this.civilizations?.[settler.civilizationId]?.isAI;
+    if (civIsAI) {
+      for (const city of this.cities) {
+        if (Math.max(Math.abs(settler.col - city.col), Math.abs(settler.row - city.row)) < MIN_CITY_CENTER_DISTANCE) {
+          return false;
+        }
       }
     }
 
