@@ -200,11 +200,30 @@ export class AutoProduction {
         // Skip unit items when the civ can't afford to maintain more units.
         // (Fall back to a building so the city still has something to do.)
         if (unitCapExhausted && item.type === 'unit') {
-          const building = this.determineFallbackBuilding(city, threatAssessment, plannedTypes);
-          if (!building) break;
-          const result = this.gameEngine.productionManager.setCityProduction(cityId, building, true);
+          // Scouts are cheap and essential for exploration — never block them
+          // behind the army-upkeep cap, or a new city would queue settlers/
+          // defenders forever and never field a scout.
+          if (item.itemType === 'scout') {
+            const scoutResult = this.gameEngine.productionManager.setCityProduction(cityId, item, true);
+            if (!scoutResult || scoutResult.success === false) break;
+            plannedTypes.push('scout');
+            added++;
+            continue;
+          }
+          let followUp = this.determineFallbackBuilding(city, threatAssessment, plannedTypes);
+          if (!followUp) {
+            // No buildable building (very early game). Keep the queue from
+            // appearing empty by queueing the already-chosen unit `item`
+            // instead of leaving the city idle once its current item
+            // completes. Only guarantee the FIRST follow-up this way — if the
+            // queue already has something, a missing building just stops
+            // topping up.
+            if (added > 0) break;
+            followUp = item;
+          }
+          const result = this.gameEngine.productionManager.setCityProduction(cityId, followUp, true);
           if (!result || result.success === false) break;
-          plannedTypes.push(building.itemType || building.type);
+          plannedTypes.push(followUp.itemType || followUp.type);
           added++;
           continue;
         }
@@ -435,10 +454,10 @@ export class AutoProduction {
     //     total troop count). Exploration ranks below defense (steps 1–2) and
     //     offensive reinforcement (step 5) but above buildings/wonders.
     const plannedScouts = plannedTypes.filter((t: string) => t === 'scout').length;
-    // On small maps (AI_VS_AI_SMALL) cities may never reach pop 2 — require
-    // only pop 1 there so scouts are still built. On larger maps keep pop 2
-    // so the city grows a little before diverting shields to exploration.
-    const scoutPopThreshold = isSmallMap ? 1 : 2;
+    // A scout is cheap (15 shields) and essential for map exploration, so a
+    // city can start one even at size 1 — otherwise a new city would queue
+    // settlers/defenders forever and never field a scout.
+    const scoutPopThreshold = 1;
     if (this.needsScout(city.civilizationId, plannedScouts) && city.population >= scoutPopThreshold) {
       const scoutProps = UNIT_PROPS.scout;
       console.log(`[AutoProduction] Building scout for map exploration (${this.countTotalTroops(city.civilizationId)} troops)`);

@@ -42,7 +42,7 @@ describe('Newly founded cities default to Auto Production', () => {
     });
   });
 
-  it('disables autoProduction by default when a human founds a city with a settler', () => {
+  it('enables autoProduction by default when a human founds a city with a settler', () => {
     const width = (engine as any).map?.width ?? 80;
     const height = (engine as any).map?.height ?? 50;
 
@@ -80,7 +80,7 @@ describe('Newly founded cities default to Auto Production', () => {
       (c: any) => c.civilizationId === 0 && engine.cities.indexOf(c) >= beforeCount
     );
     expect(city).toBeTruthy();
-    expect((city as any).autoProduction).toBe(false);
+    expect((city as any).autoProduction).toBe(true);
   });
 
   it('keeps autoProduction enabled by default for AI cities', () => {

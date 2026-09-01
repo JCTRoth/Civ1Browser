@@ -708,10 +708,6 @@ export default class GameEngine {
     return EnemySearcher.isInZone(col, row, storage.scoutZones[scoutIndex]);
   }
 
-  // Legacy triggerWarriorProduction, findBestSettlementForSettler, findScoutExplorationTarget
-  // removed — these now live in AIManager with strategy-aware logic
-
-
   /**
    * Process AI turn for a civilization (public method for RoundManager)
    */
@@ -1239,7 +1235,7 @@ export default class GameEngine {
           buildQueue: civ.isAI ? [] : [],
           buildings: [],
           tiles: [],
-          autoProduction: civ.isAI // Auto-production enabled for AI cities, disabled for human cities by default
+          autoProduction: true // New cities default to Auto Production ON
         };
         
         this.cities.push(city);
@@ -1488,7 +1484,7 @@ export default class GameEngine {
       shields: 0, // Production shields
       currentProduction: { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }, // Start building a warrior
       productionQueue: [],
-      autoProduction: civ.isAI, // Auto Production enabled for AI cities, disabled for human founding by default
+      autoProduction: true, // New cities default to Auto Production ON
       buildings: [],
       wonders: [],
       workingTiles: new Set<string>(), // Tiles being worked by citizens
@@ -2488,7 +2484,7 @@ export default class GameEngine {
         ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
         : this.pickInitialAIProduction(civId),
       buildQueue: [],
-      autoProduction: civ.isAI,
+      autoProduction: true, // New cities default to Auto Production ON
     };
     this.cities.push(city);
 
@@ -3116,7 +3112,7 @@ export default class GameEngine {
         ? { type: 'unit', itemType: 'warrior', name: 'Warrior', cost: 10 }
         : this.pickInitialAIProduction(civId), // AI: scout for first city, defender otherwise
       buildQueue: [], // Empty: the Warrior is already the current production, never also queue it
-      autoProduction: civ.isAI // Auto Production enabled for AI cities, disabled for human cities by default
+      autoProduction: true // New cities default to Auto Production ON
     };
 
     this.cities.push(city);
