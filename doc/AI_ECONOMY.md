@@ -28,6 +28,12 @@ Every turn the AI recomputes a target rate split and moves toward it gradually:
 - **Gradual movement** — rates change at most `10` pts/turn normally, `50` in a
   mild crisis, `100` in a deep crisis. This deliberately avoids the old
   `0 ↔ 100` oscillation that caused disorder / bankruptcy cycles.
+- **Trade produces gold** — `TRADE_GOLD_MULTIPLIER` (2) makes each taxed point
+  of commerce yield 2 gold, so cities working trade tiles (roads, rivers,
+  resources) are genuinely profitable and accumulate wealth instead of
+  scraping by. It is applied to the tax share of `cityOutputs` and to
+  `maxTaxIncome` (the AI's affordability model), so it both boosts real gold
+  and lets the AI afford a slightly larger standing army.
 
 ## 2. Treasury solvency floor — `AI_MIN_GOLD_RESERVE` (8)
 
@@ -83,13 +89,13 @@ The AI always aims to keep **at least 8 gold** in the treasury:
 
 The real fix is to never over-produce in the first place:
 
-- `sustainableUnits(civ)` now plans the army against the civ's **actual tax
-  income** (`maxTaxIncome × current taxRate`, after the luxury it must keep
-  for happiness) instead of an assumed 100% tax. Assuming 100% tax
-  over-estimated the affordable army, so the AI built units it couldn't
-  maintain and then had to disband them. Planning with the real tax rate means
-  the AI simply never builds an army it can't afford — disbanding becomes a
-  rare last resort.
+- `sustainableUnits(civ)` plans the army against a **reasonable tax income**
+  (`maxTaxIncome × max(currentTaxRate, 50%)`, after the luxury the civ must
+  keep for happiness). Planning against the civ's *current* rate would cap the
+  army at ~0, because the AI over-invests in science and drops tax to ~10% —
+  leaving it defenceless and passive. Using a 50% planning floor lets a real
+  military build and actually fight, while still NOT assuming 100% tax (which
+  over-built an unaffordable army that had to be disbanded).
 - `AutoProduction.ensureProductionQueue()` refuses to queue more **military**
   units once `currentUnits + queuedUnits >= sustainableUnits`. It falls back
   to buildings; if no building is available it queues the already-chosen unit
@@ -104,6 +110,20 @@ The real fix is to never over-produce in the first place:
 - `determineProductionItem()` also checks a **gold crisis**
   (`gold < −upkeep`): in a crisis it only allows the minimum settler count (1),
   so the civ doesn't add more upkeep it can't afford.
+
+## 6. Late-game wealth: markets, banks & tile improvements
+
+- **Markets & banks** (`AIBuildingStrategy.scoreBuilding`) are deliberately
+  low priority early and rise sharply in the late game: markets get a big
+  priority bump from the mid-game onward (they multiply the city's now-real
+  trade income), and banks only become a strong priority in the very late game
+  (year ≥ 500) in large cities (pop ≥ 8). Once the civ researches `currency` /
+  `banking` and reaches that era, it actually builds them.
+- **Tile improvements** (`AIManager.chooseImprovementForSettler`) already make
+  settlers build mines on hills/mountains, roads on worked trade tiles, and
+  irrigation near fresh water. In the mid-game (as the civ researches more
+  techs) the improvement budget grows (≈2×–3×) so the AI invests properly in
+  the roads/mines/irrigation that feed its cities' food, production and gold.
 
 ---
 

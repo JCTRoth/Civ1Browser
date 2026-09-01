@@ -67,6 +67,14 @@ export const CITY_MAINTENANCE = 1;
  */
 export const CITY_CENTER_COMMERCE = 2;
 /**
+ * Trade-to-gold multiplier. Cities that work trade tiles (roads, rivers,
+ * resources) convert that commerce into GOLD more generously — a point of
+ * trade yields this many gold when taxed, so trade tiles are meaningfully
+ * profitable and cities accumulate wealth instead of scraping by. (Applied
+ * to the tax share of a city's commerce; science/luxury are unchanged.)
+ */
+export const TRADE_GOLD_MULTIPLIER = 2;
+/**
  * Base contentment granted to every city. In a low-commerce economy (static
  * yields) luxury income is tiny, so without a base every city above the
  * government tolerance would be in permanent disorder and the whole economy
@@ -259,7 +267,7 @@ export class EconomicManager {
       const gov = getGovernment(civ.government);
       const effective = commerce * (1 - gov.commercePenalty);
       const corruption = CityUtils.calculateCorruption(city, civ, effective);
-      return total + Math.max(0, Math.floor(effective - corruption));
+      return total + Math.max(0, Math.floor(effective - corruption)) * TRADE_GOLD_MULTIPLIER;
     }, 0);
   }
 
@@ -775,14 +783,15 @@ export class EconomicManager {
     const cityCount = cities.length;
     const luxuryPct = this.luxuryNeedPct(civ, cities);
     const maxIncome = this.maxTaxIncome(civ);
-    // Use the civ's ACTUAL tax rate (not an assumed 100%) so the production
-    // cap reflects the real income available for upkeep after the science and
-    // luxury split. Assuming 100% tax over-estimated the affordable army, so
-    // the AI over-built units it couldn't maintain and then had to disband
-    // them. Planning with the real tax rate means the AI simply never builds
-    // an army it can't afford — disbanding becomes a rare last resort.
-    const taxRate = (civ.taxRate ?? 50) / 100;
-    const affordable = Math.floor(maxIncome * taxRate * (1 - luxuryPct / 100));
+    // Plan the standing army against a REASONABLE tax income, not the civ's
+    // current (often self-starved) rate. The AI over-invests in science and
+    // drops tax to ~10%, which would cap the affordable army at ~0 and leave
+    // it defenceless and passive. Instead, assume the civ taxes enough to
+    // support a real military (a planning floor of 50%) so an army can build
+    // and actually fight — while NOT assuming 100% tax, which over-built an
+    // unaffordable army that had to be disbanded for upkeep.
+    const planningTax = Math.max(civ.taxRate ?? 0, 50) / 100;
+    const affordable = Math.floor(maxIncome * planningTax * (1 - luxuryPct / 100));
     return Math.max(cityCount, affordable);
   }
 

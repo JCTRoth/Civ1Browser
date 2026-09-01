@@ -152,6 +152,12 @@ export class AIBuildingStrategy {
         priority += 10;
         if (city.population >= 3) { priority += 3; }
         priority += personality.economy * 0.6;
+        // Markets are a strong ROI once cities have real trade income to
+        // multiply (with the trade-to-gold bonus) — so they become a genuine
+        // priority in the mid/late game instead of being out-competed by
+        // early military/expansion buildings.
+        if (gameState.currentYear >= 1) { priority += 15; reasons.push('late-economy'); }
+        else if (gameState.currentYear >= -2000) { priority += 8; reasons.push('mid-economy'); }
         reasons.push('economy');
         break;
 
@@ -193,6 +199,12 @@ export class AIBuildingStrategy {
       case 'bank':
         priority += 8;
         priority += personality.economy * 0.5;
+        // Banks are a very-late-game play — only once cities are large and
+        // the civ has accumulated trade wealth to double. They are deliberately
+        // low priority early and become a strong priority late.
+        if (gameState.currentYear >= 1500) { priority += 20; reasons.push('very-late-economy'); }
+        else if (gameState.currentYear >= 500) { priority += 12; reasons.push('late-economy'); }
+        if (city.population >= 8) { priority += 5; reasons.push('large-city'); }
         reasons.push('economy-boost');
         break;
 

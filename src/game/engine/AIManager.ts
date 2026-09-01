@@ -1386,9 +1386,16 @@ export class AIManager {
     if (!nearCity) return null;
 
     // Improvement budget: at most ~2 improvements per city, so a big civ does
-    // not funnel every spare settler into endless road building.
+    // not funnel every spare settler into endless road building. In the MID
+    // game (once the civ has researched several techs) the budget grows so the
+    // AI invests properly in tile improvements (roads/mines/irrigation) that
+    // feed its cities' food, production and — via trade — gold.
+    const civ = this.gameEngine.civilizations?.[civId];
     const friendlyCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civId).length;
-    const budget = Math.max(2, friendlyCities * 2);
+    const techs = Array.isArray(civ?.technologies) ? (civ.technologies ?? []) : [];
+    const techCount = techs.length;
+    const midGameBoost = techCount >= 6 ? techCount >= 14 ? 3 : 2 : 1;
+    const budget = Math.max(2, friendlyCities * 2) * midGameBoost;
     const ownImprovements = (this.gameEngine.map?.tiles ?? []).filter((t: MapTile) =>
       !!t.improvement && ['road', 'railroad', 'mines', 'irrigation', 'fortress'].includes(t.improvement) &&
       this.gameEngine.cities.some((c: City) =>

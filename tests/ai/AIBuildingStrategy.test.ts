@@ -117,6 +117,40 @@ describe('AIBuildingStrategy.evaluateBuildings', () => {
       expect(plans[i - 1].priority).toBeGreaterThanOrEqual(plans[i].priority);
     }
   });
+
+  it('marketplace priority rises in the late game', () => {
+    const city = makeCity({ population: 6 });
+    const civ = makeCiv({ technologies: ['currency', 'banking', 'pottery', 'masonry'] });
+    const early = AIBuildingStrategy.evaluateBuildings(
+      city, civ, 'balanced_growth', baseBuildingGameState({ currentYear: -3000 })
+    );
+    const late = AIBuildingStrategy.evaluateBuildings(
+      city, civ, 'balanced_growth', baseBuildingGameState({ currentYear: 1 })
+    );
+    const earlyMarket = early.find(p => p.buildingType === 'marketplace');
+    const lateMarket = late.find(p => p.buildingType === 'marketplace');
+    expect(earlyMarket).toBeDefined();
+    expect(lateMarket).toBeDefined();
+    // Late-game market is worth ~15 more than the early-era one.
+    expect(lateMarket!.priority).toBeGreaterThan(earlyMarket!.priority);
+  });
+
+  it('bank priority rises in the very late game', () => {
+    const city = makeCity({ population: 9, buildings: ['marketplace'] });
+    const civ = makeCiv({ technologies: ['currency', 'banking', 'pottery', 'masonry'] });
+    const early = AIBuildingStrategy.evaluateBuildings(
+      city, civ, 'balanced_growth', baseBuildingGameState({ currentYear: -3000 })
+    );
+    const late = AIBuildingStrategy.evaluateBuildings(
+      city, civ, 'balanced_growth', baseBuildingGameState({ currentYear: 1600 })
+    );
+    const earlyBank = early.find(p => p.buildingType === 'bank');
+    const lateBank = late.find(p => p.buildingType === 'bank');
+    expect(earlyBank).toBeDefined();
+    expect(lateBank).toBeDefined();
+    // Very-late-game bank is worth ~20 more than the early-era one.
+    expect(lateBank!.priority).toBeGreaterThan(earlyBank!.priority);
+  });
 });
 
 describe('AIBuildingStrategy.evaluateWonders', () => {
