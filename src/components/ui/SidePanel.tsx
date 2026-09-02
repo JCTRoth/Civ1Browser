@@ -9,6 +9,10 @@ import '../../styles/sidePanel.css';
 import type { City, Civilization } from '../../../types/game';
 import GameEngine from '@/game/engine/GameEngine';
 
+// Capitalize the first letter of a string (e.g. 'warrior' -> 'Warrior')
+const capitalize = (value: string): string =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+
 // New side panel matching the provided mockup image
 //
 // NOTE: the store's `currentPlayer` / `playerResources` / `playerUnits` /
@@ -82,9 +86,13 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
     const isVisible = map.visibility?.[tileIndex] ?? false;
     const isExplored = map.revealed?.[tileIndex] ?? false;
     
-    // Get movement cost from TERRAIN_PROPERTIES instead of TERRAIN_TYPES
-    const terrainProps = TERRAIN_PROPERTIES as Record<string, { movement?: number; defense?: number }>;
-    const moveCost = terrainProps[tile.type]?.movement ?? 1;
+    // Get movement cost and yields from TERRAIN_PROPERTIES instead of TERRAIN_TYPES
+    const terrainProps = TERRAIN_PROPERTIES as Record<
+      string,
+      { movement?: number; defense?: number; food?: number; production?: number; trade?: number }
+    >;
+    const props = terrainProps[tile.type];
+    const moveCost = props?.movement ?? 1;
     
     return {
       ...tile,
@@ -92,7 +100,10 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
       terrainName: tile.type || 'Unknown',
       visible: isVisible,
       explored: isExplored,
-      defenseBonus: terrainProps[tile.type]?.defense ?? 1
+      defenseBonus: props?.defense ?? 1,
+      food: props?.food ?? 0,
+      production: props?.production ?? 0,
+      trade: props?.trade ?? 0
     };
   };
 
@@ -341,7 +352,7 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
 
           {selectedUnit ? (
             <div>
-              <div className="side-panel-small-muted">{selectedUnit.type}</div>
+              <div className="side-panel-small-muted">{capitalize(selectedUnit.type)}</div>
               <div className="side-panel-small-muted unit-stats">
                 HP: {selectedUnit.health ?? 100} • Moves: {selectedUnit.movesRemaining ?? 0}
               </div>
@@ -357,8 +368,8 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
             </div>
           ) : unitAtSelectedTile ? (
             <div>
-              <div className="unit-name">{unitAtSelectedTile.name}</div>
-              <div className="side-panel-small-muted">{unitAtSelectedTile.type}</div>
+              <div className="unit-name">{capitalize(unitAtSelectedTile.name)}</div>
+              <div className="side-panel-small-muted">{capitalize(unitAtSelectedTile.type)}</div>
               {unitAtSelectedTile.civilizationId === currentPlayer?.id ? (
                 <div className="side-panel-small-muted unit-stats">
                   HP: {unitAtSelectedTile.health ?? 100} • Moves: {unitAtSelectedTile.movesRemaining ?? 0}
@@ -404,19 +415,17 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
                 <div className="terrain-info-section">
                   <div className="terrain-title">Terrain Information</div>
                   <div className="stats-div">
-                    <div>Type: {selectedTile.terrainName}</div>
+                    <div>Type: {String(selectedTile.terrainName).charAt(0).toUpperCase() + String(selectedTile.terrainName).slice(1)}</div>
                     <div>Coordinates: ({selectedTile.col}, {selectedTile.row})</div>
                     <div>Movement Cost: {selectedTile.movementCost}</div>
-                    {selectedTile.resource && <div>Resource: {selectedTile.resource}</div>}
+                    <div>
+                      Defense: {Math.round((selectedTile.defenseBonus - 1) * 100)}%
+                    </div>
                     {selectedTile.improvement && <div>Improvement: {selectedTile.improvement}</div>}
-                    <div>Visible: {selectedTile.visible ? 'Yes' : 'No'}</div>
-                    <div>Explored: {selectedTile.explored ? 'Yes' : 'No'}</div>
-                    {selectedTile.defenseBonus > 1 && (
-                      <div className="defense-bonus">
-                        <span role="img" aria-label="defense">🛡️</span>
-                        <span className="ms-2">Defense Bonus: +{Math.round((selectedTile.defenseBonus - 1) * 100)}%</span>
-                      </div>
-                    )}
+                    {selectedTile.resource && <div>Resource: {selectedTile.resource}</div>}
+                    <div>Food: {selectedTile.food ?? 0}</div>
+                    <div>Production: {selectedTile.production ?? 0}</div>
+                    <div>Trade: {selectedTile.trade ?? 0}</div>
                   </div>
                 </div>
                 <hr className="details-separator" />
@@ -424,25 +433,7 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
             )}
 
             {/* Show selected item details */}
-            {selectedUnit ? (
-              <>
-                <div className="unit-name-details"><strong>{selectedUnit.name}</strong> — {selectedUnit.type}</div>
-                <div className="side-panel-small-muted">Location: {selectedUnit.col}, {selectedUnit.row}</div>
-                <div className="stats-div">
-                  <div>Health: {selectedUnit.health ?? 100}/100</div>
-                  <div>Moves: {selectedUnit.movesRemaining ?? 0}/{selectedUnit?.maxMoves ?? 1}</div>
-                  <div>Attack: {selectedUnit?.attack ?? 0}</div>
-                  <div>Defense: {selectedUnit?.defense ?? 0}</div>
-                </div>
-
-
-                  {selectedUnit.plannedPath && selectedUnit.plannedPath.length > 1 && (
-                    <div className="path-info">
-                      Route: {selectedUnit.plannedPath.length} waypoints
-                    </div>
-                  )}
-              </>
-            ) : effectiveSelectedCity ? (
+            {effectiveSelectedCity ? (
               <>
                 <div className="unit-name-details"><strong>{effectiveSelectedCity.name}</strong></div>
                 <div className="side-panel-small-muted">Location: {effectiveSelectedCity.col}, {effectiveSelectedCity.row}</div>
