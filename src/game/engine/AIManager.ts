@@ -157,12 +157,13 @@ export class AIManager {
     }
 
     // ─── Phase 2b: Government upgrade ───────────────────────────────
-    // When the civ has researched a better government tech, start a revolution.
+    // Evaluate the best government for the civ's situation and start a
+    // revolution only when it is meaningfully better than the current one.
     // (No-op while already in anarchy / revolting.)
     if (this.gameEngine.governmentManager) {
       const govManager = this.gameEngine.governmentManager;
       if (!govManager.isInRevolution(civ)) {
-        const bestGov = govManager.bestGovernmentForCiv(civ);
+        const bestGov = govManager.evaluateGovernmentForCiv(civ);
         if (bestGov) {
           console.log(`[AI] ${civ.name} adopts ${bestGov} government (revolution)`);
           this.gameEngine.startRevolution(civilizationId, bestGov);

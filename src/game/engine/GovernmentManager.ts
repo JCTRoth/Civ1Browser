@@ -10,7 +10,7 @@
  */
 
 import { getGovernment } from '../../data/GovernmentData';
-import type { Civilization, City } from '../../../types/game';
+import type { Civilization, City, Unit } from '../../../types/game';
 import GameEngine from './GameEngine';
 
 /** How many turns a revolution (anarchy) lasts before the new government applies. */
@@ -70,6 +70,105 @@ export class GovernmentManager {
       }
     }
     return best === current ? null : best;
+  }
+
+  /**
+   * Situational score for a government given a civ's current empire. Higher is
+   * a better fit. Factors (weighted by empire size / personality):
+   *  - corruption saving (more valuable the bigger the empire),
+   *  - commerce penalty (Communism -25% hurts a big economy),
+   *  - happiness bonus & population tolerance (keep big cities content),
+   *  - tax need — a civ that must raise taxes dislikes Democracy's low cap
+   *    (and a commerce penalty that cuts gold), and
+   *  - settler shield cost of Republic/Democracy for expansionist civs.
+   */
+  scoreGovernmentForCiv(civ: Civilization, govId: string): number {
+    const current = getGovernment(civ.government);
+    const candidate = getGovernment(govId);
+
+    const cities = (this.gameEngine.cities ?? []).filter(
+      (c: City) => c.civilizationId === civ.id,
+    );
+    const units = (this.gameEngine.units ?? []).filter(
+      (u: Unit) => u.civilizationId === civ.id,
+    );
+    const numCities = cities.length;
+    const totalPop = cities.reduce((sum: number, c: City) => sum + (c.population ?? 1), 0);
+    const avgPop = numCities > 0 ? totalPop / numCities : 0;
+    const army = units.filter((u: Unit) => (u.attack ?? 0) >= 1).length;
+
+    const p = civ.personality ?? {};
+    const science = p.science ?? 0;
+    const military = p.military ?? 0;
+    const economy = p.economy ?? 0;
+    const expansion = p.expansion ?? 0;
+    const aggression = p.aggression ?? 0;
+
+    // Corruption saving matters more the bigger the empire.
+    const empireScale = 1 + numCities * 0.6 + totalPop * 0.05;
+    let score = (current.corruptionRate - candidate.corruptionRate) * empireScale * 18;
+
+    // A commerce penalty hurts in proportion to the economy's size.
+    score -= candidate.commercePenalty * (10 + totalPop * 0.6 + economy * 1.2);
+
+    // Happiness bonus keeps a large city network content.
+    score += (candidate.happinessBonus - current.happinessBonus) * (5 + numCities * 2);
+    // Tolerance lets large populations stay content under the crowding rule.
+    score +=
+      (candidate.tolerance - current.tolerance) *
+      (3 + Math.max(0, avgPop - 2) * 2 + totalPop * 0.04);
+
+    // A civ that must raise taxes (upkeep / at war / militarist-economist)
+    // dislikes a low tax cap (Democracy) or a commerce penalty that cuts gold.
+    const taxNeed = Math.min(
+      10,
+      military * 0.5 + economy * 0.5 + aggression * 0.3 + Math.min(army, 10) * 0.3,
+    );
+    score -= Math.max(0, current.maxTaxRate - candidate.maxTaxRate) * taxNeed * 0.6;
+
+    // Science-focused civs value low corruption and no commerce penalty.
+    score += science * 0.35 * (0.4 - candidate.commercePenalty);
+    score += science * 0.25 * (current.corruptionRate - candidate.corruptionRate);
+
+    // Republic/Democracy make Settlers cost shields — penalise expansionists.
+    const settlerCostGov = govId === 'republic' || govId === 'democracy';
+    if (settlerCostGov) score -= Math.max(0, expansion - 3) * 1.2;
+
+    return score;
+  }
+
+  /**
+   * Pick the best government for a civ BEFORE the AI commits to a revolution.
+   * Returns the government to switch to, or null to keep the current one.
+   * Unlike `bestGovernmentForCiv` (which always takes the next unlocked tech on
+   * a fixed ladder), this weighs the civ's actual situation — empire size,
+   * happiness pressure, tax need and personality — and only switches when the
+   * best candidate is meaningfully better (anarchy costs ~3 dead turns).
+   */
+  evaluateGovernmentForCiv(civ: Civilization): string | null {
+    if (!civ) return null;
+    const available = this.getAvailableGovernments(civ);
+    if (available.length <= 1) return null;
+    const current = civ.government ?? 'despotism';
+
+    const currentScore = this.scoreGovernmentForCiv(civ, current);
+    let bestGov: string | null = null;
+    let bestScore = currentScore;
+    for (const gov of available) {
+      if (gov === current) continue;
+      const s = this.scoreGovernmentForCiv(civ, gov);
+      if (s > bestScore) {
+        bestScore = s;
+        bestGov = gov;
+      }
+    }
+
+    // Don't revolt for a negligible gain (anarchy wastes ~3 turns of output).
+    const SWITCH_MARGIN = 5;
+    if (bestGov && bestScore - currentScore >= SWITCH_MARGIN) {
+      return bestGov;
+    }
+    return null;
   }
 
   // ------------------------------------------------------------------

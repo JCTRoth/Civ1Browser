@@ -142,6 +142,51 @@ describe('GovernmentManager.bestGovernmentForCiv (AI)', () => {
   });
 });
 
+describe('GovernmentManager.evaluateGovernmentForCiv (situational AI pick)', () => {
+  function empireCiv(id: number, techs: string[], personality: Record<string, number>) {
+    return makeCiv(id, { technologies: techs, personality });
+  }
+
+  function threeCities() {
+    return [
+      makeCity(0, 'city-a', { population: 5 }),
+      makeCity(0, 'city-b', { population: 5 }),
+      makeCity(0, 'city-c', { population: 5 }),
+    ];
+  }
+
+  it('returns null when only despotism is available', () => {
+    const civ = makeCiv(0);
+    const mgr = new GovernmentManager(makeEngine({ civilizations: [civ] }));
+    expect(mgr.evaluateGovernmentForCiv(civ)).toBeNull();
+  });
+
+  it('upgrades to republic for a growing, science-minded empire', () => {
+    const civ = empireCiv(0, ['monarchy', 'republic'], { science: 5 });
+    const mgr = new GovernmentManager(makeEngine({ civilizations: [civ], cities: threeCities() }));
+    expect(mgr.evaluateGovernmentForCiv(civ)).toBe('republic');
+  });
+
+  it('does NOT pick democracy when the civ is tax-constrained (military)', () => {
+    const civ = empireCiv(0, ['monarchy', 'republic', 'democracy'], { military: 10 });
+    const mgr = new GovernmentManager(makeEngine({ civilizations: [civ], cities: threeCities() }));
+    const best = mgr.evaluateGovernmentForCiv(civ);
+    expect(best).not.toBe('democracy');
+    expect(['monarchy', 'republic']).toContain(best);
+  });
+
+  it('keeps the current government when it is already the best', () => {
+    // Democracy unlocked and already in use — only despotism is "below" it.
+    const civ = makeCiv(0, {
+      technologies: ['democracy'],
+      government: 'democracy',
+      personality: { science: 6 },
+    });
+    const mgr = new GovernmentManager(makeEngine({ civilizations: [civ], cities: threeCities() }));
+    expect(mgr.evaluateGovernmentForCiv(civ)).toBeNull();
+  });
+});
+
 describe('GovernmentManager capital management', () => {
   it('designates the first city as capital with a free Palace', () => {
     const civ = makeCiv(0);
