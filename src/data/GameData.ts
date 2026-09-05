@@ -33,84 +33,84 @@ export const CIVILIZATIONS: Civilization[] = [
     name: 'Americans',
     leader: 'Abraham Lincoln',
     color: '#0000FF', // Blue - stars and stripes
-    cityNames: ['Washington', 'New York', 'Boston', 'Philadelphia', 'Atlanta', 'Chicago', 'Seattle', 'San Francisco', 'Los Angeles', 'Detroit', 'Denver', 'Miami', 'Houston', 'Dallas', 'Phoenix', 'San Diego', 'Minneapolis', 'Cleveland', 'St. Louis', 'Baltimore'],
+    cityNames: ['Washington', 'New York', 'Boston', 'Philadelphia', 'Atlanta', 'Chicago', 'Seattle', 'San Francisco', 'Los Angeles', 'Detroit', 'Denver', 'Miami', 'Houston', 'Dallas', 'Phoenix', 'San Diego', 'Minneapolis', 'Cleveland', 'St. Louis', 'Baltimore', 'Austin', 'San Antonio', 'San Jose', 'Jacksonville', 'Fort Worth', 'Charlotte', 'Columbus', 'Indianapolis', 'Las Vegas', 'Portland', 'New Orleans', 'Nashville', 'Memphis', 'Oklahoma City', 'Louisville', 'Milwaukee', 'Albuquerque', 'Tucson', 'Kansas City', 'Sacramento', 'Pittsburgh', 'Cincinnati', 'Orlando', 'Tampa', 'Salt Lake City'],
     icon: '🦅'
   },
   {
     name: 'Aztecs',
     leader: 'Montezuma',
     color: '#009220ff', // Teal - Jungle gree
-    cityNames: ['Tenochtitlan', 'Texcoco', 'Tlatelolco', 'Teotihuacan', 'Tlaxcala', 'Cholula', 'Xochicalco', 'Tula', 'Cempoala', 'Huexotla', 'Cuauhnahuac', 'Cholula', 'Mixcoac', 'Calixtlahuaca', 'Malinalco', 'Oaxtepec', 'Tepeapulco', 'Zacatepec', 'Tepozotlan'],
+    cityNames: ['Tenochtitlan', 'Texcoco', 'Tlatelolco', 'Teotihuacan', 'Tlaxcala', 'Cholula', 'Xochicalco', 'Tula', 'Cempoala', 'Huexotla', 'Cuauhnahuac', 'Mixcoac', 'Calixtlahuaca', 'Malinalco', 'Oaxtepec', 'Tepeapulco', 'Zacatepec', 'Tepozotlan', 'Palenque', 'ChichenItza', 'Tikal', 'Copan', 'MonteAlban', 'Mitla', 'Uxmal', 'Tulum', 'Mayapan', 'Calakmul', 'Coba', 'Yaxchilan', 'Bonampak', 'Kaminaljuyu', 'ElMirador', 'Caracol', 'Quirigua', 'Iximche', 'Utatlan', 'MixcoViejo', 'Tzintzuntzan', 'Zempoala', 'Tzapotlan', 'Etzatlan'],
     icon: '🐆'
   },
   {
     name: 'Babylonians',
     leader: 'Hammurabi',
     color: '#ff954fff', // Lime - ancient Mesopotamian gold/yellow-green
-    cityNames: ['Babylon', 'Ur', 'Nineveh', 'Ashur', 'Eridu', 'Uruk', 'Lagash', 'Nippur', 'Isin', 'Larsa', 'Sippar', 'Eshnunna', 'Kish', 'Mari', 'Harran', 'Dur-Kurigalzu', 'Shuruppak', 'Adab', 'Girsu', 'Ebla'],
+    cityNames: ['Babylon', 'Ur', 'Nineveh', 'Ashur', 'Eridu', 'Uruk', 'Lagash', 'Nippur', 'Isin', 'Larsa', 'Sippar', 'Eshnunna', 'Kish', 'Mari', 'Harran', 'Dur-Kurigalzu', 'Shuruppak', 'Adab', 'Girsu', 'Ebla', 'Ctesiphon', 'Seleucia', 'Hatra', 'Nimrud', 'Susa', 'Persepolis', 'Pasargadae', 'Ecbatana', 'Ugarit', 'Aleppo', 'Damascus', 'Palmyra', 'Byblos', 'Sidon', 'Tyre', 'Jericho', 'Sardis', 'Gordium', 'Nineveh', 'Assur', 'Nuzi', 'Tello', 'Khorsabad', 'Carchemish'],
     icon: '🏺'
   },
   {
     name: 'Chinese',
     leader: 'Mao Tse Tung',
     color: '#fbff00ff', // Green - traditional Chinese color
-    cityNames: ['Beijing', 'Shanghai', 'Guangzhou', 'Nanjing', 'Xian', 'Chengdu', 'Hangzhou', 'Tianjin', 'Wuhan', 'Shenyang', 'Chongqing', 'Suzhou', 'Qingdao', 'Dalian', 'Harbin', 'Jinan', 'Fuzhou', 'Zhengzhou', 'Changsha', 'Kunming'],
+    cityNames: ['Beijing', 'Shanghai', 'Guangzhou', 'Nanjing', 'Xian', 'Chengdu', 'Hangzhou', 'Tianjin', 'Wuhan', 'Shenyang', 'Chongqing', 'Suzhou', 'Qingdao', 'Dalian', 'Harbin', 'Jinan', 'Fuzhou', 'Zhengzhou', 'Changsha', 'Kunming', 'Shenzhen', 'Ningbo', 'Wuxi', 'Hefei', 'Xiamen', 'Changchun', 'Nanchang', 'Shijiazhuang', 'Nanning', 'Taiyuan', 'Guiyang', 'Urumqi', 'Lanzhou', 'Hohhot', 'Wenzhou', 'Xuzhou', 'Tangshan', 'Foshan', 'Dongguan', 'Nantong', 'Changzhou', 'Yantai'],
     icon: '🐉'
   },
   {
     name: 'Egyptians',
     leader: 'Ramesses II',
     color: '#ffbb00ff', // Yellow - Egyptian gold/sand
-    cityNames: ['Thebes', 'Memphis', 'Heliopolis', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Karnak', 'Abydos', 'Edfu', 'Dendera', 'Kom Ombo', 'Philae', 'Esna', 'Amarna', 'Saqqara', 'Tanis', 'Bubastis', 'Hermopolis', 'Avaris'],
+    cityNames: ['Thebes', 'Memphis', 'Heliopolis', 'Alexandria', 'Giza', 'Luxor', 'Aswan', 'Karnak', 'Abydos', 'Edfu', 'Dendera', 'Kom Ombo', 'Philae', 'Esna', 'Amarna', 'Saqqara', 'Tanis', 'Bubastis', 'Hermopolis', 'Avaris', 'Cairo', 'Suez', 'PortSaid', 'Mansoura', 'Tanta', 'Asyut', 'Fayoum', 'Zagazig', 'Ismaillia', 'Damanhur', 'Minya', 'Damietta', 'Qena', 'Sohag', 'Hurghada', 'SharmElSheikh', 'Naucratis', 'Buto', 'Busiris', 'Herakleion', 'Canopus', 'Mendes', 'Leontopolis', 'Pelusium', 'Coptos', 'Elephantine'],
     icon: '🐪'
   },
   {
     name: 'English',
     leader: 'Elizabeth I',
     color: '#ff0000ff', // Red was on two of their historical flags
-    cityNames: ['London', 'York', 'Nottingham', 'Oxford', 'Cambridge', 'Canterbury', 'Coventry', 'Warwick', 'Newcastle', 'Bristol', 'Liverpool', 'Manchester', 'Birmingham', 'Leeds', 'Sheffield', 'Southampton', 'Plymouth', 'Exeter', 'Norwich', 'Gloucester'],
+    cityNames: ['London', 'York', 'Nottingham', 'Oxford', 'Cambridge', 'Canterbury', 'Coventry', 'Warwick', 'Newcastle', 'Bristol', 'Liverpool', 'Manchester', 'Birmingham', 'Leeds', 'Sheffield', 'Southampton', 'Plymouth', 'Exeter', 'Norwich', 'Gloucester', 'Bath', 'Salisbury', 'Lincoln', 'Chester', 'Durham', 'Winchester', 'Leicester', 'Derby', 'Hull', 'Brighton', 'Portsmouth', 'Bournemouth', 'Stoke', 'Wolverhampton', 'Sunderland', 'Bradford', 'Wakefield', 'Carlisle', 'Lancaster', 'Ipswich', 'Colchester', 'StAlbans'],
     icon: '🇬🇧'
   },
   {
     name: 'Germans',
     leader: 'Frederick the Great',
     color: '#949494',
-    cityNames: ['Berlin', 'Leipzig', 'Hamburg', 'Bremen', 'Frankfurt', 'Bonn', 'Nuremberg', 'Cologne', 'Munich', 'Darmstadt', 'Mannheim','Heidelberg', 'Stuttgart', 'Dresden', 'Kiel', 'Dusseldorf', 'Wiesbaden', 'Aachen', 'Freiburg', 'Regensburg', 'Wurzburg', 'Ingolstadt', 'Augsburg', 'Bielefeld', 'Bochum', 'Kassel', 'Magdeburg', 'Mainz', 'Oldenburg', 'Potsdam', 'Rostock'],
+    cityNames: ['Berlin', 'Darmstadt', 'Zwingenberg', 'Bremen', 'Frankfurt', 'Bonn', 'Nuremberg', 'Cologne', 'Munich', 'Leipzig', 'Hamburg','Bensheim', 'Bad-Homburg', 'Mannheim','Heidelberg', 'Stuttgart', 'Dresden', 'Kiel', 'Dusseldorf', 'Wiesbaden', 'Aachen', 'Freiburg', 'Regensburg', 'Wurzburg', 'Ingolstadt', 'Augsburg', 'Bielefeld', 'Bochum', 'Kassel', 'Magdeburg', 'Mainz', 'Oldenburg', 'Potsdam', 'Rostock', 'Remscheid', 'Wuppertal', 'Heilbronn', 'Pforzheim', 'Koblenz', 'Gera', 'Jena', 'Cottbus', 'Flensburg', 'Lubeck', 'Halle', 'Erfurt', 'Kaiserslautern', 'Goslar', 'Wittenberg', 'Trier', 'Ludwigshafen', 'Kempten', 'Bayreuth', 'Dessau'],
     icon: '✠'
   },
   {
     name: 'French',
     leader: 'Napoleon Bonaparte',
     color: '#fffffff6', // capitulation white
-    cityNames: ['Paris', 'Orleans', 'Lyon', 'Aix en Provence ', 'Courbevoie', 'Tours', 'Marseille', 'Chartres', 'Avignon', 'Rouen', 'Grenoble', 'Reims', 'Dijon', 'Nantes', 'Bordeaux', 'Toulouse', 'Nice', 'Strasbourg', 'Montpellier', 'Lille', 'Brest', 'Caen', 'Clermont-Ferrand', 'Limoges', 'Saint-Etienne', 'Le Havre', 'Angers', 'Metz', 'Besancon', 'Perpignan'],
+    cityNames: ['Paris', 'Orleans', 'Lyon', 'Aix en Provence', 'Courbevoie', 'Tours', 'Marseille', 'Chartres', 'Avignon', 'Rouen', 'Grenoble', 'Reims', 'Dijon', 'Nantes', 'Bordeaux', 'Toulouse', 'Nice', 'Strasbourg', 'Montpellier', 'Lille', 'Brest', 'Caen', 'Clermont-Ferrand', 'Limoges', 'Saint-Etienne', 'Le Havre', 'Angers', 'Metz', 'Besancon', 'Perpignan', 'Rennes', 'Toulon', 'Nimes', 'Amiens', 'Perpignan', 'Boulogne-Billancourt', 'Nancy', 'Mulhouse', 'Caen', 'Nancy', 'Saint-Denis', 'Argenteuil', 'Dunkerque', 'Poitiers', 'Pau', 'Antibes', 'Cannes', 'Calais', 'Saint-Nazaire', 'Colmar', 'Ajaccio', 'Bastia', 'Bourges', 'Troyes',('Valence'), ('Chambery'), ('Niort'), ('Lorient')],
     icon: '🇫🇷🥖'
   },
   {
     name: 'Greeks',
     leader: 'Alexander the Great',
     color: '#1269c5', 
-    cityNames: ['Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Ephesus', 'Rhodes', 'Byzantium', 'Pergamon', 'Olympia', 'Knossos', 'Mycenae', 'Delos', 'Syracuse', 'Miletus', 'Halicarnassus', 'Samos', 'Chios', 'Lesbos', 'Naxos', 'Eretria'],
+    cityNames: ['Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Ephesus', 'Rhodes', 'Byzantium', 'Pergamon', 'Olympia', 'Knossos', 'Mycenae', 'Delos', 'Syracuse', 'Miletus', 'Halicarnassus', 'Samos', 'Chios', 'Lesbos', 'Naxos', 'Eretria', 'Alexandria', 'Argos', 'Megara', 'Chalcis', 'Mytilene', 'Cyrene', 'Tarentum', 'Croton', 'Massalia', 'Sardis', 'Priene', 'Clazomenae', 'Phocaea', 'Colophon', 'Smyrna', 'Assos', 'Troy', 'Gortyn', 'Phaistos', 'Cydonia'],
     icon: '🏛️'
   },
   {
     name: 'Indians',
     leader: 'Mahatma Gandhi',
     color: '#ff681a',
-    cityNames: ['Delhi', 'Bombay', 'Madras', 'Bangalore', 'Calcutta', 'Lahore', 'Karachi', 'Hyderabad', 'Udaipur', 'Jaipur', 'Lucknow', 'Varanasi', 'Agra', 'Pune', 'Ahmedabad', 'Chennai', 'Kolkata', 'Bhopal', 'Patna', 'Indore'],
+    cityNames: ['Delhi', 'Bombay', 'Madras', 'Bangalore', 'Calcutta', 'Lahore', 'Karachi', 'Hyderabad', 'Udaipur', 'Jaipur', 'Lucknow', 'Varanasi', 'Agra', 'Pune', 'Ahmedabad', 'Chennai', 'Kolkata', 'Bhopal', 'Patna', 'Indore', 'Surat', 'Ahmednagar', 'Mumbai', 'Bengaluru', 'Peshawar', 'Rawalpindi', 'Islamabad', 'Multan', 'Faisalabad', 'Quetta', 'Amritsar', 'Chandigarh', 'Kanpur', 'Nagpur', 'Thane', 'Visakhapatnam', 'Kochi', 'Thiruvananthapuram', 'Coimbatore', 'Madurai', 'Mysore', 'Jodhpur','Jaisalmer', 'Gwalior', 'Jabalpur', 'Ranchi', 'Raipur', 'Guwahati', 'Bhubaneswar', 'Dehradun'],
     icon: '🇮🇳'
   },
   {
     name: 'Huns',
     leader: 'Dschingis Khan',
     color: '#00ADC3',
-    cityNames: ['Almaty', 'Shymkent', 'Karaganda', 'Taraz', 'Aktobe', 'Pavlodar', 'Oskemen', 'Semey', 'Oral', 'Astana', 'Kyzylorda', 'Atyrau', 'Kostanay', 'Taldykorgan', 'Zhezkazgan', 'Kokshetau', 'Petropavl', 'Temirtau', 'Turkistan', 'Ekibastuz'],
+    cityNames: ['Almaty', 'Shymkent', 'Karaganda', 'Taraz', 'Aktobe', 'Pavlodar', 'Oskemen', 'Semey', 'Oral', 'Astana', 'Kyzylorda', 'Atyrau', 'Kostanay', 'Taldykorgan', 'Zhezkazgan', 'Kokshetau', 'Petropavl', 'Temirtau', 'Turkistan', 'Ekibastuz', 'Rudny', 'Aktau', 'Zhanaozen', 'Balkhash', 'Kentau', 'Satpayev', 'Ridder', 'Stepnogorsk', 'Zhutikara', 'Schuchinsk', 'Talgar', 'Kaskelen', 'Kulsary', 'Arys', 'Kapshagay', 'Aksu', 'Zyryanovsk', 'Arkalyk', 'Aralsk', 'Ayagoz', 'Shakhtinsk'],
     icon: '🐎🏹'
   },
   {
     name: 'Romans',
     leader: 'Julius Caesar',
     color: '#080308ff',
-    cityNames: ['Rome', 'Capua', 'Veii', 'Pompeii', 'Antium', 'Cumae', 'Neapolis', 'Ravenna', 'Verona', 'Syracuse', 'Tarentum', 'Brundisium', 'Carthage', 'Massalia', 'Alexandria', 'Byzantium', 'Ephesus', 'Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Pergamon', 'Rhodes'],
+    cityNames: ['Rome', 'Capua', 'Veii', 'Pompeii', 'Antium', 'Cumae', 'Neapolis', 'Ravenna', 'Verona', 'Syracuse', 'Tarentum', 'Brundisium', 'Carthage', 'Massalia', 'Alexandria', 'Byzantium', 'Ephesus', 'Athens', 'Sparta', 'Corinth', 'Delphi', 'Thebes', 'Pergamon', 'Rhodes', 'Pisa', 'Florence', 'Milan', 'Venice', 'Naples', 'Palermo', 'Sicily'],
     icon: '⚔️'
   },
   {
@@ -124,7 +124,10 @@ export const CIVILIZATIONS: Civilization[] = [
     name: 'Zulus',
     leader: 'Shaka',
     color: '#8B4513',
-    cityNames: ['Zimbabwe', 'Ulundi', 'Bapedi', 'Hlobane', 'Isandhlwana', 'Intombe', 'Mpondo', 'Swazi', 'Ndebele', 'Venda', 'Tswana', 'Sotho', 'Tsonga', 'Shangaan', 'Xhosa', 'Zulu', 'Swazi', 'Ndebele', 'Venda', 'Tswana', 'Sotho', 'Tsonga', 'Shangaan', 'Xhosa'],
+    cityNames: [
+    'Zimbabwe', 'Ulundi', 'Bapedi', 'Hlobane', 'Isandhlwana', 'Intombe', 'Mpondo','Swazi', 'Ndebele', 'Venda', 'Tswana', 'Sotho', 'Tsonga', 'Shangaan', 'Xhosa', 'Zulu','RorkesDrift', 'Kambula', 'Gingindlovu', 'Eshowe', 'Melmoth', 'Nongoma', 'Vryheid','Ladysmith', 'Dundee', 'Colenso', 'Estcourt', 'Pietermaritzburg', 'Durban', 'Empangeni', 
+    'RichardsBay', 'StLucia', 'Hluhluwe', 'Mfolozi', 'Umhlanga', 'Ballito', 'Kokstad','Griqualand', 'Transkei', 'Ciskei', 'Bophuthatswana', 'Vhavenda', 'AmaXhosa','AmaZulu', 'AmaNdebele', 'Amashona', 'Kalanga', 'Lozi', 'Ndau', 'Tswa', 'Pondo', 
+    'Thembu', 'Bhaca', 'Hlubi', 'Harare', 'Bulawayo', 'Mutare', 'Gweru', 'Kwekwe', 'Kadoma', 'Masvingo','Chinhoyi', 'Marondera', 'Hwange', 'VictoriaFalls', 'Zvishavane', 'Beitbridge', 'Gwanda'],
     icon: '🛡️'
   }
 ];
