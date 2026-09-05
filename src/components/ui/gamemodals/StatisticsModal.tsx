@@ -54,7 +54,7 @@ const formatNumber = (value: number): string => (
 
 const Stat = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div className="col-12 col-sm-6 col-lg-4 mb-3">
-    <div className="bg-secondary rounded p-3 h-100">
+    <div className="rounded p-3 h-100">
       <div className="small text-light-emphasis">{label}</div>
       <div className="h4 mb-0 text-white">{value}</div>
     </div>
