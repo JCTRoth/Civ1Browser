@@ -58,8 +58,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   const [selectedHex, setSelectedHex] = useState<HexCoordinates>({ col: 5, row: 5 });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [terrain, setTerrain] = useState<TerrainRenderGrid | null>(null);
+  // Ref mirroring the latest terrain grid so the build/visibility effects below
+  // can read the current grid WITHOUT depending on `terrain` state. Depending on
+  // `terrain` while calling setTerrain() with a fresh array each run caused an
+  // infinite render loop (and 100% CPU) once the game started.
+  const terrainRef = useRef<TerrainRenderGrid | null>(null);
   const storeGotoMode = useGameStore(state => state.uiState.goToMode);
   const storeGotoUnitId = useGameStore(state => state.uiState.goToUnit);
+  const citizenReassign = useGameStore(state => state.uiState.citizenReassign);
   const [gotoMode, setGotoMode] = useState<boolean>(false);
   const [gotoUnit, setGotoUnit] = useState<Unit | null>(null);
   const [unitPaths, setUnitPaths] = useState<Map<string, UnitPathStep[]>>(new Map());
@@ -75,7 +81,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   // current game. Prevents the "select starting settler" effect from re-running
   // on every `units` change (load, unit movement, turn processing).
   const initialSettlerSelectionDoneRef = useRef<boolean>(false);
-  const [texturesLoaded, setTexturesLoaded] = useState(false);
+  const [, setTexturesLoaded] = useState(false);
 
   // ---- Touch / gesture state (mobile support) ----
   const touchStartRef = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -103,6 +109,19 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       setGotoUnit(null);
     }
   }, [storeGotoMode, storeGotoUnitId, units]);
+
+  // Cancel a citizen pick-up with the ESC key.
+  useEffect(() => {
+    if (!citizenReassign) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        actions.endCitizenReassign();
+        triggerRender();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [citizenReassign, actions, triggerRender]);
 
   // Check if game state has changed significantly
   const hasGameStateChanged = useCallback(() => {
@@ -252,6 +271,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     return grid;
   }, []);
 
+  // Keep a ref in sync with the terrain state so the build/visibility effects
+  // can read the latest grid without depending on `terrain` state.
+  useEffect(() => {
+    terrainRef.current = terrain;
+  }, [terrain]);
+
   useEffect(() => {
     if (!mapData?.width || !mapData?.height) {
       return;
@@ -261,6 +286,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
     if (Array.isArray(mapData.tiles) && mapData.tiles.length === totalTiles) {
       const terrainGrid = createTerrainGrid(mapData.tiles, mapData.width, mapData.height, mapData.visibility, mapData.revealed);
+      terrainRef.current = terrainGrid;
       setTerrain(terrainGrid);
       renderTerrainToOffscreen(terrainGrid);
       return;
@@ -269,13 +295,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     const engineTiles = gameEngine?.map?.tiles;
     if (Array.isArray(engineTiles) && engineTiles.length >= totalTiles) {
       const terrainGrid = createTerrainGrid(engineTiles, mapData.width, mapData.height, mapData.visibility, mapData.revealed);
+      terrainRef.current = terrainGrid;
       setTerrain(terrainGrid);
       renderTerrainToOffscreen(terrainGrid);
       return;
     }
 
-    if (!terrain) {
+    if (!terrainRef.current) {
       const generatedTerrain = MapRenderer.generateFallbackTerrain(mapData.width || 20, mapData.height || 20);
+      terrainRef.current = generatedTerrain;
       setTerrain(generatedTerrain);
       renderTerrainToOffscreen(generatedTerrain);
     }
@@ -289,7 +317,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   // Update terrain visibility when game state changes
   useEffect(() => {
     console.log('[GameCanvas] Updating terrain visibility', {
-      hasTerrain: !!terrain,
+      hasTerrain: !!terrainRef.current,
       hasVisibility: !!mapData.visibility,
       hasRevealed: !!mapData.revealed,
       visibilityLength: mapData.visibility?.length || 0,
@@ -300,17 +328,18 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
     // Defensive check: ensure terrain grid matches map dimensions
     const ensureTerrainMatchesMap = () => {
-      if (!terrain) return false;
+      const current = terrainRef.current;
+      if (!current) return false;
       if (!mapData || !mapData.width || !mapData.height) return false;
-      if (terrain.length !== mapData.height) return false;
+      if (current.length !== mapData.height) return false;
       for (let r = 0; r < mapData.height; r++) {
-        if (!terrain[r] || terrain[r].length !== mapData.width) return false;
+        if (!current[r] || current[r].length !== mapData.width) return false;
       }
       return true;
     };
 
     // Track current terrain (either existing or newly rebuilt)
-    let currentTerrain = terrain;
+    let currentTerrain = terrainRef.current;
 
     if (!ensureTerrainMatchesMap()) {
       console.warn('[GameCanvas] Terrain grid mismatch detected. Rebuilding terrain from mapData.tiles');
@@ -333,6 +362,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         }
         // Use rebuilt terrain immediately
         currentTerrain = rebuilt;
+        terrainRef.current = rebuilt;
         setTerrain(rebuilt);
         console.log('[GameCanvas] Terrain rebuilt from mapData');
       } else {
@@ -358,13 +388,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         }
       }
       // Always update terrain visibility - don't use expensive JSON comparison
+      terrainRef.current = updatedTerrain;
       renderTerrainToOffscreen(updatedTerrain);
       setTerrain(updatedTerrain);
       console.log('[GameCanvas] Terrain visibility updated');
     } else {
       console.log('[GameCanvas] Skipping terrain visibility update - missing data');
     }
-  }, [mapData.visibility, mapData.revealed, mapData.height, mapData.width, mapData.tiles]);
+  }, [mapData.visibility, mapData.revealed, mapData.height, mapData.width, mapData.tiles, mapData, renderTerrainToOffscreen]);
 
   // Select player's starting settler when a game starts.
   // This runs ONLY once per new game. Without the guard it re-fires on every
@@ -697,6 +728,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
       terrainGrid: terrain,
       camera,
       selectedHex,
+      citizenReassign,
       gameState: gameState as GameState,
       units,
       cities,
@@ -726,7 +758,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
 
     staticRenderedRef.current = true;
     // console.log('[GameCanvas] Static content rendered and saved');
-  }, [camera, canvasRef, civilizations, cities, combatAnimations, gameState, mapData, minimap, squareToScreen, selectedHex, terrain, unitPaths, units, texturesLoaded, renderTerrainToOffscreen, movementAnimations]);
+  }, [minimap, mapData, terrain, camera, selectedHex, citizenReassign, gameState, units, cities, civilizations, unitPaths, squareToScreen, reachableTiles, combatAnimations, movementAnimations, renderTerrainToOffscreen]);
 
   const renderAnimationLayer = useCallback((currentTime: number) => {
     if (!canvasRef.current || !animationCanvasRef.current) return;
@@ -829,6 +861,38 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     triggerRender(); // Render to update cursor state
   };
 
+  // ---- Citizen reassignment (pick up & drop) ----
+  // A left-click while a citizen is being carried: DROP it on an available
+  // (unworked, in-radius) tile, or ABORT when clicking far outside the city's
+  // workable radius. Clicking the origin/another worked tile keeps the grab.
+  const handleCitizenDrop = (hex: HexCoordinates) => {
+    const re = citizenReassign;
+    if (!re) return;
+    const city = cities.find(c => c.id === re.cityId);
+    if (!city) {
+      actions.endCitizenReassign();
+      triggerRender();
+      return;
+    }
+    const inRadius = gameEngine?.isTileInCityRadius?.(city, hex.col, hex.row) ?? false;
+    const isCenter = hex.col === city.col && hex.row === city.row;
+    const worked = city.workingTiles ?? new Set<string>();
+    const key = `${hex.col},${hex.row}`;
+    if (!isCenter && inRadius && !worked.has(key)) {
+      const ok = !!gameEngine?.reassignCitizen?.(re.cityId, re.col, re.row, hex.col, hex.row);
+      actions.endCitizenReassign();
+      triggerRender();
+      if (!ok && actions.addNotification) {
+        actions.addNotification({ type: 'warning', message: 'Cannot move citizen to that tile' });
+      }
+    } else if (!inRadius) {
+      // Abort: clicked well outside the city's workable radius.
+      actions.endCitizenReassign();
+      triggerRender();
+    }
+    // Clicking the origin / another worked tile / the center keeps the grab.
+  };
+
   const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDragging) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -853,6 +917,32 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         });
       } else {
         const hex = screenToSquare(x, y);
+
+        // Citizen reassignment takes priority over normal click handling: if
+        // we are carrying a citizen, this click is a drop or an abort.
+        if (citizenReassign) {
+          handleCitizenDrop(hex);
+          return;
+        }
+
+        // Pick-up: with a city selected, left-clicking one of its WORKED tiles
+        // (green border, no player unit standing on it) grabs a citizen so it
+        // can be dropped on another tile in the city's radius.
+        if (!citizenReassign && gameEngine && gameState.selectedCity) {
+          const selCity = cities.find(c => c.id === gameState.selectedCity);
+          const onTileUnit = gameEngine.getUnitAt?.(hex.col, hex.row);
+          const isCityCenter = selCity !== undefined && hex.col === selCity.col && hex.row === selCity.row;
+          const worked = selCity?.workingTiles ?? new Set<string>();
+          const isWorked = worked.has(`${hex.col},${hex.row}`);
+          const inRadius = selCity ? (gameEngine.isTileInCityRadius?.(selCity, hex.col, hex.row) ?? false) : false;
+          const ownUnitOnTile = !!(onTileUnit && currentPlayer && onTileUnit.civilizationId === currentPlayer.id);
+          if (selCity && !isCityCenter && isWorked && inRadius && !ownUnitOnTile) {
+            actions.setCitizenReassign({ cityId: selCity.id, col: hex.col, row: hex.row });
+            setSelectedHex(hex);
+            triggerRender();
+            return;
+          }
+        }
 
         // Check if clicking on the currently selected unit - deselect it
         const currentSelectedUnitId = gameState.selectedUnit;
@@ -1234,6 +1324,15 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
     // Right-click never starts a drag — ensure any stale drag state is cleared
     // so the cursor doesn't stay stuck on the "grabbing" hand.
     setIsDragging(false);
+
+    // Right-click aborts a citizen pick-up (cancel the grab without altering
+    // any tile) before opening the unit context menu.
+    if (citizenReassign) {
+      console.log('[RightClick] Cancelling citizen reassignment');
+      actions.endCitizenReassign();
+      triggerRender();
+      return;
+    }
 
     // If in Go To mode, right click exits GoTo mode and deselects unit
     if (gotoMode) {
@@ -1980,17 +2079,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
   // Trigger render when selection changes
   useEffect(() => {
     triggerRender();
-  }, [selectedHex, gameState.selectedCity]);
+  }, [selectedHex, gameState.selectedCity, triggerRender]);
 
   // Trigger render when terrain changes
   useEffect(() => {
     triggerRender();
-  }, [terrain]);
+  }, [terrain, triggerRender]);
 
   // Trigger render when game state changes significantly
   useEffect(() => {
     triggerRender();
-  }, [gameState.activePlayer, gameState.currentTurn, units.length, cities.length]);
+  }, [gameState.activePlayer, gameState.currentTurn, units.length, cities.length, triggerRender]);
 
   // Keep the canvas in sync with its container: when the window is resized
   // (desktop) or the layout changes, re-sync the backing store size and redraw
@@ -2040,6 +2139,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         className="w-100 h-100 game-canvas-input"
         style={{ 
           cursor: minimap ? 'pointer' : 
+                  citizenReassign ? 'grabbing' :
                   gotoMode ? 'crosshair' : 
                   (isDragging ? 'grabbing' : 'grab'),
           touchAction: 'none',

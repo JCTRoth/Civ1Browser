@@ -240,6 +240,17 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
         )}
 
       <div className="side-panel-scroll">
+        {/* Citizen reassignment banner (shown while a citizen is picked up) */}
+        {uiState?.citizenReassign && (
+          <div className="citizen-reassign-banner" role="status">
+            <span className="citizen-reassign-icon" aria-hidden="true">🧑‍🌾</span>
+            <div className="citizen-reassign-text">
+              <div className="citizen-reassign-title">1 citizen selected for reassignment</div>
+              <div className="citizen-reassign-hint">Left-click a tile to place · Right-click / ESC to cancel</div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
 
         

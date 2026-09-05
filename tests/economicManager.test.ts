@@ -414,6 +414,34 @@ describe('EconomicManager tile-based commerce', () => {
     expect(city.scienceBonus).toBe(0);
   });
 
+  it('preserves manually user-assigned tiles (auto-assign never overrides them)', () => {
+    const civ = makeCiv(0);
+    const tiles: Record<string, any> = {};
+    tiles['5,5'] = makeTile('river');                          // center
+    tiles['5,6'] = makeTile('ocean', { resource: 'fish' });    // best trade tile
+    tiles['6,6'] = makeTile('plains');                         // player's manual pick
+    const engine = makeEngine({
+      civilizations: [civ],
+      cities: [],
+      units: [],
+      squareGrid: makeTileGrid(),
+      getTileAt: (col: number, row: number) => tiles[`${col},${row}`] ?? makeTile('grassland'),
+    });
+    const econ = new EconomicManager(engine);
+
+    const city = makeCity(0, 0, 2); // pop 2 → center + 1 worked tile
+    city.col = 5;
+    city.row = 5;
+    // The player explicitly assigned (6,6); the fish (5,6) is "better" but
+    // must NOT steal the slot away from the manual assignment.
+    city.userAssignedTiles = new Set(['6,6']);
+
+    econ.recomputeCityYields(city);
+
+    expect(city.workingTiles?.has('6,6')).toBe(true);
+    expect(city.workingTiles?.has('5,6')).toBe(false);
+  });
+
   it('assigns an overlapping resource tile to only one city', () => {
     const civ = makeCiv(0);
     const first = makeCity(0, 0, 3, { id: 'first', col: 5, row: 5 });

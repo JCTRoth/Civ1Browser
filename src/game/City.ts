@@ -115,6 +115,7 @@ interface SerializedCity {
     productionProgress: number;
     carriedOverProgress: number;
     workingTiles: string[];
+    userAssignedTiles?: string[];
     founded: number;
     supportedUnitIds: string[];
     hitPoints: number;
@@ -153,6 +154,8 @@ export class City {
     // Working tiles
     public workingTiles: Set<string>;
     public assignedTiles: Map<string, string>;
+    /** Tile keys ("col,row") the player manually assigned — never auto-overridden. */
+    public userAssignedTiles: Set<string>;
 
     // City state
     public founded: number;
@@ -202,6 +205,7 @@ export class City {
         // Working tiles
         this.workingTiles = new Set();
         this.assignedTiles = new Map();
+        this.userAssignedTiles = new Set();
 
         // City state
         this.founded = 0;
@@ -966,13 +970,27 @@ export class City {
         const workableTiles = this.getWorkableTiles(gameMap);
         const maxWorkers = Math.min(this.population, workableTiles.length + 1); // +1 for city center
 
-        // Assign workers to best tiles (prioritize food for growth)
-        for (let i = 0; i < maxWorkers - 1; i++) { // -1 because city center is already assigned
-            if (i < workableTiles.length) {
-                const tile = workableTiles[i];
+        // Re-add manually assigned tiles first so growth never discards them;
+        // the auto-assigner only fills the remaining slots with good tiles.
+        const assigned = new Set<string>([cityCenter]);
+        if (this.userAssignedTiles && this.userAssignedTiles.size > 0) {
+            for (const tile of workableTiles) {
+                if (assigned.size >= maxWorkers) break;
                 const tileKey = `${tile.col},${tile.row}`;
-                this.workingTiles.add(tileKey);
+                if (this.userAssignedTiles.has(tileKey) && !assigned.has(tileKey)) {
+                    this.workingTiles.add(tileKey);
+                    assigned.add(tileKey);
+                }
             }
+        }
+
+        // Auto-fill the remaining worker slots with the best available tiles.
+        for (const tile of workableTiles) {
+            if (assigned.size >= maxWorkers) break;
+            const tileKey = `${tile.col},${tile.row}`;
+            if (assigned.has(tileKey)) continue;
+            this.workingTiles.add(tileKey);
+            assigned.add(tileKey);
         }
     }
 
@@ -1036,6 +1054,7 @@ export class City {
             productionProgress: this.productionProgress,
             carriedOverProgress: this.carriedOverProgress,
             workingTiles: Array.from(this.workingTiles),
+            userAssignedTiles: this.userAssignedTiles.size > 0 ? Array.from(this.userAssignedTiles) : undefined,
             founded: this.founded,
             supportedUnitIds: Array.from(this.supportedUnitIds),
             hitPoints: this.hitPoints
@@ -1054,6 +1073,7 @@ export class City {
         city.productionProgress = data.productionProgress;
         city.carriedOverProgress = data.carriedOverProgress || 0;
         city.workingTiles = new Set(data.workingTiles);
+        city.userAssignedTiles = data.userAssignedTiles ? new Set(data.userAssignedTiles) : new Set();
         city.founded = data.founded;
         city.supportedUnitIds = new Set(data.supportedUnitIds || []);
         city.hitPoints = data.hitPoints || data.population;

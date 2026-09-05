@@ -847,17 +847,23 @@ function App() {
             // Open government / revolution dialog
             actions.showDialog('government');
             break;
-          case 'Escape':
+          case 'Escape': {
             // Cancel action or close menus
             setActiveMenu(null);
             setShowHexDetail(false);
             setShowSettings(false);
-            // Deselect unit and exit GoTo mode
-            if (actions && typeof actions.selectUnit === 'function') {
+            // If a modal/dialog is open, ESC is closing that dialog (its
+            // onHide → hideDialog fires too) — so DON'T also clear the unit or
+            // city selection underneath. Otherwise closing e.g. the city modal
+            // would deselect the city. When no dialog is open, ESC cancels the
+            // current map selection.
+            const dialogOpen = useGameStore.getState().uiState.activeDialog != null;
+            if (!dialogOpen && actions && typeof actions.selectUnit === 'function') {
               actions.selectUnit(null);
             }
             // Add more modal closures as needed
             break;
+          }
           case 'F1':
             // Open help
             actions.showDialog('help');

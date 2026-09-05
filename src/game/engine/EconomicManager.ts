@@ -402,16 +402,38 @@ export class EconomicManager {
     candidates.sort((a, b) => total(b.yields) - total(a.yields));
 
     const pop = Math.max(1, city.population ?? 1);
-    const worked = [
+
+    // The city center is always worked.
+    const chosenKeys = new Set<string>([`${city.col},${city.row}`]);
+    const worked: Array<{ col: number; row: number; yields: { food: number; production: number; trade: number } }> = [
       { col: city.col, row: city.row, yields: centerYields },
-      ...candidates.slice(0, pop - 1),
     ];
+
+    // Manually-assigned tiles are protected: they always stay worked. The
+    // auto-assigner may only FILL the remaining worker slots with good tiles;
+    // it never overrides a tile the player explicitly assigned.
+    const userAssigned = city.userAssignedTiles ?? new Set<string>();
+    for (const cand of candidates) {
+      if (worked.length >= pop) break;
+      const key = `${cand.col},${cand.row}`;
+      if (!userAssigned.has(key) || chosenKeys.has(key)) continue;
+      chosenKeys.add(key);
+      worked.push(cand);
+    }
+
+    // Auto-fill the remaining worker slots with the best tiles not already
+    // chosen (a user-managed city still assigns new/grown citizens well).
+    for (const cand of candidates) {
+      if (worked.length >= pop) break;
+      const key = `${cand.col},${cand.row}`;
+      if (chosenKeys.has(key)) continue;
+      chosenKeys.add(key);
+      worked.push(cand);
+    }
 
     // Keep the actual assignment visible to the city UI/debugger. The economy
     // is authoritative because it is what feeds food, production and trade.
-    city.workingTiles = new Set(worked.map(
-      ({ col, row }) => `${col},${row}`
-    ));
+    city.workingTiles = chosenKeys;
     return worked;
   }
 
@@ -471,6 +493,37 @@ export class EconomicManager {
     const worked = this.cityWorkedTiles(city);
     if (!worked) return;
     const { food, production, trade } = this.computeYieldsFromWorked(city, worked);
+    city.yields = {
+      food,
+      production,
+      trade: Math.max(trade, CITY_CENTER_COMMERCE),
+    };
+    city.scienceBonus = this.buildingBonuses(city).science;
+  }
+
+  /**
+   * Recompute a city's yields from its CURRENT workingTiles WITHOUT
+   * auto-reshuffling them. `recomputeCityYields` re-picks the best tiles,
+   * which would undo a manual pick-up/drop performed this turn. Use this
+   * right after a manual reassign so the player's chosen layout holds for the
+   * rest of the turn (the per-turn recompute still honors userAssignedTiles).
+   */
+  refreshYieldsFromWorkingTiles(city: City): void {
+    if (!city) return;
+    let food = 0;
+    let production = 0;
+    let trade = 0;
+    for (const key of city.workingTiles ?? []) {
+      const sep = key.indexOf(',');
+      if (sep === -1) continue;
+      const col = Number(key.slice(0, sep));
+      const row = Number(key.slice(sep + 1));
+      if (Number.isNaN(col) || Number.isNaN(row)) continue;
+      const y = this.tileYields(this.getTile(col, row));
+      food += y.food;
+      production += y.production;
+      trade += y.trade;
+    }
     city.yields = {
       food,
       production,

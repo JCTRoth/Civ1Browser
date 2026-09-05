@@ -1631,6 +1631,70 @@ export default class GameEngine {
   }
 
   /**
+   * Whether a tile lies in a city's 20-tile Civ1 workable radius (the 5x5
+   * diamond minus the center tile and the four extreme corners).
+   */
+  isTileInCityRadius(city: City, col: number, row: number): boolean {
+    const dc = Math.abs(col - city.col);
+    const dr = Math.abs(row - city.row);
+    if (dc === 0 && dr === 0) return false;   // center tile
+    if (dc > 2 || dr > 2) return false;       // outside the 5x5 diamond
+    if (dc === 2 && dr === 2) return false;   // extreme corners are not workable
+    return true;
+  }
+
+  /**
+   * Manually move a citizen from one worked tile to an available tile inside
+   * the city's radius ("pick up & drop"). The target tile is marked
+   * user-assigned so the auto-assign algorithm never overrides it on the next
+   * population growth. Yields are refreshed immediately for the current turn.
+   * Returns true on success.
+   */
+  reassignCitizen(
+    cityId: string,
+    fromCol: number,
+    fromRow: number,
+    toCol: number,
+    toRow: number,
+  ): boolean {
+    const city = this.cities.find((c: City) => c.id === cityId);
+    if (!city) return false;
+
+    const centerKey = `${city.col},${city.row}`;
+    const fromKey = `${fromCol},${fromRow}`;
+    const toKey = `${toCol},${toRow}`;
+    if (fromKey === centerKey || toKey === centerKey) return false;
+    if (!this.isTileInCityRadius(city, toCol, toRow)) return false;
+    if (!this.squareGrid?.isValidSquare?.(toCol, toRow)) return false;
+
+    const workingTiles = city.workingTiles ?? (city.workingTiles = new Set<string>());
+    if (!workingTiles.has(fromKey)) return false; // must pick up a worked tile
+    if (workingTiles.has(toKey)) return false;    // target must be unworked
+
+    const tile = this.getTileAt(toCol, toRow);
+    if (!tile) return false;
+
+    // Move the citizen: free the origin, work the target.
+    workingTiles.delete(fromKey);
+    workingTiles.add(toKey);
+
+    // Protect the target from auto-assign; drop the origin's protection if it
+    // had been manually assigned.
+    const userAssigned = city.userAssignedTiles ?? (city.userAssignedTiles = new Set<string>());
+    userAssigned.delete(fromKey);
+    userAssigned.add(toKey);
+
+    // Refresh yields from the chosen layout for the rest of this turn.
+    this.economicManager?.refreshYieldsFromWorkingTiles?.(city);
+
+    // Persist the updated city to the store so the UI + map re-render.
+    if (this.storeActions?.updateCities) {
+      this.storeActions.updateCities([...this.cities]);
+    }
+    return true;
+  }
+
+  /**
    * Whether a Caravan is on a valid city tile and can establish a trade route.
    * Requires: a caravan unit, standing on a city, with a home city that differs
    * from the destination.

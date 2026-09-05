@@ -56,6 +56,11 @@ export interface GameState {
   selectedUnit: string | null;
   activeUnit: string | null;
   selectedCity: string | null;
+  // The city the player last opened/selected (e.g. its details modal). Unlike
+  // `selectedCity`, this marker is NOT cleared by transient selection changes
+  // (selecting a unit, clicking a field, right-click, ESC), so the map keeps
+  // the city highlighted until the turn ends or another city is chosen.
+  focusedCity?: string | null;
   activePlayer: number;
   mapGenerated: boolean;
   winner: string | null;
@@ -313,6 +318,9 @@ export interface City {
   processTurn?: (gameMap: MapState, turn: number) => void;
   /** Tile keys (e.g. "col,row") that citizens are currently working. */
   workingTiles?: Set<string>;
+  /** Tile keys (e.g. "col,row") the player manually assigned. The auto-assign
+   *  algorithm never overrides these, so manual assignments survive growth. */
+  userAssignedTiles?: Set<string>;
   /** Items purchased this turn (queued for next turn creation). */
   purchasedThisTurn?: Array<{ type?: string; itemType?: string; name?: string; cost?: number }>;
   /** Whether barbarian scout has been built from this city. */
@@ -411,6 +419,8 @@ export interface UIState {
   notifications: Notification[];
   goToMode: boolean; // When true, next click will set destination for selected unit
   goToUnit: string | null; // Unit id targeted by Go To mode (null when not set)
+  /** Active citizen pick-up origin ({cityId, col, row}) while reassigning. Null when idle. */
+  citizenReassign: { cityId: string; col: number; row: number } | null;
   turnButtonDisabled: boolean;
   currentQueueUnitId: string | null; // Current unit in the turn queue (only this unit pulses)
   turnFlashTrigger: number; // Incremented on each turn start to trigger top-bar flash animation
@@ -619,6 +629,10 @@ export interface GameActions {
   addNotification: (notification: Omit<Notification, 'id'>) => void;
   removeNotification: (id: number) => void;
   setGoToMode: (enabled: boolean, unitId?: string | null) => void;
+  /** Enter citizen pick-up mode (origin tile grabbed) or clear it when null. */
+  setCitizenReassign: (origin: { cityId: string; col: number; row: number } | null) => void;
+  /** Exit citizen pick-up mode (cancels the grab without changing any tile). */
+  endCitizenReassign: () => void;
   setLoading: (isLoading: boolean) => void;
   updateMap: (mapUpdate: Partial<MapState>) => void;
   updateVisibility: () => void;

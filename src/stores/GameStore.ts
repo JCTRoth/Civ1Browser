@@ -35,6 +35,7 @@ const createInitialGameState = (): GameState => ({
   selectedUnit: null,
   activeUnit: null,
   selectedCity: null,
+  focusedCity: null,
   activePlayer: 0,
   mapGenerated: false,
   winner: null,
@@ -72,6 +73,8 @@ const createInitialUIState = (): UIState => ({
   notifications: [],
   goToMode: false,
   goToUnit: '',
+  // Active citizen pick-up ("1 citizen selected for reassignment"). Null when idle.
+  citizenReassign: null,
   turnButtonDisabled: false,
   currentQueueUnitId: null,
   turnFlashTrigger: 0
@@ -195,7 +198,15 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     })),
 
     selectCity: (cityId) => set(state => ({
-      gameState: { ...state.gameState, selectedCity: cityId, selectedUnit: null },
+      // Selecting/deselecting a city updates the transient selection. When a
+      // real city is picked, it also becomes the persistent "focused" city so
+      // the map keeps it marked; deselecting (null) leaves the marker in place.
+      gameState: {
+        ...state.gameState,
+        selectedCity: cityId,
+        selectedUnit: null,
+        focusedCity: cityId ?? state.gameState.focusedCity ?? null
+      },
       uiState: { ...state.uiState, showCityPanel: !!cityId, showUnitPanel: false }
     })),
 
@@ -240,6 +251,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
           currentYear: nextYear,
           selectedUnit: null,
           selectedCity: null,
+          focusedCity: null,
           selectedHex: null
         },
         uiState: {
@@ -707,6 +719,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
         goToMode: !!enabled,
         goToUnit: enabled ? (unitId || state.gameState.selectedUnit || '') : ''
       }
+    })),
+    // Enter/exit citizen pick-up mode. Stores the origin tile being picked up
+    // so the map renderer + side panel can reflect the "grabbed" citizen.
+    setCitizenReassign: (origin: { cityId: string; col: number; row: number } | null) => set(state => ({
+      uiState: { ...state.uiState, citizenReassign: origin }
+    })),
+    endCitizenReassign: () => set(state => ({
+      uiState: { ...state.uiState, citizenReassign: null }
     })),
 
     setGameResult: (result: GameResult | null) => set(state => ({

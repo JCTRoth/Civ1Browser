@@ -134,6 +134,8 @@ export interface RenderFrameParams {
   camera: CameraState;
   /** Currently selected hex coordinates */
   selectedHex: { col: number; row: number } | null;
+  /** Active citizen pick-up origin (cityId + tile) while reassigning a worker. */
+  citizenReassign?: { cityId: string; col: number; row: number } | null;
   /** Current game state */
   gameState: GameState;
   /** Array of all units in the game */
@@ -176,6 +178,8 @@ export interface RenderStaticFrameParams {
   camera: CameraState;
   /** Currently selected hex coordinates */
   selectedHex: { col: number; row: number } | null;
+  /** Active citizen pick-up origin (cityId + tile) while reassigning a worker. */
+  citizenReassign?: { cityId: string; col: number; row: number } | null;
   /** Current game state */
   gameState: GameState;
   /** Array of all units in the game */
@@ -278,6 +282,8 @@ interface DynamicContentParams {
   canvasSize: CanvasSize;
   /** Currently selected hex coordinates */
   selectedHex: { col: number; row: number } | null;
+  /** Active citizen pick-up origin (cityId + tile) while reassigning a worker. */
+  citizenReassign?: { cityId: string; col: number; row: number } | null;
   /** Current game state */
   gameState: GameState;
   /** Array of all units in the game */
@@ -583,6 +589,7 @@ export class MapRenderer {
       bounds,
       canvasSize,
       selectedHex,
+      citizenReassign: params.citizenReassign,
       gameState,
       units,
       cities,
@@ -649,6 +656,7 @@ export class MapRenderer {
       bounds,
       canvasSize,
       selectedHex,
+      citizenReassign: params.citizenReassign,
       gameState,
       units,
       cities,
@@ -940,6 +948,7 @@ export class MapRenderer {
       bounds,
       canvasSize,
       selectedHex,
+      citizenReassign,
       gameState,
       units,
       cities,
@@ -971,8 +980,12 @@ export class MapRenderer {
     // Build a set of "blocked by another city" keys for fast lookup.
     // A tile is blocked when it falls inside a *different* city's radius.
     const blockedByOtherCity = new Set<string>();
-    const selectedCity = gameState.selectedCity
-      ? cities.find(city => city.id === gameState.selectedCity)
+    // Highlight the transiently selected city, falling back to the persistent
+    // "focused" city (last opened/selected) so the net stays visible after the
+    // city modal is closed or after selecting a unit / field / ESC.
+    const radiusCityId = gameState.selectedCity ?? gameState.focusedCity ?? null;
+    const selectedCity = radiusCityId
+      ? cities.find(city => city.id === radiusCityId)
       : null;
 
     if (selectedCity) {
@@ -1021,6 +1034,18 @@ export class MapRenderer {
 
       // ── Layer 2: selected city radius (full diamond) ──
       const workedTiles = selectedCity.workingTiles;
+      // While reassigning, remember the origin tile (the citizen being carried)
+      // so it can be dimmed/pulsed, and treat the other unworked radius tiles as
+      // bright "available drop" targets.
+      const isHolding =
+        !!citizenReassign &&
+        citizenReassign.cityId === selectedCity.id &&
+        (citizenReassign.col !== selectedCity.col || citizenReassign.row !== selectedCity.row);
+      const originKey = isHolding && citizenReassign
+        ? `${citizenReassign.col},${citizenReassign.row}`
+        : null;
+      const pulse = 0.5 + 0.5 * Math.sin(currentTime / 180);
+
       for (let dCol = -2; dCol <= 2; dCol++) {
         for (let dRow = -2; dRow <= 2; dRow++) {
           if (dCol === 0 && dRow === 0) continue;
@@ -1037,8 +1062,19 @@ export class MapRenderer {
           const half = scaledTileSize / 2;
           const tileKey = `${col},${row}`;
           const isWorked = workedTiles?.has(tileKey) ?? false;
+          const isOrigin = isHolding && originKey === tileKey;
 
-          if (isWorked) {
+          if (isOrigin) {
+            // Origin tile being carried — dimmed + pulsing dashed green so the
+            // player remembers where the citizen came from (still worked).
+            ctx.fillStyle = 'rgba(50, 200, 80, 0.10)';
+            ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+            ctx.strokeStyle = `rgba(50, 200, 80, ${0.45 + 0.5 * pulse})`;
+            ctx.lineWidth = Math.max(2, cameraZoom * 1.5);
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
+            ctx.setLineDash([]);
+          } else if (isWorked) {
             // Actively worked tile — strong green tint
             ctx.fillStyle = 'rgba(50, 200, 80, 0.28)';
             ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
@@ -1048,6 +1084,13 @@ export class MapRenderer {
           } else if (blockedByOtherCity.has(tileKey)) {
             // Already drawn as red blocked — skip yellow overlay
             // (red layer was drawn first)
+          } else if (isHolding) {
+            // Available drop target while carrying a citizen — brighter gold
+            ctx.fillStyle = 'rgba(255, 214, 0, 0.20)';
+            ctx.fillRect(x - half, y - half, scaledTileSize, scaledTileSize);
+            ctx.strokeStyle = 'rgba(255, 214, 0, 0.95)';
+            ctx.lineWidth = Math.max(1.5, cameraZoom);
+            ctx.strokeRect(x - half, y - half, scaledTileSize, scaledTileSize);
           } else {
             // Unworked radius tile — subtle gold
             ctx.fillStyle = 'rgba(255, 214, 0, 0.12)';
@@ -1189,7 +1232,7 @@ export class MapRenderer {
           if (shouldDrawUnit) {
             // Killed units (marked isDefeated) are never drawn again — the
             // combat animation replaces the old "black X" death marker.
-            if ((unit as any).isDefeated) {
+            if ((unit as Unit).isDefeated) {
               continue;
             }
 
@@ -1743,7 +1786,7 @@ export class MapRenderer {
       }
     }
 
-    if ((unit as any).isSleeping) {
+    if ((unit as Unit).isSleeping) {
       const sleepIcon = '💤';
       const sleepFontSize = Math.max(8, Math.round(innerRadius * 0.7));
       ctx.font = `${sleepFontSize}px monospace`;
@@ -1908,7 +1951,7 @@ export class MapRenderer {
       }
     }
 
-    if ((unit as any).isSleeping) {
+    if ((unit as Unit).isSleeping) {
       const sleepIcon = '💤';
       const sleepFontSize = Math.max(8, Math.round(innerRadius * 0.7));
       ctx.font = `${sleepFontSize}px monospace`;
@@ -1965,7 +2008,7 @@ export class MapRenderer {
 
     // Draw black X on defeated units (blinks with the unit during combat
     // animation; invisible once the unit is hidden after the death blink).
-    if ((unit as any).isDefeated) {
+    if ((unit as Unit).isDefeated) {
       ctx.save();
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 4;

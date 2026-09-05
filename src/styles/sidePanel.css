@@ -397,3 +397,34 @@
 .side-panel-research-btn:hover {
   background: #3182ce;
 }
+
+/* Citizen reassignment banner (pick-up & drop) */
+.citizen-reassign-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 8px 10px;
+  padding: 10px 12px;
+  background: rgba(240, 195, 60, 0.12);
+  border: 1px solid var(--color-accent, #f0c33c);
+  border-radius: var(--radius-md, 10px);
+  color: var(--color-text, #e8eef3);
+}
+
+.citizen-reassign-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.citizen-reassign-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-accent-strong, #ffd75e);
+}
+
+.citizen-reassign-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary, #ffffff);
+  margin-top: 2px;
+}
