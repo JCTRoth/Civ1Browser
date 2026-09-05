@@ -7,17 +7,18 @@
   padding: 1rem;
   padding-top: calc(1rem + var(--safe-top, 0px));
   padding-bottom: calc(1rem + var(--safe-bottom, 0px));
-  background: rgba(10, 10, 15, 0.85);
+  background: rgba(10, 10, 15, 0.45);
   backdrop-filter: blur(6px);
   z-index: var(--z-overlay, 5000);
   color: #f8f9fa;
   font-family: 'Orbitron', 'Segoe UI', sans-serif;
 }
 
-/* Victory: darker, more opaque backdrop for dramatic effect */
+/* Victory: transparent backdrop so the game board stays visible behind the
+   result panel (confetti/fireworks render above the board). */
 .game-result-overlay.victory {
-  background: rgba(5, 5, 10, 0.92);
-  backdrop-filter: blur(8px);
+  background: transparent;
+  backdrop-filter: none;
 }
 
 /* Confetti canvas rendered by canvas-confetti sits above the overlay

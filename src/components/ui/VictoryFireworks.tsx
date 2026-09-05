@@ -28,26 +28,27 @@ export default function VictoryFireworks({ show }: { show: boolean }) {
           // Alternate burst styles for variety.
           const burst = Math.random();
           if (burst < 0.35) {
-            // Gold burst from the left.
+            // Burst from the left.
             confetti({
               particleCount: 140,
               spread: 90,
               angle: 50,
               origin: { x: 0.15, y: 0.35 },
-              colors: ['#ffd700', '#ffffff', '#ff4500'],
-              gravity: 0.9,
+              colors: ['#FFE066', '#F7D417', '#ffdf51'], // Goldene und gelbe Töne
               scalar: 1.2,
+              shapes: ['star']
             });
           } else if (burst < 0.7) {
-            // Silver burst from the right.
+            // Burst from the right.
             confetti({
               particleCount: 120,
               spread: 100,
               angle: 130,
               origin: { x: 0.85, y: 0.35 },
-              colors: ['#c0c0c0', '#ffffff', '#87ceeb'],
+              colors: ['#ffdd00', 'rgb(238, 255, 0)', '#ffdd00'],
               gravity: 0.85,
               scalar: 1.1,
+              shapes: ['star']
             });
           } else {
             // Centre rain.
@@ -56,10 +57,11 @@ export default function VictoryFireworks({ show }: { show: boolean }) {
               spread: 160,
               angle: 90,
               origin: { x: 0.5, y: 0.1 },
-              colors: ['#ffd700', '#ffffff', '#ff4500', '#87ceeb'],
+              colors: ['#ffe554e9', '#f6ff00', '#ffe600', '#f6fe00'],
               gravity: 1.1,
               scalar: 1.3,
               drift: (Math.random() - 0.5) * 2,
+              shapes: ['star']
             });
           }
 

@@ -1,7 +1,7 @@
 /* ConfirmDialog styles */
 
 .confirm-dialog .modal-content {
-  background: var(--color-bg-elevated, #16202a);
+  background: var(--color-bg-elevated, #16202a, --transparent 0.4);
   color: var(--color-text, #e8eef3);
   border: 1px solid var(--color-border-strong, #3d5163);
   border-radius: var(--radius-lg, 16px);
