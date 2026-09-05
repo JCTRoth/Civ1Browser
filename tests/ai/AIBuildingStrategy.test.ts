@@ -151,6 +151,50 @@ describe('AIBuildingStrategy.evaluateBuildings', () => {
     // Very-late-game bank is worth ~20 more than the early-era one.
     expect(lateBank!.priority).toBeGreaterThan(earlyBank!.priority);
   });
+
+  it('prioritizes a temple when a safe city is unhappy', () => {
+    // Unhappy: unhappiness (3) outweighs happiness (1), but NOT under threat.
+    const city = makeCity({
+      population: 5,
+      happiness: 1,
+      unhappiness: 3,
+      disorder: false,
+    });
+    const civ = makeCiv({ technologies: ['pottery', 'masonry', 'ceremonial_burial'] });
+    const happyCityPlans = AIBuildingStrategy.evaluateBuildings(
+      makeCity({ population: 5 }),
+      civ, 'balanced_growth', baseBuildingGameState()
+    );
+    const unhappyCityPlans = AIBuildingStrategy.evaluateBuildings(
+      city, civ, 'balanced_growth', baseBuildingGameState()
+    );
+    const happyTemple = happyCityPlans.find(p => p.buildingType === 'temple');
+    const unhappyTemple = unhappyCityPlans.find(p => p.buildingType === 'temple');
+    expect(unhappyTemple).toBeDefined();
+    expect(happyTemple).toBeDefined();
+    // A temple for an unhappy, safe city scores meaningfully higher.
+    expect(unhappyTemple!.priority).toBeGreaterThan(happyTemple!.priority + 15);
+    expect(unhappyTemple!.reason).toContain('city-unhappy');
+  });
+
+  it('does NOT prioritize a temple for an unhappy city under threat (defense wins)', () => {
+    const civ = makeCiv({ technologies: ['pottery', 'masonry', 'ceremonial_burial'] });
+    const unsafe = AIBuildingStrategy.evaluateBuildings(
+      makeCity({ population: 5, happiness: 1, unhappiness: 3, disorder: false }),
+      civ, 'balanced_growth', baseBuildingGameState({ isUnderThreat: true })
+    );
+    const safe = AIBuildingStrategy.evaluateBuildings(
+      makeCity({ population: 5, happiness: 1, unhappiness: 3, disorder: false }),
+      civ, 'balanced_growth', baseBuildingGameState({ isUnderThreat: false })
+    );
+    const unsafeTemple = unsafe.find(p => p.buildingType === 'temple');
+    const safeTemple = safe.find(p => p.buildingType === 'temple');
+    expect(unsafeTemple).toBeDefined();
+    expect(safeTemple).toBeDefined();
+    // Same unhappy city: the safe one scores higher for temple; the threatened
+    // one keeps temple low so city_walls/defenders win the decision.
+    expect(safeTemple!.priority).toBeGreaterThan(unsafeTemple!.priority);
+  });
 });
 
 describe('AIBuildingStrategy.evaluateWonders', () => {

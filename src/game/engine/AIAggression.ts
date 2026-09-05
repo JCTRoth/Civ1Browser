@@ -9,6 +9,7 @@
  * choice is a weighted coin-flip, so games don't all play out identically.
  */
 
+import { TERRAIN_PROPERTIES } from '../../data/TerrainConstants';
 import type { City } from '../../../types/game';
 import type GameEngine from './GameEngine';
 
@@ -114,7 +115,7 @@ export function computeAggression(
   let score = 0;
 
   // Personality baseline: aggressive civs lean aggressive.
-  score += input.personalityAggression * 5;
+  score += input.personalityAggression * 6;
   reasons.push(`aggression ${input.personalityAggression}/10`);
 
   // Cities secured: a civ that has to defend everywhere cannot push.
@@ -141,10 +142,10 @@ export function computeAggression(
     score += 15;
     reasons.push('army advantage');
   } else if (ratio >= 1.25) {
-    score += 8;
+    score += 11;
     reasons.push('slight army edge');
   } else if (ratio <= 0.5) {
-    score -= 50;
+    score -= 20;
     reasons.push('severely outmatched');
   } else if (ratio <= 0.75) {
     score -= 30;
@@ -201,7 +202,7 @@ export function computeAggression(
 // Strength estimation
 // ---------------------------------------------------------------------------
 
-/** Estimate the defensive strength of an enemy city: garrison + walls + pop. */
+/** Estimate the defensive strength of an enemy city: garrison + walls + pop + terrain. */
 export function estimateCityDefense(engine: GameEngine, city: City): number {
   let defense = Math.max(1, city.population ?? 1);
   const hasWalls =
@@ -218,6 +219,14 @@ export function estimateCityDefense(engine: GameEngine, city: City): number {
       }
     }
   }
+
+  // Terrain under the city boosts its defensibility: a city on hills, forest,
+  // river or mountains is far harder to assault than one on open plains.
+  const tile = engine?.getTileAt?.(city.col, city.row) as { type?: string } | null | undefined;
+  if (tile?.type) {
+    defense *= TERRAIN_PROPERTIES[tile.type]?.defense ?? 1;
+  }
+
   return defense;
 }
 

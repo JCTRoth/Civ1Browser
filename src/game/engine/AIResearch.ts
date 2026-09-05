@@ -45,12 +45,12 @@ interface GameStateSnapshot {
 
 const STRATEGY_CATEGORY_WEIGHTS: Record<StrategyProfile, Partial<Record<TechCategory, number>>> = {
   military_expansion: {
-    military: 3.0,
+    military: 2.8,
     economy: 1.0,
     science: 0.8,
     culture: 0.3,
     expansion: 1.2,
-    infrastructure: 0.8,
+    infrastructure: 0.9,
     government: 1.2,
   },
   science_focus: {
@@ -105,10 +105,10 @@ const STRATEGY_CATEGORY_WEIGHTS: Record<StrategyProfile, Partial<Record<TechCate
 // ---------------------------------------------------------------------------
 
 const STRATEGY_GOAL_TECHS: Record<StrategyProfile, string[]> = {
-  military_expansion: ['iron_working', 'horseback_riding', 'gunpowder', 'metallurgy', 'combustion'],
-  science_focus: ['writing', 'literacy', 'university', 'science_theory', 'computers', 'space_flight'],
-  balanced_growth: ['pottery', 'alphabet', 'bronze_working', 'currency', 'construction', 'republic'],
-  defensive_turtle: ['bronze_working', 'masonry', 'construction', 'gunpowder', 'monarchy'],
+  military_expansion: ['iron_working', 'horseback_riding', 'ceremonial_burial', 'gunpowder', 'metallurgy', 'combustion'],
+  science_focus: ['writing', 'literacy', 'ceremonial_burial', 'university', 'science_theory', 'computers', 'space_flight'],
+  balanced_growth: ['pottery', 'alphabet', 'ceremonial_burial','bronze_working', 'currency', 'construction', 'republic'],
+  defensive_turtle: ['bronze_working', 'ceremonial_burial', 'masonry', 'construction', 'gunpowder', 'monarchy'],
   wonder_rush: ['masonry', 'ceremonial_burial', 'writing', 'philosophy', 'astronomy'],
   early_expansion: ['pottery', 'alphabet', 'the_wheel', 'horseback_riding', 'code_of_laws'],
 };

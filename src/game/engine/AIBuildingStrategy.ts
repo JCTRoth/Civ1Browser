@@ -17,6 +17,27 @@ import {
 import type { City, Civilization } from '../../../types/game';
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a city is unhappy — it has unhappy citizens it can no longer (or
+ * barely) keep content, or it has already tipped into disorder. This mirrors
+ * EconomicManager's disorder/borderline check (`unhappiness >= happiness`).
+ * A temple's +1 happiness is the direct, cheapest fix for such a city.
+ *
+ * NOTE: `city.happiness` may historically be an object `{happy, content,
+ * unhappy}` on some legacy paths, so we only treat numeric values as points;
+ * otherwise we fall back to the disorder flag alone.
+ */
+function isCityUnhappy(city: City): boolean {
+  if (city.disorder === true) return true;
+  const unhappy = typeof city.unhappiness === 'number' ? city.unhappiness : 0;
+  const happy = typeof city.happiness === 'number' ? city.happiness : 0;
+  return unhappy > 0 && unhappy >= happy;
+}
+
+// ---------------------------------------------------------------------------
 // Building priority weights per strategy
 // ---------------------------------------------------------------------------
 
@@ -144,6 +165,19 @@ export class AIBuildingStrategy {
       case 'temple':
         priority += 10;
         if (city.population >= 4) { priority += 5; reasons.push('happiness-need'); }
+        // An unhappy city is losing shields and commerce (it drifts toward
+        // disorder, which zeroes output), so a temple's +1 happiness is a
+        // strong, direct fix. We only reach for it once the city is safe:
+        // under an active threat the garrison / walls must be built first —
+        // defense is the precondition for spending shields on comfort.
+        if (isCityUnhappy(city)) {
+          if (!gameState.isUnderThreat) {
+            priority += 25;
+            reasons.push('city-unhappy');
+          } else {
+            reasons.push('unhappy-but-threatened');
+          }
+        }
         priority += personality.diplomacy * 0.3;
         reasons.push('happiness');
         break;

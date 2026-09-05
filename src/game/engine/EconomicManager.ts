@@ -98,7 +98,7 @@ export const CITY_CENTER_MIN = { food: 2, production: 1, trade: 1 };
  */
 export const AI_SCIENCE_FLOOR = 20;
 /** Absolute floor the AI never drops tax below while commerce exists. */
-export const AI_MIN_TAX = 10;
+export const AI_MIN_TAX = 35;
 /**
  * Turns of upkeep the AI keeps as a treasury reserve (cushion), per strategy.
  * Military / defensive civs hold a bigger war chest; science / wonder civs
