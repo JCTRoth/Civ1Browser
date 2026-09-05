@@ -4,7 +4,6 @@ import { CIVILIZATIONS } from '@/data/GameData';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { TERRAIN_PROPERTIES } from '@/data/TerrainConstants';
 import MiniMap from './MiniMap';
-import { getTechIcon } from '@/data/TechnologyIcons';
 import '../../styles/sidePanel.css';
 import type { City, Civilization } from '../../../types/game';
 import GameEngine from '@/game/engine/GameEngine';
@@ -35,9 +34,6 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
   const selectedHex = useGameStore((s) => s.gameState.selectedHex);
   const map = useGameStore((s) => s.map);
   const settings = useGameStore((s) => s.settings);
-  const technologies = useGameStore((s) => s.technologies);
-  const researchPath = useGameStore((s) => s.researchPath);
-  const techProgress = useGameStore((s) => s.techProgress);
 
   const playerUnits = useMemo(
     () => (currentPlayer ? units.filter((u) => u.civilizationId === currentPlayer.id) : []),
@@ -124,69 +120,6 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
 
   // Find the static civilization data to get the icon
   const staticCiv = CIVILIZATIONS.find(civ => civ.name === displayPlayer.name);
-
-  // Research status for the human player: current tech + progress, the next
-  // tech in the selected path, and whether all techs are already researched.
-  const researchInfo = (() => {
-    const civ = (civilizations && civilizations[0]) || null;
-    const techs = technologies && technologies.length > 0 ? technologies : [];
-    const allResearched = techs.length > 0 && techs.every((t) => t.researched);
-    const current = civ?.currentResearch;
-    const currentId = current
-      ? (typeof current === 'object' ? (current as { id?: string }).id : current)
-      : null;
-    const currentTech = currentId ? techs.find((t) => t.id === currentId) : null;
-    const currentProgress = civ?.researchProgress ?? 0;
-    // Effective (map/difficulty/tech-count scaled) cost for the current tech —
-    // the value research actually completes at.
-    let effectiveCost: number | null = null;
-    if (currentTech && gameEngine?.researchManager) {
-      const engineCiv = gameEngine.civilizations?.[0] ?? civ;
-      if (engineCiv) effectiveCost = gameEngine.researchManager.effectiveTechCost(engineCiv, currentTech);
-    }
-    const nextInPathId = researchPath.find((id) => {
-      const t = techs.find((x) => x.id === id);
-      return t && t.available && !t.researched;
-    }) ?? null;
-    const nextInPath = nextInPathId ? techs.find((t) => t.id === nextInPathId) : null;
-    return { currentTech, currentProgress, nextInPath, allResearched, effectiveCost };
-  })();
-
-  /**
-   * Live "research time" estimate for the current tech, computed from the
-   * Civ I research model. Uses the per-turn science at the CURRENT rates
-   * (EconomicManager.cityOutputs preview), so changing the Science Rate in
-   * the rates modal immediately updates the estimated turns remaining.
-   */
-  const researchTurns = (() => {
-    if (!gameEngine?.researchManager || !researchInfo.currentTech) return null;
-    const civ = gameEngine.civilizations?.[0] ?? ((civilizations && civilizations[0]) || null);
-    if (!civ) return null;
-    const econ = gameEngine.economicManager as
-      { cityOutputs?: (city: unknown, civ: unknown) => { science: number } } | undefined;
-    const cities = (gameEngine.cities ?? []).filter((c) => c.civilizationId === civ.id);
-    const perTurnScience = cities.reduce((sum: number, c) => {
-      if (econ && typeof econ.cityOutputs === 'function') {
-        return sum + econ.cityOutputs(c, civ).science;
-      }
-      return sum + ((c as { science?: number }).science ?? 0);
-    }, 0);
-    const turns = gameEngine.researchManager.estimatedTurns(civ, researchInfo.currentTech, perTurnScience);
-    return turns > 0 ? turns : null;
-  })();
-
-  const handleContinueResearch = () => {
-    if (!gameEngine) return;
-    const civ = (civilizations && civilizations[0]) || null;
-    const nextId = researchPath.find((id) => {
-      const t = technologies.find((x) => x.id === id);
-      return t && t.available && !t.researched;
-    });
-    if (nextId && civ) {
-      gameEngine.setResearch(civ.id, nextId, techProgress[nextId] ?? 0);
-      actions.updateCivilizations([...(gameEngine.civilizations || [])]);
-    }
-  };
 
   // Detect multi-codepoint icons (e.g. two emoji characters) and adjust avatar sizing
   const civIcon = staticCiv?.icon ?? '🏛️';
@@ -292,67 +225,6 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
               </label>
             </div>
           </div>
-        </div>
-
-        {/* Research */}
-        <div className="side-panel-research">
-          <div className="side-panel-research-title">🔬 Research</div>
-          {researchInfo.currentTech ? (
-            <>
-              <div className="side-panel-research-line">
-                {getTechIcon(researchInfo.currentTech.id)} {researchInfo.currentTech.name}
-                <span className="side-panel-research-progress">
-                  {researchInfo.currentProgress}/{researchInfo.effectiveCost ?? researchInfo.currentTech.cost ?? 0}
-                </span>
-              </div>
-              <div className="side-panel-research-bar">
-                <div
-                  className="side-panel-research-bar-fill"
-                  style={{ width: `${Math.min(100, (researchInfo.currentProgress / (researchInfo.effectiveCost ?? researchInfo.currentTech.cost ?? 1)) * 100)}%` }}
-                />
-              </div>
-              {researchTurns != null && (
-                <div className="side-panel-research-eta">
-                  ~{researchTurns} {researchTurns === 1 ? 'turn' : 'turns'} to complete
-                </div>
-              )}
-              <button
-                type="button"
-                className="side-panel-research-btn"
-                onClick={() => actions.showDialog('tech')}
-              >
-                Tech 
-              </button>
-            </>
-          ) : researchInfo.nextInPath ? (
-            <>
-              <div className="side-panel-research-line">
-                Next: {getTechIcon(researchInfo.nextInPath.id)} {researchInfo.nextInPath.name}
-              </div>
-              <button
-                type="button"
-                className="side-panel-research-btn"
-                onClick={handleContinueResearch}
-              >
-                Continue Researching
-              </button>
-            </>
-          ) : researchInfo.allResearched ? (
-            <div className="side-panel-research-line">All technologies researched. 🏆</div>
-          ) : (
-            <>
-              <div className="side-panel-research-line">
-                No research selected. Choose a technology path to keep advancing.
-              </div>
-              <button
-                type="button"
-                className="side-panel-research-btn"
-                onClick={() => actions.showDialog('tech')}
-              >
-                Choose Research Path
-              </button>
-            </>
-          )}
         </div>
 
         {/* Selection */}

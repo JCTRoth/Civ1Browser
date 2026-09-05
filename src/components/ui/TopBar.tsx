@@ -1,5 +1,7 @@
 import React from 'react';
 import type { GameMenuName } from './GameMenuSheet';
+import type GameEngine from '@/game/engine/GameEngine';
+import ResearchIndicator from './ResearchIndicator';
 
 interface TopBarProps {
   activeMenu: GameMenuName | null;
@@ -9,6 +11,7 @@ interface TopBarProps {
   onEndTurn: () => void;
   endTurnDisabled?: boolean;
   topBarRef?: React.Ref<HTMLDivElement>;
+  gameEngine?: GameEngine | null;
 }
 
 const MENU_ITEMS: GameMenuName[] = ['GAME', 'WORLD', 'INFO'];
@@ -25,9 +28,10 @@ const TopBar: React.FC<TopBarProps> = ({
   onEndTurn,
   endTurnDisabled = false,
   topBarRef,
+  gameEngine,
 }) => (
   <div ref={topBarRef} className="game-top-bar" role="banner">
-    <div className="d-flex align-items-center gap-1">
+    <div className="d-flex align-items-center gap-1 topbar-menus">
       {MENU_ITEMS.map((item) => (
         <button
           key={item}
@@ -42,12 +46,15 @@ const TopBar: React.FC<TopBarProps> = ({
       ))}
     </div>
 
-    <div className="d-flex align-items-center gap-2 topbar-turn ms-auto">
-      <span className="topbar-turn">
-        Turn <strong>{currentTurn}</strong>
-      </span>
-      <span className="text-muted-ui" aria-hidden="true">•</span>
-      <span className="topbar-turn">{currentYear}</span>
+    <div className="topbar-center">
+      <div className="d-flex align-items-center gap-2 topbar-turn">
+        <span>
+          Turn <strong>{currentTurn}</strong>
+        </span>
+        <span className="text-muted-ui" aria-hidden="true">•</span>
+        <span>{currentYear}</span>
+      </div>
+      <ResearchIndicator gameEngine={gameEngine} />
     </div>
 
     <button

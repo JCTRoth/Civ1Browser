@@ -145,7 +145,9 @@ export function computeAggression(
     score += 11;
     reasons.push('slight army edge');
   } else if (ratio <= 0.5) {
-    score -= 20;
+    // Severely outmatched — the largest penalty. (Checked before the milder
+    // band so a lopsided deficit crushes aggression harder than a mild one.)
+    score -= 50;
     reasons.push('severely outmatched');
   } else if (ratio <= 0.75) {
     score -= 30;

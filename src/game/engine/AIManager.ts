@@ -2609,6 +2609,19 @@ export class AIManager {
     const threatened = this.findDefensiveAssignment(unit, storage, roundNumber);
     if (threatened) return threatened;
 
+    // A spare defender guards its home city while the rest of the force pushes.
+    // Only park a reserve at home when a real offensive force exists (>=3 other
+    // combat units) — a lone defender must stay mobile (probe/picket) or the
+    // civ is trapped at home and never makes contact (see oscillation notes).
+    const ownCombat = this.gameEngine.units.filter(
+      (u: Unit) => u.civilizationId === unit.civilizationId && this.isCombatUnit(u),
+    );
+    const reserveIds = this.getCityDefenseReserveIds(unit.civilizationId, ownCombat);
+    const nonReserveCount = ownCombat.filter((u: Unit) => !reserveIds.has(u.id)).length;
+    if (nonReserveCount >= 3) {
+      return { col: city.col, row: city.row };
+    }
+
     return null;
   }
 

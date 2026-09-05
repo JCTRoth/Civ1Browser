@@ -1005,6 +1005,7 @@ function App() {
         currentYear={GameUtils.formatYear(gameState.currentYear ?? -4000)}
         onEndTurn={handleEndTurnRequest}
         endTurnDisabled={uiState.turnButtonDisabled}
+        gameEngine={gameEngine}
       />
 
       {/* Main Game Area */}

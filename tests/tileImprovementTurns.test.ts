@@ -204,7 +204,11 @@ describe('Civ1 tile improvement construction', () => {
         && !e.getCityAt(candidate.col, candidate.row);
     });
     if (!target) return; // no adjacent land — skip
-    settler.movesRemaining = 1;
+    // A working settler normally has no moves, but to actually leave the tile
+    // it needs enough movement points to afford the (map-dependent) terrain
+    // cost of the adjacent tile — grant a generous amount so the move always
+    // succeeds regardless of which land tile the generated map puts next door.
+    settler.movesRemaining = 10;
     expect(e.moveUnit(settler.id, target.col, target.row).success).toBe(true);
 
     expect(settler.workTarget).toBeNull();
