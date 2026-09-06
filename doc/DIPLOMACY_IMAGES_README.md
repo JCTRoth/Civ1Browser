@@ -87,7 +87,8 @@ public/
 ### File: `leaders/lincoln.png`
 **Leader:** Abraham Lincoln — Americans
 
-> **Prompt:** Pixel art portrait of Abraham Lincoln, shoulders-up bust view, dark navy suit with gold pocket chain, tall black top hat, short dark beard, serious but kind expression, warm skin tone, olive-green eyes, dark wood-paneled office background, 16-bit retro game style, 240x312 pixels, no text
+> **Prompt:** PHere’s the revised prompt for **Abraham Lincoln** in the same pixel art style:
+Pixel art portrait of Abraham Lincoln, 64x64 resolution, 16-color EGA palette, 1991 MS-DOS game aesthetic, dithered shading, tall black stovepipe hat, sharp angular face, clean-shaven chin, deep-set eyes, prominent nose, formal black suit with white shirt and thin black tie, pale complexion, thin lips, solemn expression, 19th-century American president, black background, no anti-aliasing, crisp 1-pixel outlines, Sid Meier's Civilization 1 leader screen style, retro strategy game UI, visible pixel grid, limited color count.
 
 ---
 
