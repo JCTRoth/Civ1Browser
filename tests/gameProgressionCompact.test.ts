@@ -256,9 +256,9 @@ describe('buildCompactCsv (strongly reduced export)', () => {
   });
 
   afterEach(() => {
-    (engine as any).units = [];
-    (engine as any).cities = [];
-    (engine as any).civilizations = [];
+    (engine as GameEngine).units = [];
+    (engine as GameEngine).cities = [];
+    (engine as GameEngine).civilizations = [];
     gameProgression.reset();
   });
 

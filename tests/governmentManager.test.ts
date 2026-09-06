@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { GovernmentManager, ANARCHY_TURNS } from '../src/game/engine/GovernmentManager';
+import { Civilization } from '../types/game';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeEngine(overrides: any = {}): any {
@@ -88,7 +89,7 @@ describe('GovernmentManager.startRevolution / processTurn', () => {
       economicManager: {
         setGovernment: (id: number, gov: string) => {
           setGovernmentCalls.push(gov);
-          const target = engine.civilizations.find((c: any) => c.id === id);
+          const target = engine.civilizations.find((c: Civilization) => c.id === id);
           if (target) target.government = gov;
         },
       },
