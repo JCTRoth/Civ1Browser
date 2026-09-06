@@ -79,14 +79,6 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
           {/* Unit Actions */}
           {contextMenu.unit && (
             <>
-              <button
-                type="button"
-                className="context-menu-item"
-                onClick={() => handleAction('sleep')}
-              >
-                <span aria-hidden="true">{contextMenu.unit.isSleeping ? '🌅' : '😴'}</span>
-                {contextMenu.unit.isSleeping ? 'Wake Up' : 'Sleep'}
-              </button>
 
               {(contextMenu.unit.type === 'warriors' || contextMenu.unit.type === 'archer' || contextMenu.unit.type === 'chariot') && (
                 <button
@@ -202,8 +194,6 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
                 </>
               )}
 
-              <div className="context-menu-label">ORDERS</div>
-
               <button
                 type="button"
                 className="context-menu-item"
@@ -237,6 +227,27 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
               >
                 <span aria-hidden="true">⏭️</span>Skip Turn
               </button>
+
+              {/* Disband: remove the unit from the game entirely. Costs the
+                  unit's maintenance for one turn but frees the ongoing upkeep
+                  permanently.  Only shown for non-NONE units. */}
+              {contextMenu.unit && !contextMenu.unit.isNoneUnit && (
+                <button
+                  type="button"
+                  className="context-menu-item context-menu-item--danger"
+                  onClick={() => handleAction('disband_unit')}
+                >
+                  <span aria-hidden="true">🗑️</span>Disband
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="context-menu-item"
+                onClick={() => handleAction('sleep')}>
+                <span aria-hidden="true">{contextMenu.unit.isSleeping ? '🌅' : '😴'}</span>
+                {contextMenu.unit.isSleeping ? 'Wake Up' : 'Sleep'}
+              </button>
             </>
           )}
 
@@ -259,23 +270,6 @@ const UnitActionsModal: React.FC<UnitActionsModalProps> = ({
               </button>
             </>
           )}
-
-          <div className="context-menu-label">GENERAL</div>
-
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => handleAction('centerView')}
-          >
-            <span aria-hidden="true">📍</span>Center View
-          </button>
-          <button
-            type="button"
-            className="context-menu-item"
-            onClick={() => handleAction('examineHex')}
-          >
-            <span aria-hidden="true">🔍</span>Examine
-          </button>
         </div>
       </div>
     </>

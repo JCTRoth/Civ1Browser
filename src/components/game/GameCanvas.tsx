@@ -1766,6 +1766,27 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         }
         break;
 
+      // ===== UNIT DISBAND =====
+      case 'disband_unit': {
+        if (unit) {
+          console.log(`[ContextMenu] Disbanding unit ${unit.id} (${unit.type})`);
+          if (gameEngine && typeof gameEngine.disbandUnit === 'function') {
+            gameEngine.disbandUnit(unit.id);
+          } else if (actions?.updateUnits) {
+            // Fallback: remove unit directly from store
+            const allUnits = getAllUnitsFromEngine();
+            actions.updateUnits(allUnits.filter((u: { id: string }) => u.id !== unit.id));
+          }
+          if (actions?.addNotification) {
+            actions.addNotification({
+              type: 'info',
+              message: `Unit ${unit.type} disbanded`
+            });
+          }
+        }
+        break;
+      }
+
       // ===== DIPLOMAT ACTIONS =====
       case 'diplomat_propose_peace':
       case 'diplomat_propose_alliance':

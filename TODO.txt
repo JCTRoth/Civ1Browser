@@ -8,6 +8,9 @@ TOODO:
 * Implement End of game statistics that show the player how they did, enconmics, military, and science wise.
 * Implement Civ1 ingame statistics screen that shows the player greatest cities in the worl, and there rank in the world wide demographics.
 * High score system for single player games, including a list of high scores, and the ability to submit high scores to a server.
+* Select the civilization on the start screen on initialization by the country the web browser is set to, or by the country the player is in (IP address).
+    Therefor create a matrix mapping country codes to civilization ids, and use the country code to select the civilization on the start screen.
+
 
 Far further development of the game engine is planned, including:
 

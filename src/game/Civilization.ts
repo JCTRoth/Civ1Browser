@@ -119,6 +119,10 @@ export class Civilization {
         this.personality = this.generatePersonality();
         this.priorities = this.generatePriorities();
 
+        // Log the personality and priorities for debugging
+        console.log(`Civilization ${this.name} (ID: ${this.id}) initialized with personality:`, this.personality);
+        console.log(`Civilization ${this.name} (ID: ${this.id}) initialized with priorities:`, this.priorities);
+
         // Units and cities (will be managed by game map)
         this.units = [];
         this.cities = [];
@@ -319,24 +323,6 @@ export class Civilization {
         return score;
     }
 
-    // ─── Legacy AI methods removed ────────────────────────────────────
-    // makeAIDecisions, makeProductionDecisions, selectCityProduction,
-    // evaluateMilitaryNeed, evaluateExpansionNeed, findGoodExpansionSpots,
-    // isGoodSettlementSite, evaluateInfrastructureNeed, getBestMilitaryUnit,
-    // makeUnitDecisions, makeUnitDecision, findNearbySettlementSite,
-    // findNearbyEnemy, moveUnitTowards, exploreWithUnit, makeDiplomaticDecisions,
-    // findWeakNeighbor, evaluateCivilizationStrength, makeExplorationDecisions,
-    // findNearbyUnexplored
-    //
-    // All AI decisions are now handled by:
-    //   - AIManager (unit targeting, army coordination)
-    //   - AIResearch (technology selection)
-    //   - AIBuildingStrategy (building/wonder production)
-    //   - AIStrategySelector (strategy profile evaluation)
-    //   - AutoProduction (city production management)
-    //   - AICoordinator (army groups, retreat logic)
-    // ──────────────────────────────────────────────────────────────────
-
     // Check if civilization is enemy
     isEnemy(otherCiv: Civilization): boolean {
         return this.warWith.has(otherCiv.id);
@@ -475,6 +461,3 @@ const TECHNOLOGY_TREE: Record<string, Technology> = {
         effects: { enables: ['trireme'] }
     }
 };
-
-// Civilization Templates
-// CIVILIZATION_TEMPLATES removed (unused)
