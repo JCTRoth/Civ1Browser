@@ -3,9 +3,10 @@ import { useGameStore } from '@/stores/GameStore';
 import { CIVILIZATIONS } from '@/data/GameData';
 import { TILE_SIZE } from '@/data/TerrainData';
 import { TERRAIN_PROPERTIES } from '@/data/TerrainConstants';
+import { SPECIALIST_YIELDS } from '@/data/GameConstants';
 import MiniMap from './MiniMap';
 import '../../styles/sidePanel.css';
-import type { City, Civilization } from '../../../types/game';
+import type { City, Civilization, SpecialistType } from '../../../types/game';
 import GameEngine from '@/game/engine/GameEngine';
 
 // Capitalize the first letter of a string (e.g. 'warrior' -> 'Warrior')
@@ -328,6 +329,74 @@ const SidePanel: React.FC<{ gameEngine?: GameEngine | null }> = ({ gameEngine })
                   <div>Science: {effectiveSelectedCity.science ?? 0}</div>
                   <div>Gold: {effectiveSelectedCity.gold ?? 0}</div>
                 </div>
+
+                {/* Specialist management */}
+                {(() => {
+                  const city = effectiveSelectedCity;
+                  const specs = city.specialists ?? [];
+                  const workedTiles = city.workingTiles ?? new Set<string>();
+                  const tileWorkers = workedTiles.size;
+                  const isPlayerCity = currentPlayer && city.civilizationId === currentPlayer.id;
+
+                  const handlePromote = (type: SpecialistType) => {
+                    if (gameEngine && typeof gameEngine.promoteCitizenToSpecialist === 'function') {
+                      gameEngine.promoteCitizenToSpecialist(city.id, type);
+                    }
+                  };
+                  const handleDemote = (index: number) => {
+                    if (gameEngine && typeof gameEngine.demoteSpecialistToWorker === 'function') {
+                      gameEngine.demoteSpecialistToWorker(city.id, index);
+                    }
+                  };
+
+                  if (!isPlayerCity) return null;
+
+                  return (
+                    <div className="mt-2">
+                      {specs.length > 0 && (
+                        <div className="mb-2">
+                          <div className="side-panel-small-muted fw-bold mb-1">Specialists:</div>
+                          <div className="d-flex flex-wrap gap-1">
+                            {specs.map((type, i) => {
+                              const def = SPECIALIST_YIELDS[type];
+                              return (
+                                <span key={i} className="side-panel-specialist-chip" title={`Demote ${def.name} to tile worker`}>
+                                  {def.icon}
+                                  <button
+                                    type="button"
+                                    className="side-panel-specialist-remove"
+                                    onClick={() => handleDemote(i)}
+                                    title="Convert back to tile worker"
+                                  >×</button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {tileWorkers > 1 && (
+                        <div className="side-panel-small-muted fw-bold mb-1">Add specialist:</div>
+                      )}
+                      <div className="d-flex flex-wrap gap-1">
+                        {(Object.keys(SPECIALIST_YIELDS) as SpecialistType[]).map((type) => {
+                          const def = SPECIALIST_YIELDS[type];
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              className="side-panel-specialist-btn"
+                              disabled={tileWorkers <= 1}
+                              title={tileWorkers <= 1 ? 'Need at least one tile worker' : `Convert tile citizen → ${def.name}`}
+                              onClick={() => handlePromote(type)}
+                            >
+                              {def.icon}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             ) : !selectedTile ? (
               <>

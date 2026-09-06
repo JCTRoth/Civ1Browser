@@ -928,8 +928,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ minimap = false, onExamineHex, 
         // Pick-up: with a city selected, left-clicking one of its WORKED tiles
         // (green border, no player unit standing on it) grabs a citizen so it
         // can be dropped on another tile in the city's radius.
-        if (!citizenReassign && gameEngine && gameState.selectedCity) {
-          const selCity = cities.find(c => c.id === gameState.selectedCity);
+        // Uses selectedCity OR focusedCity (the persistent marker that keeps
+        // the yellow net visible after the modal is closed / unit is selected).
+        const activeCityId = gameState.selectedCity ?? gameState.focusedCity;
+        if (!citizenReassign && gameEngine && activeCityId) {
+          const selCity = cities.find(c => c.id === activeCityId);
           const onTileUnit = gameEngine.getUnitAt?.(hex.col, hex.row);
           const isCityCenter = selCity !== undefined && hex.col === selCity.col && hex.row === selCity.row;
           const worked = selCity?.workingTiles ?? new Set<string>();

@@ -428,3 +428,64 @@
   color: var(--color-text-secondary, #ffffff);
   margin-top: 2px;
 }
+
+/* ── Specialist chips & buttons (side panel) ─────────────────────── */
+.side-panel-specialist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: default;
+}
+
+.side-panel-specialist-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: #ef4444;
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background var(--dur-fast, 120ms);
+}
+
+.side-panel-specialist-remove:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.side-panel-specialist-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background var(--dur-fast, 120ms), border-color var(--dur-fast, 120ms);
+}
+
+.side-panel-specialist-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.side-panel-specialist-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

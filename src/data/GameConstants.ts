@@ -131,7 +131,7 @@ export interface SpecialistProperties {
 }
 
 export const SPECIALIST_YIELDS: Record<SpecialistType, SpecialistProperties> = {
-  entertainer: { luxury: 2, gold: 0, science: 0, name: 'Entertainer', icon: '🎵' },
-  taxman:      { luxury: 0, gold: 2, science: 0, name: 'Taxman',      icon: '💰' },
-  scientist:   { luxury: 0, gold: 0, science: 2, name: 'Scientist',   icon: '🔬' },
+  entertainer: { luxury: 2, gold: 0, science: 0, name: 'Entertainer', icon: '🕺' },
+  taxman:      { luxury: 0, gold: 2, science: 0, name: 'Taxman',      icon: '💸' },
+  scientist:   { luxury: 0, gold: 0, science: 2, name: 'Scientist',   icon: '🥼' },
 };

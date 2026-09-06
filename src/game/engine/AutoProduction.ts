@@ -1006,14 +1006,99 @@ export class AutoProduction {
       const civCities = this.gameEngine.cities.filter((c: City) => c.civilizationId === civilizationId);
       
       for (const city of civCities) {
-        // Only set production if city has auto-production enabled
+        // Before adjusting production, try to fix happiness problems by
+        // assigning an Entertainer specialist. This is cheaper than raising
+        // the luxury rate (which drains commerce from ALL cities) and avoids
+        // the disorder → zero-income death spiral.  Only assign when the
+        // city can survive the food loss (the worker pulled off a tile may
+        // have been producing the food surplus the city depends on).
         if (city.autoProduction) {
+          this.assignEntertainerIfHelpful(city, civilizationId);
           this.setAutoProduction(city.id);
         }
       }
     } catch (e) {
       console.error('[AutoProduction] processAutoProductionForCivilization error', e);
     }
+  }
+
+  /**
+   * Try to fix a city's happiness problems by assigning an Entertainer
+   * specialist instead of raising the luxury rate. An Entertainer generates
+   * +2 Luxury, which directly helps prevent disorder.
+   *
+   * Guards:
+   *  1. City must actually have a happiness problem (disorder or unhappiness
+   *     ≥ happiness).
+   *  2. City must have at least one tile worker to convert (population −
+   *     specialists ≥ 2 so the city center stays worked).
+   *  3. Removing the worst food-producing worker must leave the city with a
+   *     positive food surplus (≥ 1) — otherwise the city starves.
+   *  4. The AI's luxury rate must be below 30% — if it's already high, a
+   *     temple or other building is a better long-term fix than more
+   *     specialists.
+   *
+   * Returns true if an Entertainer was assigned.
+   */
+  private assignEntertainerIfHelpful(city: City, civId: number): boolean {
+    const civ = this.gameEngine.civilizations?.[civId];
+    if (!civ) return false;
+
+    const econ = this.gameEngine.economicManager;
+    if (!econ) return false;
+
+    // Only act when the city actually has a happiness problem.
+    const happyState = econ.cityHappiness(city, civ);
+    if (!happyState.disorder && happyState.unhappiness < happyState.happiness) {
+      return false;
+    }
+
+    // Don't pile on when the civ is already spending a lot on luxury — at
+    // that point a building (temple/colosseum) is the better long-term fix.
+    if ((civ.luxuryRate ?? 0) >= 30) return false;
+
+    // Need at least 2 tile workers so the city center stays worked after
+    // converting one (the center is always worked, population − specialists
+    // must be ≥ 1 for the center + at least one outer tile for food).
+    const workingTiles = city.workingTiles ?? new Set<string>();
+    const tileWorkers = workingTiles.size;
+    if (tileWorkers < 2) return false;
+
+    // Find the tile worker that produces the LEAST food — converting them to
+    // an Entertainer has the smallest impact on the food surplus.
+    const centerKey = `${city.col},${city.row}`;
+    let worstFoodKey: string | null = null;
+    let worstFood = Infinity;
+    for (const key of workingTiles) {
+      if (key === centerKey) continue; // never remove the center worker
+      const sep = key.indexOf(',');
+      const col = Number(key.slice(0, sep));
+      const row = Number(key.slice(sep + 1));
+      const tile = this.gameEngine.getTileAt(col, row);
+      if (!tile) continue;
+      const y = econ.tileYields(tile);
+      if (y.food < worstFood) {
+        worstFood = y.food;
+        worstFoodKey = key;
+      }
+    }
+    if (!worstFoodKey) return false;
+
+    // Simulate the food surplus AFTER removing this worker. The city must
+    // still have ≥ 1 food surplus to avoid starvation next turn.
+    const currentYields = city.yields ?? { food: 0, production: 0, trade: 0 };
+    const foodAfter = currentYields.food - worstFood;
+    const pop = city.population ?? 1;
+    const foodConsumed = pop * 2; // each citizen eats 2 food
+    const surplusAfter = foodAfter - foodConsumed;
+    if (surplusAfter < 1) return false;
+
+    // All guards passed — assign the Entertainer.
+    const ok = this.gameEngine.promoteCitizenToSpecialist?.(city.id, 'entertainer');
+    if (ok) {
+      console.log(`[AutoProduction] ${city.name}: assigned Entertainer (food surplus ${surplusAfter} after removal)`);
+    }
+    return !!ok;
   }
 
   /**
