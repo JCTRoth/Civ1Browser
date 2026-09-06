@@ -33,7 +33,7 @@ import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
 import { AIResearch } from './AIResearch';
 import { MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
-import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem, TradeRoute } from '../../../types/game';
+import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem, TradeRoute, SpecialistType } from '../../../types/game';
 
 
 
@@ -1688,6 +1688,137 @@ export default class GameEngine {
     this.economicManager?.refreshYieldsFromWorkingTiles?.(city);
 
     // Persist the updated city to the store so the UI + map re-render.
+    if (this.storeActions?.updateCities) {
+      this.storeActions.updateCities([...this.cities]);
+    }
+    return true;
+  }
+
+  // ── Specialists ──────────────────────────────────────────────────────
+
+  /**
+   * Convert a tile citizen into a specialist. The citizen is removed from
+   * the worst-yield worked tile (preserving manually-assigned tiles) and
+   * added to the city's specialists list.
+   *
+   * @returns true on success.
+   */
+  promoteCitizenToSpecialist(cityId: string, specialistType: SpecialistType): boolean {
+    const city = this.cities.find((c: City) => c.id === cityId);
+    if (!city) return false;
+
+    const workingTiles = city.workingTiles;
+    if (!workingTiles || workingTiles.size === 0) return false;
+
+    // Don't convert more citizens than the city has.
+    const specCount = (city.specialists ?? []).length;
+    if (specCount >= (city.population ?? 1)) return false;
+
+    // Find the worst-yield worked tile to free (skip the city center and
+    // player-assigned tiles to preserve intentional placements).
+    const centerKey = `${city.col},${city.row}`;
+    const userAssigned = city.userAssignedTiles ?? new Set<string>();
+    let worstKey: string | null = null;
+    let worstYield = Infinity;
+    for (const key of workingTiles) {
+      if (key === centerKey) continue;
+      if (userAssigned.has(key)) continue;
+      const sep = key.indexOf(',');
+      const col = Number(key.slice(0, sep));
+      const row = Number(key.slice(sep + 1));
+      const tile = this.getTileAt(col, row);
+      if (!tile) continue;
+      const y = this.economicManager?.tileYields(tile);
+      if (!y) continue;
+      const total = y.food + y.production + y.trade;
+      if (total < worstYield) {
+        worstYield = total;
+        worstKey = key;
+      }
+    }
+
+    // If all remaining worked tiles are player-assigned, free the lowest-yield
+    // one — the player explicitly chose to convert a citizen.
+    if (!worstKey) {
+      for (const key of workingTiles) {
+        if (key === centerKey) continue;
+        const sep = key.indexOf(',');
+        const col = Number(key.slice(0, sep));
+        const row = Number(key.slice(sep + 1));
+        const tile = this.getTileAt(col, row);
+        if (!tile) continue;
+        const y = this.economicManager?.tileYields(tile);
+        if (!y) continue;
+        const total = y.food + y.production + y.trade;
+        if (total < worstYield) {
+          worstYield = total;
+          worstKey = key;
+        }
+      }
+    }
+
+    if (!worstKey) return false;
+
+    workingTiles.delete(worstKey);
+    userAssigned.delete(worstKey);
+
+    if (!city.specialists) city.specialists = [];
+    city.specialists.push(specialistType);
+
+    this.economicManager?.refreshYieldsFromWorkingTiles?.(city);
+    if (this.storeActions?.updateCities) {
+      this.storeActions.updateCities([...this.cities]);
+    }
+    return true;
+  }
+
+  /**
+   * Demote a specialist back to a tile worker. The specialist is removed
+   * from the list; the auto-assigner will pick the best available tile on
+   * the next turn's recomputeCityYields.
+   *
+   * @returns true on success.
+   */
+  demoteSpecialistToWorker(cityId: string, specialistIndex: number): boolean {
+    const city = this.cities.find((c: City) => c.id === cityId);
+    if (!city) return false;
+    const specs = city.specialists;
+    if (!specs || specialistIndex < 0 || specialistIndex >= specs.length) return false;
+
+    specs.splice(specialistIndex, 1);
+
+    // Let the auto-assigner pick the best tile on the next turn.
+    this.economicManager?.recomputeCityYields?.(city);
+    if (this.storeActions?.updateCities) {
+      this.storeActions.updateCities([...this.cities]);
+    }
+    return true;
+  }
+
+  /**
+   * Convenience: remove a citizen from a worked tile and make them a
+   * specialist of the given type. Called from the city UI "Make Specialist"
+   * button.
+   *
+   * @returns true on success.
+   */
+  removeCitizenFromTile(cityId: string, col: number, row: number, specialistType: SpecialistType = 'entertainer'): boolean {
+    const city = this.cities.find((c: City) => c.id === cityId);
+    if (!city) return false;
+    const centerKey = `${city.col},${city.row}`;
+    const key = `${col},${row}`;
+    if (key === centerKey) return false;
+
+    const workingTiles = city.workingTiles;
+    if (!workingTiles || !workingTiles.has(key)) return false;
+
+    workingTiles.delete(key);
+    (city.userAssignedTiles ?? new Set<string>()).delete(key);
+
+    if (!city.specialists) city.specialists = [];
+    city.specialists.push(specialistType);
+
+    this.economicManager?.refreshYieldsFromWorkingTiles?.(city);
     if (this.storeActions?.updateCities) {
       this.storeActions.updateCities([...this.cities]);
     }

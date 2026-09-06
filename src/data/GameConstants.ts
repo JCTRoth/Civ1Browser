@@ -1,5 +1,8 @@
 // Game Constants - Core game settings and configuration
 
+export const MAX_CARAVAN_TRADE_ROUTES = 3;
+
+
 export interface TerrainProperties {
     movement: number;
     defense: number;
@@ -107,4 +110,28 @@ export const GAME_CONSTANTS: GameConstants = {
         SELECTED: '#ff6b6b',
         HIGHLIGHT: '#4ecdc4'
     }
+};
+// ── Specialists ──────────────────────────────────────────────────────────
+// When a citizen is pulled off a worked tile they become one of these
+// specialists, trading raw tile yields (Food/Shields/Trade) for a fixed
+// city-specific yield (Luxury / Gold / Science).
+
+import type { SpecialistType } from '../../types/game';
+
+export interface SpecialistProperties {
+  name: string;
+  /** Per-turn luxury bonus. */
+  luxury: number;
+  /** Per-turn gold bonus (straight to treasury). */
+  gold: number;
+  /** Per-turn science bonus (toward current research). */
+  science: number;
+  /** Emoji icon (drawn under the city on the map). */
+  icon: string;
+}
+
+export const SPECIALIST_YIELDS: Record<SpecialistType, SpecialistProperties> = {
+  entertainer: { luxury: 2, gold: 0, science: 0, name: 'Entertainer', icon: '🎵' },
+  taxman:      { luxury: 0, gold: 2, science: 0, name: 'Taxman',      icon: '💰' },
+  scientist:   { luxury: 0, gold: 0, science: 2, name: 'Scientist',   icon: '🔬' },
 };

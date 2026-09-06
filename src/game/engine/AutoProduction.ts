@@ -4,7 +4,7 @@
  * intelligent building/wonder production decisions.
  */
 
-import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
+import { UNIT_PROPS, BUILDING_PROPS, MAX_CARAVAN_TRADE_ROUTES } from '@/utils/Constants';
 import { BUILDING_PROPERTIES, WONDER_PROPERTIES } from '@/data/BuildingConstants';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import {
@@ -364,10 +364,11 @@ export class AutoProduction {
             (civCities.length < 3 && expansion.earlyBonus ? 1 : 0),
         );
     if (!needsHappiness && city.population >= 1) {
-      // Don't produce more settlers when the treasury is deeply negative —
-      // each new settler adds upkeep the civ can't afford, triggering mass
-      // unit disbanding.  Only allow settlers when gold is non-negative or
-      // the deficit is small (< 1 turn of upkeep).
+      // Civ1: Settlers consume food from the home city (not gold), so they
+      // don't drain the treasury. However, building a Settler diverts shields
+      // from other production — only allow settlers when the economy is healthy
+      // enough (gold non-negative or small deficit) to sustain the production
+      // delay.
       const gold = this.gameEngine.civilizations?.[city.civilizationId]?.resources?.gold ?? 0;
       const upkeep = this.gameEngine.economicManager?.totalUpkeep?.(city.civilizationId) ?? 0;
       const goldCrisis = gold < -upkeep;
@@ -491,6 +492,25 @@ export class AutoProduction {
           itemType: buildingPlan.buildingType,
           name: bProps.name,
           cost: bProps.cost
+        };
+      }
+    }
+
+    // 5c. Caravan for trade routes (Civ I): once the civ has Trade tech and
+    //     at least one existing city with fewer than 3 trade routes, build a
+    //     Caravan. The AI unit movement logic will then deliver it to a
+    //     suitable destination city to establish a permanent trade route.
+    //     Caravans are a peacetime economy boost — they never displace
+    //     defenders, settlers, or buildings that are still needed.
+    if (civ && this.shouldBuildCaravan(civ, city, plannedTypes)) {
+      const caravanProps = UNIT_PROPS.caravan;
+      if (caravanProps) {
+        console.log(`[AutoProduction] Building caravan for trade route (profile ${strategy})`);
+        return {
+          type: 'unit',
+          itemType: 'caravan',
+          name: caravanProps.name,
+          cost: caravanProps.cost
         };
       }
     }
@@ -818,6 +838,52 @@ export class AutoProduction {
     const personality = civ.personality ?? { aggression: 5, diplomacy: 5, military: 5 };
     const chance = personality.diplomacy >= 7 ? 0.30 : personality.diplomacy >= 5 ? 0.15 : 0.05;
     return Math.random() < chance;
+  }
+
+  /**
+   * Whether the AI should produce a Caravan to establish trade routes.
+   *
+   * Rules:
+   *  1. Must have the `trade` tech (Caravan prerequisite).
+   *  2. Must NOT be at war (Caravans are fragile peacetime units).
+   *  3. At least one owned city has fewer than 3 trade routes (room for more).
+   *  4. The civ owns fewer than ceil(cities / 2) Caravans already — avoids
+   *     flooding the map with undelivered Caravans.
+   *  5. The city has enough population (≥ 2) — a pop-1 city should focus on
+   *     food/growth, not trade.
+   */
+  private shouldBuildCaravan(civ: Civilization, city: City, plannedTypes: string[]): boolean {
+    if (!canBuildUnit(civ, 'caravan')) return false;
+
+    // Only at peace — Caravans are fragile, no point building them mid-war.
+    const dm = this.gameEngine.diplomacyManager;
+    if (dm) {
+      for (const other of this.gameEngine.civilizations ?? []) {
+        if (other.id === civ.id || other.isAlive === false) continue;
+        if (dm.isAtWar(civ.id, other.id)) return false;
+      }
+    }
+
+    // At least one city has room for more trade routes (max 3 per city).
+    const civCities = this.gameEngine.cities.filter(
+      (c: City) => c.civilizationId === civ.id,
+    );
+    const hasRoom = civCities.some(
+      (c: City) => (c.tradeRoutes?.length ?? 0) < MAX_CARAVAN_TRADE_ROUTES,
+    );
+    if (!hasRoom) return false;
+
+    // Don't over-build Caravans — cap at ceil(cities / 2).
+    const caravanCount = this.gameEngine.units.filter(
+      (u: Unit) => u.civilizationId === civ.id && u.type === 'caravan',
+    ).length + plannedTypes.filter((t: string) => t === 'caravan').length;
+    const maxCaravans = Math.ceil(civCities.length / 2);
+    if (caravanCount >= maxCaravans) return false;
+
+    // Pop ≥ 2 so the city is stable enough to divert shields to trade.
+    if ((city.population ?? 1) < 2) return false;
+
+    return true;
   }
 
   private isOffensiveUnitType(unitType: string): boolean {

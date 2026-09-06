@@ -21,6 +21,7 @@ import { CityUtils } from '../../utils/CityUtils';
 import { UNIT_PROPS } from '../../utils/Constants';
 import { TERRAIN_PROPERTIES, TERRAIN_TYPES, SPECIAL_RESOURCES } from '../../data/TerrainConstants';
 import { IMPROVEMENT_PROPERTIES } from '../../data/TileImprovementConstants';
+import { SPECIALIST_YIELDS } from '../../data/GameConstants';
 import type { City, Civilization, Unit } from '../../../types/game';
 import { resolveAICivStrategy, type StrategyProfile } from './AITypes';
 import GameEngine from './GameEngine';
@@ -401,7 +402,12 @@ export class EconomicManager {
       y.food + y.production + y.trade;
     candidates.sort((a, b) => total(b.yields) - total(a.yields));
 
-    const pop = Math.max(1, city.population ?? 1);
+    // Specialists occupy citizen slots that no longer work tiles. A specialist
+    // citizen trades raw tile yields (Food/Shields/Trade) for a fixed city-
+    // specific yield (Luxury/Gold/Science), so the auto-assigner has fewer
+    // tile-worker slots to fill.
+    const specCount = (city.specialists ?? []).length;
+    const pop = Math.max(1, (city.population ?? 1) - specCount);
 
     // The city center is always worked.
     const chosenKeys = new Set<string>([`${city.col},${city.row}`]);
@@ -452,6 +458,24 @@ export class EconomicManager {
       }
     }
     return { trade, science };
+  }
+
+  /**
+   * Aggregate specialist yields for a city. Each specialist adds a fixed
+   * yield — entertainer → luxury, taxman → gold, scientist → science.
+   */
+  specialistYields(city: City): { luxury: number; gold: number; science: number } {
+    const specs = city.specialists ?? [];
+    let luxury = 0, gold = 0, science = 0;
+    for (const t of specs) {
+      const s = SPECIALIST_YIELDS[t];
+      if (s) {
+        luxury += s.luxury;
+        gold += s.gold;
+        science += s.science;
+      }
+    }
+    return { luxury, gold, science };
   }
 
   /**
@@ -546,7 +570,12 @@ export class EconomicManager {
       ? CAPTURED_CITY_UNHAPPY
       : 0;
     const unhappiness = Math.max(0, population - gov.tolerance) + capturedUnrest;
-    const happiness = out.luxury + this.buildingHappiness(city) + gov.happinessBonus + BASE_CONTENTMENT;
+    // Specialist entertainers add a flat luxury bonus that feeds directly into
+    // happiness, bypassing the rate split — this is the Civ1 mechanic where
+    // pulling a worker off a tile into an Entertainer trades raw yields for
+    // happiness to prevent disorder.
+    const specLuxury = this.specialistYields(city).luxury;
+    const happiness = out.luxury + specLuxury + this.buildingHappiness(city) + gov.happinessBonus + BASE_CONTENTMENT;
     return { happiness, unhappiness, disorder: unhappiness > happiness };
   }
 
@@ -715,6 +744,8 @@ export class EconomicManager {
     let scienceTotal = 0;
     let luxuryTotal = 0;
     let commerceTotal = 0;
+    let specGoldTotal = 0;
+    let specScienceTotal = 0;
     for (const city of cities) {
       // Recompute the city's real tile-based yields before splitting commerce.
       this.recomputeCityYields(city);
@@ -723,11 +754,17 @@ export class EconomicManager {
       scienceTotal += out.science;
       luxuryTotal += out.luxury;
       commerceTotal += out.commerce;
+      // Specialist yields (Taxman → gold, Scientist → science) go directly
+      // into the civ totals, bypassing the rate split.
+      const spec = this.specialistYields(city);
+      specGoldTotal += spec.gold;
+      specScienceTotal += spec.science;
     }
 
     // Per-turn income (NOT cumulative) — fixes the compounding research bug.
+    // Specialist Scientist science goes directly toward current research.
     civ.resources.trade = commerceTotal;
-    civ.resources.science = scienceTotal;
+    civ.resources.science = scienceTotal + specScienceTotal;
     civ.resources.production = 0;
     civ.resources.food = 0;
 
@@ -739,7 +776,8 @@ export class EconomicManager {
     // running into minus. A catastrophic deficit (can't pay ~3 turns of
     // upkeep) still triggers disbanding for human civs too. Disbanded debts
     // are forgiven (the AI recovers to the 8-gold floor) for a fresh start.
-    civ.resources.gold = (civ.resources.gold ?? 0) + taxTotal;
+    // Specialist Taxman gold goes directly to the treasury.
+    civ.resources.gold = (civ.resources.gold ?? 0) + taxTotal + specGoldTotal;
     const upkeep = this.totalUpkeep(civId);
     civ.resources.gold -= upkeep;
     let deficit = 0;
@@ -808,8 +846,9 @@ export class EconomicManager {
     for (const city of cities) {
       const population = city?.population ?? 1;
       const unhappiness = Math.max(0, population - gov.tolerance);
+      const specLuxury = this.specialistYields(city).luxury;
       const nonLuxHappiness =
-        this.buildingHappiness(city) + (gov.happinessBonus ?? 0) + BASE_CONTENTMENT;
+        specLuxury + this.buildingHappiness(city) + (gov.happinessBonus ?? 0) + BASE_CONTENTMENT;
       maxNeed = Math.max(maxNeed, Math.max(0, unhappiness - nonLuxHappiness));
       const commerce = this.cityCommerce(city);
       const effective = commerce * (1 - (gov.commercePenalty ?? 0));

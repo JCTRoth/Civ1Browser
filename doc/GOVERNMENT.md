@@ -61,9 +61,10 @@ Where each modifier is applied:
   the government's `tolerance` as unhappy and adds `happinessBonus`
   (`EconomicManager`, the Civ1 crowding rule). A higher tolerance / happiness
   bonus keeps cities out of disorder as they grow.
-- **Settler upkeep** — in **Republic** and **Democracy** each Settler costs 1
-  shield; in the other governments Settlers cost 0 shields
-  (`TurnManager.calculateCityShieldSupport`).
+- **Settler upkeep** — Settlers consume **food** from their home city (1
+  food/turn, 2 in Democracy), not gold. Shield support for Settlers applies
+  in Republic/Democracy only (`TurnManager.calculateCityShieldSupport`).
+  Settlers have **zero gold maintenance** (`UNIT_PROPS.settler.maintenance = 0`).
 
 ### The capital / seat of government
 

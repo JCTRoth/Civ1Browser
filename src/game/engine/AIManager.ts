@@ -891,6 +891,21 @@ export class AIManager {
       }
     }
 
+    // ── Caravan delivery: send to a friendly city to establish a trade route ──
+    // Civ1: Caravans are consumed when they deliver to a city, establishing a
+    // permanent trade route. The AI sends them to the nearest friendly city
+    // with fewer than 3 trade routes. This is a peacetime economy boost.
+    if (unit.type === 'caravan') {
+      const target = this.chooseCaravanDeliveryTarget(unit);
+      if (target) {
+        console.log(`[AI-CARAVAN] Caravan ${unit.id} heading to city at (${target.col},${target.row}) for trade route`);
+        return target;
+      }
+      // No suitable city — skip the Caravan (it sits and waits).
+      this.gameEngine.skipUnit(unit.id);
+      return null;
+    }
+
     // Diplomats head to a known foreign city to open negotiations (Civ I).
     if (unit.type === 'diplomat') {
       const diplomatTarget = this.chooseDiplomatTarget(unit);
@@ -1228,6 +1243,42 @@ export class AIManager {
 
   // ─── AI diplomat units (Civ I: diplomats move to an enemy city/unit to
   //      initiate diplomacy) ───────────────────────────────────────────
+
+  /**
+   * Pick a destination for an AI Caravan: the nearest friendly city with fewer
+   * than 3 trade routes. When the Caravan arrives and moves onto that city's
+   * tile, GameEngine.moveUnit automatically calls establishTradeRoute (the
+   * existing Civ1 delivery mechanic), consuming the Caravan and creating a
+   * permanent trade route.
+   */
+  private chooseCaravanDeliveryTarget(unit: Unit): { col: number; row: number } | null {
+    const civId = unit.civilizationId;
+    const squareDistance = (c1: number, r1: number, c2: number, r2: number) =>
+      this.gameEngine.squareGrid?.squareDistance(c1, r1, c2, r2) ?? Infinity;
+
+    const friendlyCities = this.gameEngine.cities.filter(
+      (c: City) => c.civilizationId === civId,
+    );
+
+    let bestCity: City | null = null;
+    let bestDist = Infinity;
+    for (const city of friendlyCities) {
+      // Skip the city the Caravan is already standing on (can't deliver to self).
+      if (city.col === unit.col && city.row === unit.row) continue;
+      const routes = city.tradeRoutes?.length ?? 0;
+      if (routes >= 3) continue; // max 3 routes per city
+      const dist = squareDistance(unit.col, unit.row, city.col, city.row);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestCity = city;
+      }
+    }
+
+    if (bestCity) {
+      return { col: bestCity.col, row: bestCity.row };
+    }
+    return null;
+  }
 
   /**
    * Pick a destination for an AI diplomat: the nearest foreign city the civ

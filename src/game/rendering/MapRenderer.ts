@@ -20,6 +20,7 @@ import { TILE_SIZE, getTerrainInfo, TERRAIN_TYPES } from '@/data/TerrainData';
 import { TERRAIN_RESOURCES } from '@/data/TerrainConstants';
 import { IMPROVEMENT_PROPERTIES, IMPROVEMENT_TYPES, ImprovementDisplayConfig } from '@/data/TileImprovementConstants';
 import { UNIT_PROPERTIES } from '@/data/UnitConstants';
+import { SPECIALIST_YIELDS } from '@/data/GameConstants';
 import { getUnitIcon } from '@/utils/UnitIconLoader';
 import { TERRAIN_FONT_FAMILY } from '@/utils/terrainFont';
 import { MathUtils } from '@/utils/MathUtils';
@@ -1636,6 +1637,36 @@ export class MapRenderer {
     ctx.font = `${Math.max(8, 10 * cameraZoom)}px monospace`;
     ctx.fillStyle = '#000';
     ctx.fillText(city.name, centerX, centerY + 24 * cameraZoom);
+
+    // Draw specialist icons below the city name, flowing left to right.
+    const specs = city.specialists ?? [];
+    if (specs.length > 0) {
+      const specFontSize = Math.max(6, 7 * cameraZoom);
+      ctx.font = `${specFontSize}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const iconW = specFontSize * 1.4;
+      const totalW = specs.length * iconW;
+      const startX = centerX - totalW / 2 + iconW / 2;
+      const specY = centerY + 24 * cameraZoom + specFontSize * 0.5;
+      for (let i = 0; i < specs.length; i++) {
+        const def = SPECIALIST_YIELDS[specs[i]];
+        if (def) {
+          const x = startX + i * iconW;
+          // Coloured circle background for each specialist type
+          const bg =
+            specs[i] === 'entertainer' ? 'rgba(180,80,220,0.7)' :
+            specs[i] === 'taxman'      ? 'rgba(220,180,40,0.7)' :
+                                          'rgba(80,160,220,0.7)';
+          ctx.beginPath();
+          ctx.arc(x, specY + specFontSize * 0.4, specFontSize * 0.65, 0, Math.PI * 2);
+          ctx.fillStyle = bg;
+          ctx.fill();
+          ctx.fillStyle = '#FFF';
+          ctx.fillText(def.icon, x, specY);
+        }
+      }
+    }
 
     // Show city population size as a number badge on the city tile
     const pop = city.population || 1;

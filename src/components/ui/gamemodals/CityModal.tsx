@@ -4,9 +4,10 @@ import { CityModalLogic } from './CityModalLogic';
 import { ModalUtils } from './ModalUtils';
 import { UNIT_PROPS, BUILDING_PROPS } from '@/utils/Constants';
 import { BUILDING_PROPERTIES } from '@/data/BuildingConstants';
+import { SPECIALIST_YIELDS } from '@/data/GameConstants';
 import ProductionSelectionModal from './ProductionSelectionModal';
 import GameEngine from '@/game/engine/GameEngine';
-import type { City, Civilization, GameActions, ProductionItem } from '../../../../types/game';
+import type { City, Civilization, GameActions, ProductionItem, SpecialistType } from '../../../../types/game';
 import '../../../styles/cityModal.css';
 
 interface CityModalProps {
@@ -584,6 +585,104 @@ const CityModal: React.FC<CityModalProps> = ({
                           another city to establish a route.
                         </div>
                       )}
+                    </>
+                  );
+                })()}
+              </div>
+            </Tab>
+            <Tab eventKey="citizens" title="Citizens">
+              <div className="city-citizens-content">
+                {(() => {
+                  const pop = selectedCity.population ?? 1;
+                  const specs = selectedCity.specialists ?? [];
+                  const workedTiles = selectedCity.workingTiles ?? new Set<string>();
+                  const tileWorkers = workedTiles.size;
+                  const freeCitizens = Math.max(0, pop - tileWorkers - specs.length);
+
+                  const handlePromote = (type: SpecialistType) => {
+                    if (gameEngine && typeof gameEngine.promoteCitizenToSpecialist === 'function') {
+                      const ok = gameEngine.promoteCitizenToSpecialist(selectedCity.id, type);
+                      if (!ok && actions?.addNotification) {
+                        actions.addNotification({ type: 'warning', message: 'Cannot convert citizen — all tile workers are protected or city is full.' });
+                      }
+                    }
+                  };
+
+                  const handleDemote = (index: number) => {
+                    if (gameEngine && typeof gameEngine.demoteSpecialistToWorker === 'function') {
+                      gameEngine.demoteSpecialistToWorker(selectedCity.id, index);
+                    }
+                  };
+
+                  return (
+                    <>
+                      <p className="small text-muted mb-3">
+                        Pull a citizen off a tile to make them a <strong>Specialist</strong>. You lose the tile's
+                        Food/Production/Trade but gain a fixed city yield: <strong>Entertainer</strong> (+2 Luxury),
+                        <strong> Taxman</strong> (+2 Gold), or <strong>Scientist</strong> (+2 Science).
+                      </p>
+
+                      {/* Specialist summary */}
+                      {specs.length > 0 && (
+                        <div className="mb-3">
+                          <h6>Specialists ({specs.length})</h6>
+                          <div className="d-flex flex-wrap gap-2">
+                            {specs.map((type, i) => {
+                              const def = SPECIALIST_YIELDS[type];
+                              return (
+                                <div key={i} className="d-flex align-items-center gap-1 p-1 px-2 rounded bg-dark border border-secondary">
+                                  <span>{def.icon}</span>
+                                  <span className="small">{def.name}</span>
+                                  {isPlayerCity && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-danger btn-sm p-0 px-1 ms-1"
+                                      style={{ fontSize: '0.65rem', lineHeight: 1 }}
+                                      title="Convert back to tile worker"
+                                      onClick={() => handleDemote(i)}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Convert citizen buttons */}
+                      {isPlayerCity && (
+                        <div className="mb-3">
+                          <h6>Convert Tile Citizen → Specialist</h6>
+                          <div className="d-flex flex-wrap gap-2">
+                            {(Object.keys(SPECIALIST_YIELDS) as SpecialistType[]).map((type) => {
+                              const def = SPECIALIST_YIELDS[type];
+                              return (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  className="btn btn-outline-secondary btn-sm"
+                                  disabled={tileWorkers <= 1}
+                                  title={tileWorkers <= 1 ? 'Need at least one tile worker' : `Convert a tile citizen to ${def.name}`}
+                                  onClick={() => handlePromote(type)}
+                                >
+                                  {def.icon} {def.name} <span className="text-muted ms-1">+{type === 'entertainer' ? '2 Luxury' : type === 'taxman' ? '2 Gold' : '2 Science'}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {tileWorkers <= 1 && (
+                            <small className="text-muted d-block mt-1">All citizens are already specialists or on the city center.</small>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Stats */}
+                      <div className="small text-muted">
+                        <div>Population: {pop} · Tile workers: {tileWorkers} · Specialists: {specs.length}</div>
+                        {freeCitizens > 0 && <div className="text-warning">{freeCitizens} unassigned citizen(s)</div>}
+                      </div>
                     </>
                   );
                 })()}

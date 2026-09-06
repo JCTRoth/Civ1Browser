@@ -426,7 +426,9 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         hitPoints: 2,
         sightRange: 3,
         cost: 40,
-        maintenance: 1,
+        // Civ1: Settlers consume food from their home city (1 food/turn, 2 in
+        // Democracy), not gold. The food cost is applied in TurnManager.
+        maintenance: 0,
         canSettle: true,
         canWork: true,
         naval: false,
@@ -455,7 +457,10 @@ export const UNIT_PROPERTIES: Record<string, UnitProperties> = {
         movement: 1,
         sightRange: 1,
         cost: 50,
-        maintenance: 1,
+        // Civ1: Caravans are consumed when they deliver a trade route. No
+        // ongoing upkeep — the benefit is the one-time lump-sum gold/science
+        // payout plus the permanent per-turn trade route bonus.
+        maintenance: 0,
         canSettle: false,
         canWork: false,
         naval: false,

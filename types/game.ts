@@ -2,6 +2,13 @@
 
 export type VictoryReason = 'elimination' | 'moonshot' | 'domination';
 
+/**
+ * Civ1 specialist types. When a citizen is pulled off a tile they become one
+ * of these, trading raw tile yields (Food/Shields/Trade) for city-specific
+ * yields (Luxury/Gold/Science).
+ */
+export type SpecialistType = 'entertainer' | 'taxman' | 'scientist';
+
 export interface EnemyLocation {
   col: number;
   row: number;
@@ -316,6 +323,16 @@ export interface City {
   autoProduction?: boolean; // When true, the engine auto-selects production for this city
   output?: { food: number; production: number; trade: number };
   processTurn?: (gameMap: MapState, turn: number) => void;
+  /**
+   * Specialists: citizens pulled off tiles that now generate fixed city yields
+   * instead of tile yields. Each entry is one specialist citizen.
+   * - 'entertainer': +2 Luxury (helps prevent disorder)
+   * - 'taxman':      +2 Gold (straight to treasury)
+   * - 'scientist':   +2 Science (toward current research)
+   *
+   * Invariant: `workingTiles.size + specialists.length === population`.
+   */
+  specialists?: SpecialistType[];
   /** Tile keys (e.g. "col,row") that citizens are currently working. */
   workingTiles?: Set<string>;
   /** Tile keys (e.g. "col,row") the player manually assigned. The auto-assign

@@ -1,5 +1,9 @@
 TOODO:
 
+* Diplomatie: Add possiblity to send gold to other civs, and to request gold from other civs. The AI should be bribable, and the player should be able to bribe the AI. The AI should also be able to request gold from the player, and the player should be able to refuse or accept the request.
+* Sending money to the AI should improve the AI's relationship with the player, and requesting money from the AI should be possible in two ways: 1. The Player and the AI have a very good relationship, and the AI will give the player money for free. 2. Threten the AI with war, and the AI will give the player money to avoid war. Depending on the AI's personality, and Military strength, the AI may or may not give the player money. The AI should also be able to request money from the player, and the player should be able to refuse or accept the request. The AI should also be able to request money from the player, and the player should be able to refuse or accept the request. The AI should also be able to request money from the player, and the player should be able to refuse or accept the request.
+  * AI to AI use this behavior as well, and the player should be able to observe this behavior in the Diplomacy screen if he has a embassy in boath civs.
+* On the Auto End Turn screen, Inform about thr Auto End Turn feature, add there a check box to enable/disable the feature.
 * Implement Human and Human (on one computer) against AI vs AI game modes.
 * Implement End of game statistics that show the player how they did, enconmics, military, and science wise.
 * Implement Civ1 ingame statistics screen that shows the player greatest cities in the worl, and there rank in the world wide demographics.
