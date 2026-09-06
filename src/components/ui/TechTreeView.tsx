@@ -21,13 +21,17 @@ type Props = {
   researchProgress?: number;
   /** Effective (scaled) cost of the tech currently being researched. */
   currentTechCost?: number | null;
+  /** IDs of techs researched by the current player (for coloring). */
+  playerResearchedIds?: Set<string>;
   /** Called when the player picks a tech to research. */
   onSelectTech?: (techId: string) => void;
 };
 
-const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWidth = 200, nodeHeight = 56, verticalSpacing = 80, horizontalSpacing = 40, researchPath = null, currentResearchId = null, researchProgress = 0, currentTechCost = null, onSelectTech }) => {
+const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWidth = 200, nodeHeight = 56, verticalSpacing = 80, horizontalSpacing = 40, researchPath = null, currentResearchId = null, researchProgress = 0, currentTechCost = null, playerResearchedIds, onSelectTech }) => {
   // If store hasn't populated technologies yet, fall back to static data
   const techs = (technologies && technologies.length > 0) ? technologies : TECHNOLOGIES_DATA;
+  // Helper: is this tech researched by the current player?
+  const isPlayerResearched = (techId: string) => playerResearchedIds?.has(techId) ?? false;
   // compute depth per tech
   const getDepth = (techId: string, visited = new Set()): number => {
     const tech = techs.find(t => t.id === techId);
@@ -267,7 +271,7 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
           if (!pos) return null;
           const isAnimating = animatingNodes.has(tech.id);
           const isCurrentResearch = tech.id === currentResearchId;
-          const fill = isAnimating ? 'url(#unresearchedPattern)' : (tech.researched ? '#2f855a' : tech.available ? '#1e90ff' : '#444');
+          const fill = isAnimating ? 'url(#unresearchedPattern)' : (isPlayerResearched(tech.id) ? '#2f855a' : tech.available ? '#1e90ff' : '#444');
           // Effective cost for the current research (map/difficulty scaled);
           // other nodes keep their base cost.
           const nodeCost = isCurrentResearch && currentTechCost != null ? currentTechCost : tech.cost;
@@ -327,7 +331,7 @@ const TechTreeView: React.FC<Props> = ({ technologies = [], width = 800, nodeWid
               </div>
             )}
             <div className="small mt-1">
-              Status: {hoveredTech.researched ? 
+              Status: {isPlayerResearched(hoveredTech.id) ? 
                 <span className="text-success">✓ Researched</span> : 
                 hoveredTech.available ? 
                   <span className="text-info">Available</span> : 

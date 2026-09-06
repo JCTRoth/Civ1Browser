@@ -414,6 +414,7 @@ const GameModals = ({ gameEngine }: { gameEngine?: GameEngine | null }) => {
               currentResearchId={currentTechId}
               researchProgress={civ?.researchProgress ?? 0}
               currentTechCost={currentTechCost}
+              playerResearchedIds={new Set((currentPlayer?.technologies ?? []).map(String))}
               onSelectTech={handleSelectTech}
             />
           </React.Suspense>

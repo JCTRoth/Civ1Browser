@@ -221,6 +221,26 @@ function App() {
     handleGameStart(quickSettings);
   }, [gameEngine, showGameSetup, handleGameStart]);
 
+  // Show the research-selection modal once when the game starts with no
+  // active research and no researched techs. Only fires once per game.
+  const researchPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!gameEngine || !gameState.isGameStarted) {
+      researchPromptedRef.current = false;
+      return;
+    }
+    if (researchPromptedRef.current) return;
+    const civ = gameEngine.civilizations?.[gameState.activePlayer];
+    if (!civ) return;
+    const hasResearched = (civ.technologies?.length ?? 0) > 0;
+    const hasResearch = !!civ.currentResearch;
+    if (!hasResearched && !hasResearch) {
+      researchPromptedRef.current = true;
+      // Short delay so the game board renders first
+      setTimeout(() => actions.showDialog('tech'), 500);
+    }
+  }, [gameEngine, gameState.isGameStarted, gameState.activePlayer, actions]);
+
   // End the human turn and, when it was auto-triggered, surface a recap of
   // what the engine auto-resolved (e.g. "2 units skipped"). Shared by the
   // confirmation-modal path and the immediate "skip confirmation" path so the
