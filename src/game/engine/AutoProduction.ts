@@ -6,6 +6,7 @@
 
 import { UNIT_PROPS, BUILDING_PROPS, MAX_CARAVAN_TRADE_ROUTES } from '@/utils/Constants';
 import { BUILDING_PROPERTIES, WONDER_PROPERTIES } from '@/data/BuildingConstants';
+import { getGovernment } from '@/data/GovernmentData';
 import { BARBARIAN_CIV_ID } from '@/data/VillageConstants';
 import {
   assessCityThreat,
@@ -1093,12 +1094,44 @@ export class AutoProduction {
       return false;
     }
 
+    // ── Martial law first: if the government supports garrison units and
+    //    there is room for one more, prefer moving a military unit INTO the
+    //    city over assigning an Entertainer — a garrison unit costs gold but
+    //    also defends, while an Entertainer only gives happiness. ──
+    // (This is an advisory check — the actual unit movement is handled by
+    //  AIManager. Here we just skip the Entertainer if martial law could
+    //  solve the problem instead.)
+
     // Need at least 2 tile workers so the city center stays worked after
     // converting one (the center is always worked, population − specialists
     // must be ≥ 1 for the center + at least one outer tile for food).
     const workingTiles = city.workingTiles ?? new Set<string>();
     const tileWorkers = workingTiles.size;
     if (tileWorkers < 2) return false;
+
+    // Don't over-assign: cap at 3 Entertainers per city. Beyond that the
+    // city is losing too many tile workers and should build a temple instead.
+    const curEntertainers = (city.specialists ?? []).filter(s => s === 'entertainer').length;
+    if (curEntertainers >= 3) return false;
+
+    // ── Randomness: for borderline cases (disorder=0, unhappiness≈happiness)
+    //    roll a dice — sometimes an Entertainer is worth it even when the
+    //    city is "technically" content, because next turn growth or a new
+    //    citizen could tip it into disorder. This makes AI behaviour less
+    //    predictable and more human-like. ──
+    const deficit = happyState.unhappiness - happyState.happiness + (happyState.disorder ? 1 : 0);
+    if (deficit <= 0) {
+      // City is actually content — but maybe it's about to tip. Assign an
+      // Entertainer with probability proportional to how close unhappiness
+      // is to happiness. If they're equal (deficit=0), 20% chance.
+      const borderline = happyState.unhappiness >= happyState.happiness - 1;
+      if (!borderline) return false;
+      // deficit ≤ 0 means happy > unhappy. The closer they are, the higher
+      // the chance. When unhappy == happy-1: 30%. When unhappy == happy: 60%.
+      const ratio = 1 - (happyState.happiness - happyState.unhappiness) / Math.max(1, happyState.happiness);
+      const chance = Math.min(0.6, ratio * 0.6);
+      if (Math.random() > chance) return false;
+    }
 
     // Find the tile worker that produces the LEAST food — converting them to
     // an Entertainer has the smallest impact on the food surplus.
@@ -1120,20 +1153,21 @@ export class AutoProduction {
     }
     if (!worstFoodKey) return false;
 
-    // Simulate the food surplus AFTER removing this worker. The city must
-    // still have ≥ 0 food surplus to avoid starvation (0 means no growth
-    // but the city survives).
+    // Simulate the food surplus AFTER removing this worker. Allow slight
+    // negative surplus (up to −2) — the city loses 1 pop on starvation but
+    // the Entertainer prevents disorder, which is worse (0 commerce).
+    // Only block if starvation would be catastrophic (surplus < −2).
     const currentYields = city.yields ?? { food: 0, production: 0, trade: 0 };
     const foodAfter = currentYields.food - worstFood;
     const pop = city.population ?? 1;
     const foodConsumed = pop * 2; // each citizen eats 2 food
     const surplusAfter = foodAfter - foodConsumed;
-    if (surplusAfter < 0) return false;
+    if (surplusAfter < -2) return false;
 
     // All guards passed — assign the Entertainer.
     const ok = this.gameEngine.promoteCitizenToSpecialist?.(city.id, 'entertainer');
     if (ok) {
-      console.log(`[AutoProduction] ${city.name}: assigned Entertainer (food surplus ${surplusAfter} after removal)`);
+      console.log(`[AutoProduction] ${city.name}: assigned Entertainer (food surplus ${surplusAfter}, deficit ${deficit}, cur entertainers ${curEntertainers + 1})`);
     }
     return !!ok;
   }
@@ -1188,22 +1222,44 @@ export class AutoProduction {
       return demoted > 0;
     }
 
-    // If the city is exactly balanced (happy == unhappy), check if a building
+    // If the city is exactly balanced or 1 point short, check if a building
     // is being produced that will add happiness — if so, demote ONE Entertainer
     // to free a worker slot for food/production while the building finishes.
-    if (happinessWithoutEntertainers === currentHappy.unhappiness && entertainers.length > 1) {
+    // Also demote when a garrison unit is present (martial law covers the gap).
+    if (happinessWithoutEntertainers <= currentHappy.unhappiness && entertainers.length > 1) {
+      let canDemoteOne = false;
+      // A building under production will help
       const producing = city.currentProduction;
       if (producing?.type === 'building') {
         const bEffects = BUILDING_PROPERTIES[producing.itemType]?.effects;
         if (bEffects && (bEffects.happiness ?? 0) > 0) {
-          console.log(`[AutoProduction] ${city.name}: demoting 1 Entertainer while building ${producing.itemType} (+${bEffects.happiness} happiness)`);
-          // Find the last Entertainer and demote it
-          for (let i = specs.length - 1; i >= 0; i--) {
-            if (specs[i] === 'entertainer') {
-              this.gameEngine.demoteSpecialistToWorker?.(city.id, i);
-              console.log(`[AutoProduction] ${city.name}: demoted 1 Entertainer back to tile worker`);
-              return true;
-            }
+          canDemoteOne = true;
+        }
+      }
+      // Martial law from garrison units covers part of the need
+      const gov = getGovernment(civ?.government);
+      const govName = (gov.name ?? '').toLowerCase();
+      const martialLawMax = (govName === 'despotism' || govName === 'anarchy') ? 4
+        : (govName === 'monarchy' || govName === 'communism') ? 3 : 0;
+      if (martialLawMax > 0) {
+        const garrisonUnits = (this.gameEngine?.units ?? []).filter((u: Unit) =>
+          u.civilizationId === civId
+          && u.col === city.col && u.row === city.row
+          && !u.isDefeated
+          && (u.attack ?? 0) > 0
+        ).length;
+        if (garrisonUnits > 0 && garrisonUnits < martialLawMax) {
+          // There's room for one more garrison unit to cover happiness
+          canDemoteOne = true;
+        }
+      }
+      if (canDemoteOne) {
+        // Demote the last Entertainer
+        for (let i = specs.length - 1; i >= 0; i--) {
+          if (specs[i] === 'entertainer') {
+            this.gameEngine.demoteSpecialistToWorker?.(city.id, i);
+            console.log(`[AutoProduction] ${city.name}: demoted 1 Entertainer (building/martial law covers the gap)`);
+            return true;
           }
         }
       }
@@ -1256,7 +1312,7 @@ export class AutoProduction {
     if (!civ || civ.isHuman) return;
 
     const gold = civ.resources?.gold ?? 0;
-    const available = gold - minimumReserve;
+    const available = gold - minimumReserve - 15; // Keep a buffer of 15gold for emergencies
     if (available <= 5) return; // Too little gold above reserve to spend
 
     const cities = this.gameEngine.cities.filter(

@@ -245,7 +245,7 @@ describe('Civ1 combat terrain defense', () => {
       terrain: defenderTerrain,
       improvement: opts.fortress ? 'fortress' : null,
     });
-    e.getCityAt = () => undefined;
+    e.getCityAt = () => null;
     e.checkAndEndTurnIfNoMoves = () => undefined;
     return e;
   }

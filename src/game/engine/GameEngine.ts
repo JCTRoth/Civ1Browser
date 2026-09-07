@@ -2922,7 +2922,11 @@ export default class GameEngine {
     const defenderTerrain = defenderTile ? (defenderTile.type ?? defenderTile.terrain) : null;
     const terrainDefense = defenderTerrain ? TERRAIN_PROPS[defenderTerrain]?.defense ?? 1 : 1;
     let defenderStrength = defender.defense * (defender.health / 100) * Math.max(1, terrainDefense);
-    if ((defender as { isFortified?: boolean }).isFortified) {
+    // Units inside a city automatically gain +50% fortification bonus,
+    // even without an explicit fortify order.
+    const isInCity = this.getCityAt(defender.col, defender.row) !== null;
+    const isFortified = (defender as { isFortified?: boolean }).isFortified || isInCity;
+    if (isFortified) {
       defenderStrength *= 1.5;
     }
     const fortressDef = defenderTile?.improvement
@@ -3074,6 +3078,17 @@ export default class GameEngine {
    *   hands (or is destroyed if it had only 1 population).
    */
   private resolveCityCombat(attacker: Unit, city: City): 'captured' | 'hit' | 'city_destroyed' | 'defended' {
+    // Find the garrison: living military units standing on the city tile.
+    // Units inside a city die one by one — the garrison is fought
+    // unit-by-unit, not all at once. The city only falls when the garrison
+    // is empty AND the attacker wins the population-vs-attack roll.
+    const garrison = this.units.filter(
+      (u: Unit) => u.civilizationId === city.civilizationId
+        && u.col === city.col && u.row === city.row
+        && !u.isDefeated
+        && u.id !== attacker.id,
+    );
+
     // Attack 0 units (civilians) must have zero strength — `attack || 1` would
     // give a settler the same strength as a warrior and a 50/50 capture roll.
     const attackerStrength = (attacker.attack && attacker.attack > 0 ? attacker.attack : 0)
@@ -3097,6 +3112,26 @@ export default class GameEngine {
     this.updateUnitTurnsDoneFlag(attacker);
 
     if (attackerWins) {
+      // No Stack death rule: city units die one by one ──
+      // If the garrison has defenders, only ONE dies per combat round.
+      // The attacker does not enter the city until the garrison is empty.
+      if (garrison.length > 0) {
+        const defender = garrison[0]; // Kill the first garrison unit
+        defender.isDefeated = true;
+        defender.defeatTimestamp = Date.now();
+        if (this.onStateChange) {
+          this.onStateChange('UNIT_DEFEATED', { unit: defender });
+        }
+        setTimeout(() => {
+          this.units = this.units.filter(u => u.id !== defender.id);
+          this.onStateChange?.('UNIT_REMOVED', { unit: defender });
+          if (defender.type === 'scout') this.onScoutDeath(defender);
+        }, 1200);
+        console.log(`[COMBAT] ${attacker.type} defeated garrison ${defender.type} in ${city.name} (${garrison.length - 1} defenders remain)`);
+        return 'hit'; // City damaged but not captured yet
+      }
+
+      // No garrison left — the city falls.
       const oldCiv = city.civilizationId;
       if ((city.population || 1) <= 1) {
         // City is razed rather than captured — every unit garrisoned on its

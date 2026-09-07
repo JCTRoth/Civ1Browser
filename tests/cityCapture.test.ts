@@ -364,6 +364,11 @@ describe('City capture & destruction', () => {
     city.buildings = [];
     city.population = 1;
     city.capturedTurns = 0;
+    // Clear garrison units from the city tile so martial law doesn't mask
+    // the disorder test — we want to test the capturedTurns unhappiness alone.
+    engine.units = engine.units.filter(
+      (u: any) => !(u.col === city.col && u.row === city.row && u.civilizationId === 0),
+    );
 
     const calm = econ.cityHappiness(city, civ0);
     expect(calm.unhappiness).toBe(0);

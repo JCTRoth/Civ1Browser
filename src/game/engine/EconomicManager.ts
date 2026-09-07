@@ -577,7 +577,23 @@ export class EconomicManager {
     // pulling a worker off a tile into an Entertainer trades raw yields for
     // happiness to prevent disorder.
     const specLuxury = this.specialistYields(city).luxury;
-    const happiness = out.luxury + specLuxury + this.buildingHappiness(city) + gov.happinessBonus + BASE_CONTENTMENT;
+    // Martial law: military units in the city convert unhappy citizens into
+    // content ones, depending on government type.
+    //   Despotism / Anarchy: 1 unit → 1 unhappy → content (max 4 units)
+    //   Monarchy / Communism: 1 unit → 1 unhappy → content (max 3 units)
+    //   Republic / Democracy: no martial law bonus
+    const garrisonUnits = (this.gameEngine?.units ?? []).filter((u: Unit) =>
+      u.civilizationId === civ.id
+      && u.col === city.col && u.row === city.row
+      && !u.isDefeated
+      && (u.attack ?? 0) > 0
+    ).length;
+    const govName = (gov.name ?? '').toLowerCase();
+    const martialLawMax = (govName === 'despotism' || govName === 'anarchy') ? 4
+      : (govName === 'monarchy' || govName === 'communism') ? 3
+      : 0;
+    const martialLawBonus = Math.min(garrisonUnits, martialLawMax);
+    const happiness = out.luxury + specLuxury + martialLawBonus + this.buildingHappiness(city) + gov.happinessBonus + BASE_CONTENTMENT;
     return { happiness, unhappiness, disorder: unhappiness > happiness };
   }
 
@@ -843,14 +859,39 @@ export class EconomicManager {
    */
   private luxuryNeedPct(civ: Civilization, cities: City[]): number {
     const gov = getGovernment(civ?.government);
+    const govName = (gov.name ?? '').toLowerCase();
+    const martialLawMax = (govName === 'despotism' || govName === 'anarchy') ? 4
+      : (govName === 'monarchy' || govName === 'communism') ? 3 : 0;
     let maxNeed = 0;
     let minAfterCommerce = Infinity;
     for (const city of cities) {
       const population = city?.population ?? 1;
       const unhappiness = Math.max(0, population - gov.tolerance);
       const specLuxury = this.specialistYields(city).luxury;
+      // Martial law: military units stationed in the city convert unhappy
+      // citizens into content ones (Despotism max 4, Monarchy max 3,
+      // Republic/Democracy 0).  Without this the rate planner over-estimates
+      // luxury need and sets rates at 40%+ when garrisons already handle it.
+      const garrisonUnits = (this.gameEngine?.units ?? []).filter((u: Unit) =>
+        u.civilizationId === civ.id
+        && u.col === city.col && u.row === city.row
+        && !u.isDefeated
+        && (u.attack ?? 0) > 0
+      ).length;
+      const martialLawBonus = Math.min(garrisonUnits, martialLawMax);
+      // Entertainer potential: each unhappy city COULD host 1-2 Entertainers
+      // (+2 luxury each) instead of raising the global luxury rate.  We
+      // estimate this so the rate planner prefers entertainers over raw
+      // luxury — each entertainer only costs ONE city a worker slot, while
+      // 1% luxury drains commerce from ALL cities.
+      const currentEntertainers = (city.specialists ?? []).filter((s: string) => s === 'entertainer').length;
+      const canAddEntertainers = Math.max(0, Math.min(
+        2, // max 2 entertainers as a safety net
+        population - 1 - currentEntertainers, // keep center + 1 worker min
+      ));
+      const entertainerPotential = canAddEntertainers * 2; // each gives +2 luxury
       const nonLuxHappiness =
-        specLuxury + this.buildingHappiness(city) + (gov.happinessBonus ?? 0) + BASE_CONTENTMENT;
+        specLuxury + martialLawBonus + entertainerPotential + this.buildingHappiness(city) + (gov.happinessBonus ?? 0) + BASE_CONTENTMENT;
       maxNeed = Math.max(maxNeed, Math.max(0, unhappiness - nonLuxHappiness));
       const commerce = this.cityCommerce(city);
       const effective = commerce * (1 - (gov.commercePenalty ?? 0));
@@ -910,18 +951,25 @@ export class EconomicManager {
     const commerce = cities.reduce((t: number, c: City) => t + this.cityCommerce(c), 0);
     if (commerce <= 0) return;
 
-    // ── Luxury: keep it at exactly 0% while every city is content. Only when
-    //    at least one city is actually in (or approaching) disorder do we
-    //    spend commerce on luxury — and then only what that city needs. A
-    //    content empire puts ALL its commerce into tax + science instead of
-    //    wasting it on happiness. Never spend more on luxury than leaves room
-    //    for the tax + science floors. ──
+    // ── Luxury: prefer Entertainers over the global luxury rate.  Each
+    //    Entertainer gives +2 luxury to ONE city and only costs one worker
+    //    slot; 1% luxury drains commerce from ALL cities.  We only set a
+    //    positive luxury rate as a LAST RESORT when even Entertainers +
+    //    buildings + martial law cannot prevent disorder. ──
+    //
+    //    The luxuryNeedPct() function already accounts for:
+    //    • martial law (garrison units) — reduces unhappiness directly
+    //    • entertainer potential — each unhappy city could host 1-2 Entertainers
+    //      (+2 luxury each), which reduces the computed need further
+    //    So the returned need is the RESIDUAL luxury after those cheaper
+    //    sources are exhausted.
     const anyCityProblem = cities.some((c: City) => {
       const h = this.cityHappiness(c, civ);
       return h.disorder || h.unhappiness >= h.happiness;
     });
-    const luxuryNeed = anyCityProblem ? this.luxuryNeedPct(civ, cities) : 0;
-    const luxury = Math.min(luxuryNeed, 100 - AI_MIN_TAX - AI_SCIENCE_FLOOR);
+    const luxury = anyCityProblem
+      ? Math.min(this.luxuryNeedPct(civ, cities), 30, 100 - AI_MIN_TAX - AI_SCIENCE_FLOOR)
+      : 0;
 
     // ── Treasury reserve: keep a cushion of a few turns of upkeep. Below it,
     //    raise tax a little to rebuild; at/above it, invest the surplus in
@@ -974,8 +1022,8 @@ export class EconomicManager {
     //    surplus luxury back into science. ──
     let newLuxury = Math.min(luxury, 100 - newTax);
     let newScience = 100 - newTax - newLuxury;
-    if (newScience < AI_SCIENCE_FLOOR && newLuxury > luxuryNeed) {
-      const trim = Math.min(newLuxury - luxuryNeed, AI_SCIENCE_FLOOR - newScience);
+    if (newScience < AI_SCIENCE_FLOOR && newLuxury > luxury) {
+      const trim = Math.min(newLuxury - luxury, AI_SCIENCE_FLOOR - newScience);
       newLuxury -= trim;
       newScience += trim;
     }
