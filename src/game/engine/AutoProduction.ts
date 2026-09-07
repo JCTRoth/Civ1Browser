@@ -301,10 +301,15 @@ export class AutoProduction {
     // Happiness emergency: a city at (or near) disorder burns its whole
     // commerce on luxury — starving science and the treasury. Such a city
     // fixes its happiness first; a healthy city expands instead.
+    // Also trigger when the city has Entertainers — a building is more
+    // efficient long-term (one building replaces multiple Entertainers,
+    // freeing worker slots for food/production).
     let needsHappiness = false;
+    let entertainerCount = 0;
     if (civ && econ) {
       const happyState = econ.cityHappiness(city, civ);
       needsHappiness = happyState.disorder || happyState.unhappiness >= happyState.happiness;
+      entertainerCount = (city.specialists ?? []).filter(s => s === 'entertainer').length;
     }
 
     // 1b. Happiness emergency BEFORE the plain "no defender" check. A city
@@ -314,8 +319,11 @@ export class AutoProduction {
     //     city rarely shows one on the tile) and the temple that would fix
     //     the economy is never built — the civ stays at 70% luxury / 0
     //     science for the whole game and never produces a real army.
+    //     Also build when Entertainers are present — a building is more
+    //     efficient (one temple replaces ~2 Entertainers, freeing workers).
     const luxuryRate = civ?.luxuryRate ?? 0;
-    if (needsHappiness || luxuryRate >= 40) {
+    const hasEntertainers = entertainerCount > 0;
+    if (needsHappiness || luxuryRate >= 40 || hasEntertainers) {
       const existingBuildings = new Set(city.buildings ?? []);
       const happyBuilding = ['temple', 'colosseum', 'cathedral']
         .find((b) => !existingBuildings.has(b) && !plannedTypes.includes(b));
@@ -1011,6 +1019,8 @@ export class AutoProduction {
         // the luxury rate (which drains commerce from ALL cities) and avoids
         // the disorder → zero-income death spiral.  Keep assigning until
         // the city is content or no more workers can be converted.
+        // After assigning, demote any Entertainers that are now redundant
+        // (e.g. a building was completed that provides enough happiness).
         if (city.autoProduction) {
           let assigned = 0;
           while (assigned < 5 && this.assignEntertainerIfHelpful(city, civilizationId)) {
@@ -1019,6 +1029,10 @@ export class AutoProduction {
           if (assigned > 0) {
             console.log(`[AutoProduction] ${city.name}: assigned ${assigned} Entertainer(s) this turn`);
           }
+          // Demote Entertainers that are no longer needed (building/garrison
+          // now covers the happiness need).  Run AFTER assignment so the
+          // cycle is: assign needed → demote unneeded → build production.
+          this.demoteUnneededEntertainers(city, civilizationId);
           this.setAutoProduction(city.id);
         }
       }
@@ -1104,6 +1118,79 @@ export class AutoProduction {
       console.log(`[AutoProduction] ${city.name}: assigned Entertainer (food surplus ${surplusAfter} after removal)`);
     }
     return !!ok;
+  }
+
+  /**
+   * Demote Entertainers back to tile workers when they are no longer needed.
+   * An Entertainer becomes redundant when:
+   *  1. A building (temple/colosseum/cathedral) now provides enough happiness.
+   *  2. A garrison unit is nearby providing defense bonus.
+   *  3. The city's happiness problem is resolved without the Entertainer.
+   *
+   * This runs AFTER Entertainer assignment, so the cycle is:
+   *  assign needed Entertainers → demote unneeded ones → build production.
+   *
+   * Returns true if any Entertainer was demoted.
+   */
+  private demoteUnneededEntertainers(city: City, civId: number): boolean {
+    const civ = this.gameEngine.civilizations?.[civId];
+    if (!civ) return false;
+    const econ = this.gameEngine.economicManager;
+    if (!econ) return false;
+
+    const specs = city.specialists ?? [];
+    const entertainers = specs.filter(s => s === 'entertainer');
+    if (entertainers.length === 0) return false;
+
+    // Calculate how much luxury the Entertainers provide
+    const entertainerLuxury = entertainers.length * 2;
+
+    // Check if the city would still be happy WITHOUT the Entertainers.
+    // Temporarily remove all Entertainers and re-evaluate happiness.
+    // Simulate: if the city had no Entertainers, what would happiness look like?
+    // We compute: happiness without Entertainer luxury = (current happiness - entertainerLuxury)
+    const currentHappy = econ.cityHappiness(city, civ);
+    const happinessWithoutEntertainers = currentHappy.happiness - entertainerLuxury;
+
+    // If the city is STILL happy without Entertainers, demote them all.
+    if (happinessWithoutEntertainers > currentHappy.unhappiness) {
+      console.log(`[AutoProduction] ${city.name}: ${entertainers.length} Entertainer(s) no longer needed (happy ${happinessWithoutEntertainers} vs unhappy ${currentHappy.unhappiness} without them)`);
+      let demoted = 0;
+      // Demote from last to first to avoid index shifting
+      for (let i = specs.length - 1; i >= 0 && demoted < entertainers.length; i--) {
+        if (specs[i] === 'entertainer') {
+          if (this.gameEngine.demoteSpecialistToWorker?.(city.id, i)) {
+            demoted++;
+          }
+        }
+      }
+      if (demoted > 0) {
+        console.log(`[AutoProduction] ${city.name}: demoted ${demoted} Entertainer(s) back to tile workers`);
+      }
+      return demoted > 0;
+    }
+
+    // If the city is exactly balanced (happy == unhappy), check if a building
+    // is being produced that will add happiness — if so, demote ONE Entertainer
+    // to free a worker slot for food/production while the building finishes.
+    if (happinessWithoutEntertainers === currentHappy.unhappiness && entertainers.length > 1) {
+      const producing = city.currentProduction;
+      if (producing?.type === 'building') {
+        const bEffects = BUILDING_PROPERTIES[producing.itemType]?.effects;
+        if (bEffects && (bEffects.happiness ?? 0) > 0) {
+          console.log(`[AutoProduction] ${city.name}: demoting 1 Entertainer while building ${producing.itemType} (+${bEffects.happiness} happiness)`);
+          // Find the last Entertainer and demote it
+          for (let i = specs.length - 1; i >= 0; i--) {
+            if (specs[i] === 'entertainer') {
+              this.gameEngine.demoteSpecialistToWorker?.(city.id, i);
+              return true;
+            }
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   /**

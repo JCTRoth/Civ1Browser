@@ -137,7 +137,10 @@ export class EngineEventRouter {
       case 'TRADE_ROUTE_ESTABLISHED':
         this.onTradeRouteEstablished(eventData);
         break;
-      default:
+      case 'GAME_LOG':
+        console.log('[EngineEventRouter] GAME_LOG:', eventData);
+        break;
+        default:
         console.log('Unhandled game engine event:', eventType, eventData);
     }
   }
