@@ -1773,8 +1773,8 @@ export default class GameEngine {
 
   /**
    * Demote a specialist back to a tile worker. The specialist is removed
-   * from the list; the auto-assigner will pick the best available tile on
-   * the next turn's recomputeCityYields.
+   * from the list and the freed citizen is immediately reassigned to the
+   * best available tile in the city's radius.
    *
    * @returns true on success.
    */
@@ -1786,10 +1786,13 @@ export default class GameEngine {
 
     specs.splice(specialistIndex, 1);
 
-    // Let the auto-assigner pick the best tile on the next turn.
+    // Immediately recompute yields — this calls cityWorkedTiles which
+    // reassigns the freed citizen to the best available tile in the radius.
     this.economicManager?.recomputeCityYields?.(city);
     if (this.storeActions?.updateCities) {
       this.storeActions.updateCities([...this.cities]);
+    }else {
+      console.warn('Store actions not available to update cities after demoting specialist');
     }
     return true;
   }

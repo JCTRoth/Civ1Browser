@@ -127,9 +127,11 @@ const clamp = (v: number, min: number, max: number): number =>
 
 export class EconomicManager {
   private gameEngine: GameEngine;
+  AI_MIN_GOLD_RESERVE: number;
 
   constructor(gameEngine: GameEngine) {
     this.gameEngine = gameEngine;
+    this.AI_MIN_GOLD_RESERVE = AI_MIN_GOLD_RESERVE;
   }
 
   // ------------------------------------------------------------------

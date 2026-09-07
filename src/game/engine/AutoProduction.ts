@@ -1036,6 +1036,9 @@ export class AutoProduction {
           this.setAutoProduction(city.id);
         }
       }
+      // After all cities are evaluated, consider spending gold on rushing
+      // urgent production (defenders under threat, nearly-done builds).
+      this.evaluateGoldSpending(civilizationId);
     } catch (e) {
       console.error('[AutoProduction] processAutoProductionForCivilization error', e);
     }
@@ -1183,6 +1186,7 @@ export class AutoProduction {
           for (let i = specs.length - 1; i >= 0; i--) {
             if (specs[i] === 'entertainer') {
               this.gameEngine.demoteSpecialistToWorker?.(city.id, i);
+              console.log(`[AutoProduction] ${city.name}: demoted 1 Entertainer back to tile worker`);
               return true;
             }
           }
@@ -1190,6 +1194,7 @@ export class AutoProduction {
       }
     }
 
+    console.log(`[AutoProduction] ${city.name}: Entertainer(s) still needed (happy ${happinessWithoutEntertainers} vs unhappy ${currentHappy.unhappiness})`);
     return false;
   }
 
@@ -1209,6 +1214,68 @@ export class AutoProduction {
       }
     } catch (e) {
       console.error('[AutoProduction] processAutoProductionForAI error', e);
+    }
+  }
+
+  // ── Strategic gold spending ───────────────────────────────────────────
+  // AI should try to make money and use it strategically:
+  //  1. Maintain minimum 8 gold (AI_MIN_GOLD_RESERVE).
+  //  2. When gold exceeds the reserve, consider buying/rushing if it would
+  //     help (e.g. rush a defender when under threat, rush a wonder, buy a
+  //     critical unit).
+  //  3. Only spend when the benefit outweighs the gold cost.
+
+  private readonly RUSH_COST_MULTIPLIER = 2; // gold cost = remaining shields × 2
+
+  /**
+   * Evaluate whether to spend gold on rushing production in cities.
+   * Only rushes when:
+   *  1. Gold is above the minimum reserve.
+   *  2. The city is under threat and needs an immediate defender.
+   *  3. The rush cost is affordable (≤ 50% of available gold above reserve).
+   *  4. Rushing would finish within 2 turns of production (not a long build).
+   */
+  private evaluateGoldSpending(civId: number): void {
+    const minimumReserve = this.gameEngine.economicManager?.AI_MIN_GOLD_RESERVE ?? 8;
+    const civ = this.gameEngine.civilizations?.[civId];
+    if (!civ || civ.isHuman) return;
+
+    const gold = civ.resources?.gold ?? 0;
+    const available = gold - minimumReserve;
+    if (available <= 5) return; // Too little gold above reserve to spend
+
+    const cities = this.gameEngine.cities.filter(
+      (c: City) => c.civilizationId === civId && c.autoProduction,
+    );
+
+    for (const city of cities) {
+      if (!city.currentProduction) continue;
+      if (city.currentProduction.type !== 'unit' && city.currentProduction.type !== 'building') continue;
+
+      const threat = this.evaluateCityThreat(city);
+      const isUrgentDefender = threat?.needsDefense && city.currentProduction.type === 'unit'
+        && this.isDefensiveProduction(city.currentProduction);
+      const productionProgress = city.productionStored ?? 0;
+      const productionCost = city.currentProduction.cost ?? 0;
+      const remaining = Math.max(0, productionCost - productionProgress);
+      if (remaining <= 0) continue;
+
+      const rushGold = remaining * this.RUSH_COST_MULTIPLIER;
+
+      // Only rush if:
+      //  (a) under immediate threat and building a defender, OR
+      //  (b) gold is abundant (≥ 3× reserve) and the build is nearly done.
+      const goldIsAbundant = gold >= minimumReserve * 3;
+      const nearlyDone = remaining <= 5;
+      const shouldRush = isUrgentDefender || (goldIsAbundant && nearlyDone);
+
+      if (!shouldRush) continue;
+      if (rushGold > available) continue; // Can't afford it
+
+      // Rush the production
+      console.log(`[AutoProduction] ${city.name}: rushing ${city.currentProduction.itemType} for ${rushGold} gold (${remaining} shields remaining, ${isUrgentDefender ? 'threat' : 'abundant gold'})`);
+      this.gameEngine.rushCityProduction(city.id);
+      break; // Only rush one city per turn to avoid draining the treasury
     }
   }
 

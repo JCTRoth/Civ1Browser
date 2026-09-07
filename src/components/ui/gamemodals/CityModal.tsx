@@ -614,6 +614,13 @@ const CityModal: React.FC<CityModalProps> = ({
                     }
                   };
 
+                  const handlePickUp = (col: number, row: number) => {
+                    actions.setCitizenReassign({ cityId: selectedCity.id, col, row });
+                    if (actions?.addNotification) {
+                      actions.addNotification({ type: 'info', message: '🧑‍🌾 Citizen selected for reassignment — click a tile on the map to place' });
+                    }
+                  };
+
                   return (
                     <>
                       <p className="small text-muted mb-3">
@@ -648,6 +655,34 @@ const CityModal: React.FC<CityModalProps> = ({
                               );
                             })}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Worked tiles with reassignment */}
+                      {isPlayerCity && tileWorkers > 1 && (
+                        <div className="mb-3">
+                          <h6>Worked Tiles ({tileWorkers})</h6>
+                          <div className="d-flex flex-wrap gap-2">
+                            {Array.from(workedTiles).map((key) => {
+                              const sep = key.indexOf(',');
+                              const col = Number(key.slice(0, sep));
+                              const row = Number(key.slice(sep + 1));
+                              const isCenter = col === selectedCity.col && row === selectedCity.row;
+                              if (isCenter) return null; // City center is always worked, can't reassign
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  className="btn btn-outline-success btn-sm"
+                                  title={`Move citizen from (${col},${row}) to another tile`}
+                                  onClick={() => handlePickUp(col, row)}
+                                >
+                                  🧑‍🌾 ({col},{row})
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <small className="text-muted d-block mt-1">Click a tile to pick up its citizen, then click an empty tile on the map to place it.</small>
                         </div>
                       )}
 
