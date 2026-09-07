@@ -176,6 +176,9 @@ class Unit {
     // Callback for state changes (replaces EventEmitter)
     public onStateChange: ((eventType: string, data: unknown) => void) | null;
 
+    // Tracking: Used to detect if a unit is oscillating back and forth
+    public positionHistory?: string[];
+
     constructor(type: string, civilization: Civilization, col: number, row: number) {
         this.id = GameUtils.generateId();
         this.type = type;

@@ -36,7 +36,6 @@ import { MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
 import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem, TradeRoute, SpecialistType } from '../../../types/game';
 
 
-
 /** Civ1 "Bridge Building" tech — mapped to the existing Engineering tech. */
 const BRIDGE_BUILDING_TECH = 'engineering';
 
@@ -2167,6 +2166,59 @@ export default class GameEngine {
       console.log(`[canUnitMoveTo] Insufficient moves for unit ${unitId}. Distance: ${distance}, MoveCost: ${moveCost}, MovesRemaining: ${unit.movesRemaining}`);
     }
     return hasEnoughMoves;
+  }
+
+  /**
+   * Checks if a unit can move to a specific tile without actually moving it.
+   * Returns true if the move is valid and possible, false otherwise.
+   */
+  canMoveUnit(id: string, targetCol: number, targetRow: number): boolean {
+    const unit = this.units.find(u => u.id === id);
+    if (!unit) return false;
+
+    if (!this.squareGrid.isValidSquare(targetCol, targetRow)) return false;
+
+    // Check if unit has moves remaining
+    if ((unit.movesRemaining || 0) <= 0) return false;
+
+    // Check if target tile exists and is passable
+    const targetTile = this.getTileAt(targetCol, targetRow);
+    if (!targetTile) return false;
+
+    const targetTerrain = this.getTerrainKey(targetTile);
+    const isTargetWater = this.isWaterTerrain(targetTile);
+    const isUnitNaval = !!(UNIT_PROPS[unit.type]?.naval || unit.isNaval || (unit as { naval?: boolean }).naval);
+
+    if (unit.type === 'settler' && isTargetWater) return false;
+    if (isTargetWater && !isUnitNaval) return false;
+    if (!isTargetWater && isUnitNaval) return false;
+    if (TERRAIN_PROPS[targetTerrain]?.passable === false) return false;
+
+    // Check if the unit can afford the terrain cost
+    const moveCost = this.getMoveCost(targetTile);
+    if (!this.canUnitAffordMove(unit, moveCost)) {
+      return false;
+    }
+
+    // Check if there's an enemy unit blocking the tile (combat is possible, so we return true)
+    // If there is a friendly unit on the tile, assume we cannot move there (no stacking)
+    const targetUnit = this.getUnitAt(targetCol, targetRow);
+    if (targetUnit) {
+      if (targetUnit.civilizationId === unit.civilizationId) {
+        return false; // Friendly unit blocking
+      }
+      // If it's an enemy unit, it's a valid combat move
+      return true; 
+    }
+
+    // Check for enemy city (valid attack target)
+    const targetCity = this.getCityAt(targetCol, targetRow);
+    if (targetCity && targetCity.civilizationId !== unit.civilizationId) {
+      // Caravans can enter to deliver, Scouts can attempt rush, military can attack
+      return true;
+    }
+
+    return true;
   }
 
   /**

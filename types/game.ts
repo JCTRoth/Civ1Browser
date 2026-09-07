@@ -212,6 +212,7 @@ export interface ProductionItem {
 }
 
 export interface Unit {
+  positionHistory: [col: number, row: number][] | undefined;
   id: string;
   type: string;
   civilizationId: number;

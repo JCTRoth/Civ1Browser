@@ -32,6 +32,7 @@ import {
 import type { DiplomatAction } from './DiplomacyTypes';
 import type { Unit, City } from '../../../types/game';
 import GameEngine, { type PlayerTurnStorage, type MapTile } from './GameEngine';
+import { getShuffledAdjacentTiles } from './MovementHelper';
 
 // How much better (in settlement-score points) the best location must be for a
 // settler to keep walking instead of founding at its current tile. Prevents
@@ -41,6 +42,9 @@ const SETTLE_SCORE_THRESHOLD = 12;
 // If the best settlement location is farther than this Chebyshev distance,
 // found at the current tile instead of walking across the map.
 const MAX_SETTLE_WALK_DISTANCE = 4;
+
+const OSCILLATION_WINDOW = 6;
+const OSCILLATION_THRESHOLD = 3;
 
 export class AIManager {
   private gameEngine: GameEngine;
@@ -255,6 +259,77 @@ export class AIManager {
       }
 
       console.log(`[AI] Processing unit ${unit.id} (${unit.type}) at (${unit.col},${unit.row}) with ${unit.movesRemaining} moves remaining`);
+
+      // ── Oscillation detection: punish back-and-forth movement ──
+      if (!unit.positionHistory) {
+        unit.positionHistory = [];
+      }
+
+      // Only record position changes — a stuck unit (can't move) should not
+      // accumulate the same position and trigger oscillation detection.
+      const posHistory = unit.positionHistory;
+      const currentPosTuple: [number, number] = [unit.col, unit.row];
+      const currentPosKey = `${unit.col},${unit.row}`;
+      const lastPos = posHistory.length > 0 ? posHistory[posHistory.length - 1] : null;
+      if (!lastPos || lastPos[0] !== unit.col || lastPos[1] !== unit.row) {
+        posHistory.push(currentPosTuple);
+        if (posHistory.length > OSCILLATION_WINDOW) {
+          posHistory.shift();
+        }
+      }
+
+      // Single-pass frequency count with early exit
+      const posCounts: Record<string, number> = {};
+      let isOscillating = false;
+
+      for (const pos of posHistory) {
+        const key = `${pos[0]},${pos[1]}`;
+        posCounts[key] = (posCounts[key] || 0) + 1;
+        if (posCounts[key] >= OSCILLATION_THRESHOLD) {
+          isOscillating = true;
+          break; // Exit loop early as soon as threshold is met
+        }
+      }
+
+      if (isOscillating) {
+        console.warn(
+          `[AI] 🔄🔄🔄 Civ: Unit ${unit.id} (${unit.type}) oscillating — visited ${currentPosKey} ${posCounts[currentPosKey]}x in last ${posHistory.length} positions, skipping`
+        );
+        
+        this.gameEngine.log('ai', `Oscillation —   🔄🔄🔄 Civ ${civilizationId} ${unit.type}(${unit.id}) at (${unit.col},${unit.row})`, {
+          civilizationId, 
+          action: 'skip', 
+          unitId: unit.id, 
+          unitType: unit.type,
+          reason: 'oscillation', 
+          positions: posHistory.map(p => p.join(',')).join(' → '),
+        });
+
+        // Clear history after punishment so the unit can try fresh next turn
+        posHistory.length = 0; 
+        
+        // Get all 8 adjacent tiles in a randomized order
+        const adjacentTiles = getShuffledAdjacentTiles(unit.col, unit.row);
+        let brokeLoop = false;
+
+        for (const tile of adjacentTiles) {
+          // Use your new engine method to check before moving
+          if (this.gameEngine.canMoveUnit(unit.id, tile.col, tile.row)) {
+            console.warn(`[AI] 🔄🔄🔄 Breaking oscillation: Attempting random move to (${tile.col}, ${tile.row})`);
+            this.gameEngine.moveUnit(unit.id, tile.col, tile.row);
+            brokeLoop = true;
+            break; // Stop trying directions once one succeeds
+          }
+        }
+
+        if (!brokeLoop) {
+          console.warn(`[AI] 🔄🔄🔄 Cannot move unit ${unit.id} to ANY adjacent tile — skipping`);
+          this.gameEngine.skipUnit(unit.id);
+        }
+
+        // Move to the next unit in the loop
+        continue; 
+      }
 
       // Safety: Prevent infinite loops by limiting iterations per unit
       let movementAttempts = 0;
