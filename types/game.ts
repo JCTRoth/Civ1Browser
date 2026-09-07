@@ -212,8 +212,9 @@ export interface ProductionItem {
 }
 
 export interface Unit {
-  positionHistory: [col: number, row: number][] | undefined;
   id: string;
+  /** Position history for oscillation detection (AI units). */
+  positionHistory?: [col: number, row: number][];
   type: string;
   civilizationId: number;
   col: number;

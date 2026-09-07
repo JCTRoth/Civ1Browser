@@ -1007,13 +1007,18 @@ export class AutoProduction {
       
       for (const city of civCities) {
         // Before adjusting production, try to fix happiness problems by
-        // assigning an Entertainer specialist. This is cheaper than raising
+        // assigning Entertainer specialists. This is cheaper than raising
         // the luxury rate (which drains commerce from ALL cities) and avoids
-        // the disorder → zero-income death spiral.  Only assign when the
-        // city can survive the food loss (the worker pulled off a tile may
-        // have been producing the food surplus the city depends on).
+        // the disorder → zero-income death spiral.  Keep assigning until
+        // the city is content or no more workers can be converted.
         if (city.autoProduction) {
-          this.assignEntertainerIfHelpful(city, civilizationId);
+          let assigned = 0;
+          while (assigned < 5 && this.assignEntertainerIfHelpful(city, civilizationId)) {
+            assigned++;
+          }
+          if (assigned > 0) {
+            console.log(`[AutoProduction] ${city.name}: assigned ${assigned} Entertainer(s) this turn`);
+          }
           this.setAutoProduction(city.id);
         }
       }
@@ -1027,16 +1032,19 @@ export class AutoProduction {
    * specialist instead of raising the luxury rate. An Entertainer generates
    * +2 Luxury, which directly helps prevent disorder.
    *
+   * This runs every turn for every city with auto-production enabled, so
+   * the AI keeps adding Entertainers until the city is content — letting
+   * the rate planner (`raiseTaxForAI`) see the reduced need and cut the
+   * luxury rate on the next turn.
+   *
    * Guards:
    *  1. City must actually have a happiness problem (disorder or unhappiness
    *     ≥ happiness).
    *  2. City must have at least one tile worker to convert (population −
    *     specialists ≥ 2 so the city center stays worked).
    *  3. Removing the worst food-producing worker must leave the city with a
-   *     positive food surplus (≥ 1) — otherwise the city starves.
-   *  4. The AI's luxury rate must be below 30% — if it's already high, a
-   *     temple or other building is a better long-term fix than more
-   *     specialists.
+   *     non-negative food surplus (≥ 0 — the city doesn't grow but doesn't
+   *     starve either).
    *
    * Returns true if an Entertainer was assigned.
    */
@@ -1052,10 +1060,6 @@ export class AutoProduction {
     if (!happyState.disorder && happyState.unhappiness < happyState.happiness) {
       return false;
     }
-
-    // Don't pile on when the civ is already spending a lot on luxury — at
-    // that point a building (temple/colosseum) is the better long-term fix.
-    if ((civ.luxuryRate ?? 0) >= 30) return false;
 
     // Need at least 2 tile workers so the city center stays worked after
     // converting one (the center is always worked, population − specialists
@@ -1085,13 +1089,14 @@ export class AutoProduction {
     if (!worstFoodKey) return false;
 
     // Simulate the food surplus AFTER removing this worker. The city must
-    // still have ≥ 1 food surplus to avoid starvation next turn.
+    // still have ≥ 0 food surplus to avoid starvation (0 means no growth
+    // but the city survives).
     const currentYields = city.yields ?? { food: 0, production: 0, trade: 0 };
     const foodAfter = currentYields.food - worstFood;
     const pop = city.population ?? 1;
     const foodConsumed = pop * 2; // each citizen eats 2 food
     const surplusAfter = foodAfter - foodConsumed;
-    if (surplusAfter < 1) return false;
+    if (surplusAfter < 0) return false;
 
     // All guards passed — assign the Entertainer.
     const ok = this.gameEngine.promoteCitizenToSpecialist?.(city.id, 'entertainer');
