@@ -250,7 +250,7 @@ describe('AutoProduction happiness emergency', () => {
         {
           id: 1,
           name: 'TestCiv',
-          technologies: new Set(['warrior_code']),
+          technologies: new Set(['warrior_code', 'ceremonial_burial']),
           personality: { aggression: 5, expansion: 5, diplomacy: 5, science: 5, military: 5, economy: 5 },
           warWith: new Set(),
           luxuryRate: 0,

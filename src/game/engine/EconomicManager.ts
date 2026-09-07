@@ -247,7 +247,7 @@ export class EconomicManager {
     return {
       commerce: afterCorruption,
       corruption,
-      tax: Math.floor(afterCorruption * (rates.tax / 100)),
+      tax: Math.floor(afterCorruption * (rates.tax / 100)) * TRADE_GOLD_MULTIPLIER,
       // Round (not floor) the science share so the Science Rate slider visibly
       // affects research even for tiny economies — flooring made 1–2 commerce
       // cities produce the same 0–1 science across most slider positions.
@@ -959,9 +959,12 @@ export class EconomicManager {
     //    units get disbanded for bankruptcy. ──
     const crisis = gold < -upkeep;
     const deepCrisis = gold < -upkeep * 2;
+    const belowReserve = gold < reserveTarget && !inDeficit;
     // In deep crisis, jump straight to the target to prevent mass disbanding.
-    // In mild crisis, ramp up quickly. Otherwise, gradual adjustment.
-    const MAX_DELTA = deepCrisis ? 100 : crisis ? 50 : 10;
+    // In mild crisis, ramp up quickly. When below reserve but not in deficit,
+    // move faster than usual (20 pts/turn) to rebuild before hitting zero.
+    // Otherwise, gradual adjustment.
+    const MAX_DELTA = deepCrisis ? 100 : crisis ? 50 : belowReserve ? 20 : 10;
     const newTax = targetTax >= rates.tax
       ? Math.min(targetTax, rates.tax + MAX_DELTA)
       : Math.max(targetTax, rates.tax - MAX_DELTA);

@@ -125,7 +125,7 @@ describe('EconomicManager city commerce split', () => {
 
     const out = econ.cityOutputs(city, civ);
     expect(out.commerce).toBe(10); // no capital → no corruption
-    expect(out.tax).toBe(3);
+    expect(out.tax).toBe(6); // 30% of 10 × TRADE_GOLD_MULTIPLIER(2) = 6
     expect(out.science).toBe(5);
     expect(out.luxury).toBe(2);
   });
@@ -137,7 +137,7 @@ describe('EconomicManager city commerce split', () => {
     const engine = makeEngine({ civilizations: [civ], cities: [cityA, cityB] });
     const econ = new EconomicManager(engine);
 
-    expect(econ.civGold(0)).toBe(9);      // 3 + 6
+    expect(econ.civGold(0)).toBe(18);     // 6 + 12 (tax × TRADE_GOLD_MULTIPLIER)
     expect(econ.civScience(0)).toBe(15);  // 5 + 10
     expect(econ.civLuxury(0)).toBe(6);    // 2 + 4
     expect(econ.civCommerce(0)).toBe(30);
@@ -153,11 +153,11 @@ describe('EconomicManager upkeep & treasury', () => {
     const econ = new EconomicManager(engine);
 
     const result = econ.processTurn(civ);
-    // income +3 (tax); the single unit is free (1 city supports 1 unit), so
-    // upkeep = 1 city only → gold 50 + 3 - 1 = 52
-    expect(civ.resources.gold).toBe(52);
+    // income +6 (tax 30% of 10 × TRADE_GOLD_MULTIPLIER=2); the single unit is free
+    // (1 city supports 1 unit), so upkeep = 1 city only → gold 50 + 6 - 1 = 55
+    expect(civ.resources.gold).toBe(55);
     expect(result.upkeep).toBe(1);
-    expect(result.tax).toBe(3);
+    expect(result.tax).toBe(6);
     expect(result.deficit).toBe(0);
     expect(result.disbanded).toBe(0);
   });
@@ -176,9 +176,9 @@ describe('EconomicManager upkeep & treasury', () => {
     const econ = new EconomicManager(engine);
 
     const result = econ.processTurn(civ);
-    // upkeep = 1 city + 2 extra units = 3 → gold 50 + 3 - 3 = 50
+    // upkeep = 1 city + 2 extra units = 3 → gold 50 + 6 - 3 = 53
     expect(result.upkeep).toBe(3);
-    expect(civ.resources.gold).toBe(50);
+    expect(civ.resources.gold).toBe(53);
     expect(result.deficit).toBe(0);
   });
 
@@ -272,7 +272,7 @@ describe('EconomicManager happiness & disorder', () => {
     const econ = new EconomicManager(engine);
 
     econ.applyCityOutputs(city, civ);
-    expect(city.tax).toBe(3);
+    expect(city.tax).toBe(6); // 30% of 10 × TRADE_GOLD_MULTIPLIER(2)
     expect(city.science).toBe(5);
     expect(city.luxury).toBe(2);
     expect(city.disorder).toBe(false);

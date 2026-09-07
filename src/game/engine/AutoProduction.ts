@@ -325,8 +325,23 @@ export class AutoProduction {
     const hasEntertainers = entertainerCount > 0;
     if (needsHappiness || luxuryRate >= 40 || hasEntertainers) {
       const existingBuildings = new Set(city.buildings ?? []);
+      const civTechs = new Set<string>();
+      const techs = civ.technologies;
+      if (Array.isArray(techs)) {
+        for (const t of techs) civTechs.add(String(t));
+      } else if (techs && typeof (techs as Iterable<string>)[Symbol.iterator] === 'function') {
+        for (const t of techs as Iterable<string>) civTechs.add(String(t));
+      }
       const happyBuilding = ['temple', 'colosseum', 'cathedral']
-        .find((b) => !existingBuildings.has(b) && !plannedTypes.includes(b));
+        .find((b) => {
+          if (existingBuildings.has(b) || plannedTypes.includes(b)) return false;
+          const props = BUILDING_PROPS[b] || BUILDING_PROPERTIES[b];
+          if (!props) return false;
+          // Only consider buildings the civ has the tech for
+          if (props.requiredTechnology && !civTechs.has(props.requiredTechnology)) return false;
+          console.log(`[AutoProduction] Happiness emergency: considering ${b} (luxury ${luxuryRate}%, disorder ${needsHappiness}, entertainers ${entertainerCount})`);
+          return true;
+        });
       const bProps = happyBuilding ? (BUILDING_PROPS[happyBuilding] || BUILDING_PROPERTIES[happyBuilding]) : null;
       if (bProps) {
         console.log(`[AutoProduction] Happiness emergency: building ${happyBuilding} (luxury ${luxuryRate}%, disorder ${needsHappiness})`);
