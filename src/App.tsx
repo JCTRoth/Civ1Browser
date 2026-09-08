@@ -216,6 +216,10 @@ function App() {
       numberOfCivilizations: 2,
       mapType: 'NORMAL_SKIRMISH',
       devMode: true,
+      landMass: 1,
+      temperature: 1,
+      climate: 1,
+      age: 1,
     };
     console.log('[App] Quick-start mode — launching game with defaults:', quickSettings);
     handleGameStart(quickSettings);

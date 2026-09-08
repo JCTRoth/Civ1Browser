@@ -204,7 +204,8 @@ export default class MapGenerator {
     this.stage1_Continents(rng);
     this.stage2_Temperature(rng);
     this.stage3_Climate(rng);
-    this.stage4_Age(123123);
+    this.stage4_Age(rng);
+    this.smoothTerrain();
     this.stage5_Rivers(rng);
     this.stage6_PolarCaps(rng);
     this.stage6a_SpecialResources(rng);
@@ -305,13 +306,13 @@ export default class MapGenerator {
       }
     }
 
-    // ── Raise terrain in continent interiors (distance-to-water heuristic) ──
+    // ── Raise terrain in continent interiors (distance-to-water + noise) ──
     for (let r = 1; r < this.height - 1; r++) {
       for (let c = 0; c < this.width; c++) {
         if (this.cells[r][c].type === TERRAIN_TYPES.OCEAN) continue;
         let minDist = 99;
-        for (let dr = -3; dr <= 3; dr++) {
-          for (let dc = -3; dc <= 3; dc++) {
+        for (let dr = -4; dr <= 4; dr++) {
+          for (let dc = -4; dc <= 4; dc++) {
             const nr = r + dr;
             const nc = this.wrapCol(c + dc);
             if (this.isValid(nc, nr) && this.cells[nr][nc].type === TERRAIN_TYPES.OCEAN) {
@@ -319,8 +320,12 @@ export default class MapGenerator {
             }
           }
         }
-        if (minDist >= 5) this.cells[r][c].type = TERRAIN_TYPES.MOUNTAINS;
-        else if (minDist >= 3) this.cells[r][c].type = TERRAIN_TYPES.HILLS;
+        // Add perlin-like noise so elevation isn't purely distance-based.
+        // Hash the position for deterministic noise.
+        const noise = ((c * 7919 + r * 6271) & 0xff) / 255; // 0–1
+        const effectiveDist = minDist + (noise - 0.5) * 2; // jitter ±1
+        if (effectiveDist >= 7) this.cells[r][c].type = TERRAIN_TYPES.MOUNTAINS;
+        else if (effectiveDist >= 5) this.cells[r][c].type = TERRAIN_TYPES.HILLS;
         else this.cells[r][c].type = TERRAIN_TYPES.PLAINS;
       }
     }
@@ -368,21 +373,22 @@ export default class MapGenerator {
         const tile = this.cells[row][col];
         if (tile.type !== TERRAIN_TYPES.PLAINS) continue;
 
-        const climateVal = Math.abs(rng() * 8 + row - yMedian) + (1 - this.temperature);
-        const band = Math.floor(climateVal / 6) + 1;
+        const climateVal = Math.abs(rng() * 4 + row - yMedian) + (1 - this.temperature);
+        const band = Math.floor(climateVal / 7) + 1;
 
         if (band < 8) {
           switch (band) {
             case 0:
-            case 1:
               tile.type = TERRAIN_TYPES.DESERT; break;
+            case 1:
             case 2:
-            case 3:
               tile.type = TERRAIN_TYPES.PLAINS; break;
+            case 3:
             case 4:
+              tile.type = TERRAIN_TYPES.GRASSLAND; break;
             case 5:
-              tile.type = TERRAIN_TYPES.TUNDRA; break;
             case 6:
+              tile.type = TERRAIN_TYPES.TUNDRA; break;
             case 7:
               tile.type = TERRAIN_TYPES.ARCTIC; break;
           }
@@ -408,10 +414,10 @@ export default class MapGenerator {
         const cell = this.cells[row][col];
         if (cell.type !== TERRAIN_TYPES.OCEAN) {
           if (moisture > 0) {
-            moisture -= Math.floor(rng() * (7 - this.climate * 2));
+            moisture -= Math.floor(rng() * (5 - this.climate));
             this.applyMoisture(cell, row, threshold);
           }
-        } else if (Math.abs(this.yMedian / 2 - threshold) + this.climate * 4 > moisture) {
+        } else if (Math.abs(this.yMedian / 2 - threshold) + this.climate * 3 > moisture) {
           moisture++;
         }
       }
@@ -425,7 +431,7 @@ export default class MapGenerator {
           if (threshold / 2 + this.climate > moisture) moisture++;
         } else {
           if (moisture > 0) {
-            moisture -= Math.floor(rng() * (7 - this.climate * 2));
+            moisture -= Math.floor(rng() * (5 - this.climate));
             this.applyMoisture(cell, row, threshold);
           }
         }
@@ -436,6 +442,7 @@ export default class MapGenerator {
   private applyMoisture(cell: InternalTile, _row: number, threshold: number): void {
     switch (cell.type) {
       case TERRAIN_TYPES.SWAMP:
+        cell.type = TERRAIN_TYPES.FOREST; break;
       case TERRAIN_TYPES.HILLS:
         cell.type = TERRAIN_TYPES.FOREST; break;
       case TERRAIN_TYPES.PLAINS:
@@ -444,7 +451,8 @@ export default class MapGenerator {
         cell.type = threshold < 10 ? TERRAIN_TYPES.JUNGLE : TERRAIN_TYPES.SWAMP;
         break;
       case TERRAIN_TYPES.MOUNTAINS:
-        cell.type = TERRAIN_TYPES.FOREST; break;
+        // Mountains near moisture sources get foothills (forest), not raw forest
+        break;
       case TERRAIN_TYPES.DESERT:
         cell.type = TERRAIN_TYPES.PLAINS; break;
     }
@@ -460,10 +468,7 @@ export default class MapGenerator {
   private stage4_Age(rng: () => number): void {
     const totalCells = this.width * this.height;
     // Civ1 formula but with a softer scaling to avoid destroying too much land.
-    // Original: (total / 5) + (total / 5) * age  — age 1 alone = 40% of cells
-    // which is far too aggressive.  We cap the age multiplier at ×0.3 so the
-    // map stays recognisable.
-    const passes = Math.floor(totalCells / 5) + Math.floor((totalCells / 5) * this.age * 0.3);
+    const passes = Math.floor(totalCells / 8) + Math.floor((totalCells / 8) * this.age * 0.3);
 
     let col = 0;
     let row = 0;
@@ -482,23 +487,25 @@ export default class MapGenerator {
       if (!this.isValid(col, row)) continue;
 
       const cell = this.cells[row][col];
+      const roll = rng();
       switch (cell.type) {
         case TERRAIN_TYPES.FOREST:
-          cell.type = TERRAIN_TYPES.JUNGLE; break;
+          if (roll < 0.3) cell.type = TERRAIN_TYPES.JUNGLE; break;
         case TERRAIN_TYPES.SWAMP:
           cell.type = TERRAIN_TYPES.GRASSLAND; break;
         case TERRAIN_TYPES.RIVER:
           break; // rivers are immutable
         case TERRAIN_TYPES.PLAINS:
         case TERRAIN_TYPES.TUNDRA:
-          cell.type = TERRAIN_TYPES.HILLS; break;
+          if (roll < 0.25) cell.type = TERRAIN_TYPES.HILLS; break;
         case TERRAIN_TYPES.GRASSLAND:
-          cell.type = TERRAIN_TYPES.FOREST; break;
+          if (roll < 0.4) cell.type = TERRAIN_TYPES.FOREST; break;
         case TERRAIN_TYPES.JUNGLE:
-          cell.type = TERRAIN_TYPES.SWAMP; break;
+          if (roll < 0.3) cell.type = TERRAIN_TYPES.SWAMP; break;
         case TERRAIN_TYPES.HILLS:
+          if (roll < 0.2) cell.type = TERRAIN_TYPES.MOUNTAINS; break;
         case TERRAIN_TYPES.ARCTIC:
-          cell.type = TERRAIN_TYPES.MOUNTAINS; break;
+          if (roll < 0.05) cell.type = TERRAIN_TYPES.MOUNTAINS; break;
         case TERRAIN_TYPES.MOUNTAINS:
           // Mountains surrounded by water on all four diagonal corners
           // erode into water (Civ1 coastal erosion).
@@ -514,6 +521,84 @@ export default class MapGenerator {
           break;
         case TERRAIN_TYPES.DESERT:
           cell.type = TERRAIN_TYPES.PLAINS; break;
+      }
+    }
+  }
+
+  // ── Stage 4b — Terrain smoothing ──────────────────────────────────
+
+  /**
+   * Post-age smoothing pass that eliminates isolated single-tile terrain
+   * anomalies and creates more natural terrain clusters.  Runs multiple
+   * iterations of a majority-vote filter (only on land tiles).
+   */
+  private smoothTerrain(): void {
+    // Terrain weight: lower = more likely to be replaced by neighbours.
+    // Mountains and arctic are kept more stubbornly.
+    const weight: Record<string, number> = {
+      [TERRAIN_TYPES.OCEAN]: 0,
+      [TERRAIN_TYPES.MOUNTAINS]: 1,
+      [TERRAIN_TYPES.HILLS]: 2,
+      [TERRAIN_TYPES.FOREST]: 3,
+      [TERRAIN_TYPES.JUNGLE]: 3,
+      [TERRAIN_TYPES.PLAINS]: 4,
+      [TERRAIN_TYPES.GRASSLAND]: 4,
+      [TERRAIN_TYPES.DESERT]: 5,
+      [TERRAIN_TYPES.TUNDRA]: 3,
+      [TERRAIN_TYPES.ARCTIC]: 1,
+      [TERRAIN_TYPES.SWAMP]: 3,
+      [TERRAIN_TYPES.RIVER]: 0,
+    };
+
+    const iterations = 2;
+    for (let iter = 0; iter < iterations; iter++) {
+      for (let r = 1; r < this.height - 1; r++) {
+        for (let c = 0; c < this.width; c++) {
+          const cell = this.cells[r][c];
+          // Never smooth ocean, rivers, or polar rows
+          if (cell.type === TERRAIN_TYPES.OCEAN) continue;
+          if (cell.type === TERRAIN_TYPES.RIVER) continue;
+          if (r <= 1 || r >= this.height - 2) continue;
+
+          // Count neighbours of each type (8-directional)
+          const counts = new Map<string, number>();
+          for (let dr = -1; dr <= 1; dr++) {
+            for (let dc = -1; dc <= 1; dc++) {
+              if (dr === 0 && dc === 0) continue;
+              const nc = this.wrapCol(c + dc);
+              const nr = r + dr;
+              if (!this.isValid(nc, nr)) continue;
+              const nType = this.cells[nr][nc].type;
+              counts.set(nType, (counts.get(nType) ?? 0) + 1);
+            }
+          }
+
+          // Find the dominant neighbour type (ignoring ocean and river)
+          let bestType = cell.type;
+          let bestScore = -1;
+          for (const [nType, count] of counts) {
+            if (nType === TERRAIN_TYPES.OCEAN || nType === TERRAIN_TYPES.RIVER) continue;
+            const w = weight[nType] ?? 3;
+            const score = count * 10 + w; // prefer high-count, then higher weight
+            if (score > bestScore) {
+              bestScore = score;
+              bestType = nType;
+            }
+          }
+
+          // Replace only if: dominant neighbour has ≥ 4 votes AND current
+          // type is lighter (lower weight) than the dominant type.  This
+          // prevents downgrading mountains/hills, and only promotes weaker
+          // terrain to match its surroundings.
+          if (bestType !== cell.type) {
+            const curW = weight[cell.type] ?? 3;
+            const bestW = weight[bestType] ?? 3;
+            const dominantCount = counts.get(bestType) ?? 0;
+            if (dominantCount >= 4 && bestW > curW) {
+              cell.type = bestType;
+            }
+          }
+        }
       }
     }
   }

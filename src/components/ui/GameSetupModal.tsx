@@ -82,6 +82,10 @@ function GameSetupModal({ show, onStart }) {
   const [numCivilizations, setNumCivilizations] = useState(2);
   const [mapType, setMapType] = useState('NORMAL_SKIRMISH');
   const [devMode, setDevMode] = useState(false);
+  const [landMass, setLandMass] = useState(1);
+  const [temperature, setTemperature] = useState(1);
+  const [climate, setClimate] = useState(1);
+  const [age, setAge] = useState(1);
 
   const totalSteps = 2;
   const isFinalStep = currentStep === totalSteps;
@@ -138,7 +142,11 @@ function GameSetupModal({ show, onStart }) {
       difficulty: difficulty,
       numberOfCivilizations: numCivilizations,
       mapType: mapType,
-      devMode: devMode
+      devMode: devMode,
+      landMass: landMass,
+      temperature: temperature,
+      climate: climate,
+      age: age,
     };
     onStart(settings);
   };
@@ -284,6 +292,46 @@ function GameSetupModal({ show, onStart }) {
                     <option value="AI_VS_AI_SMALL">Computer vs Computer (Small) · Tall narrow corridor</option>
                   </Form.Select>
                 </div>
+
+                {mapType !== 'NAVAL_CLOSEUP' && (
+                  <>
+                    <div className="control-card">
+                      <div className="control-card__header">
+                        <span className="control-card__title">Land Mass</span>
+                        <span className="control-card__value">{['Sparse Islands', 'Standard', 'Pangaea'][landMass]}</span>
+                      </div>
+                      <Form.Range min="0" max="2" step="1" value={landMass} onChange={(e) => setLandMass(Number(e.target.value))} className="control-card__range" />
+                      <span className="control-card__hint">How much land appears on the map.</span>
+                    </div>
+
+                    <div className="control-card">
+                      <div className="control-card__header">
+                        <span className="control-card__title">Temperature</span>
+                        <span className="control-card__value">{['Hot (Desert)', 'Temperate', 'Cold (Arctic)'][temperature]}</span>
+                      </div>
+                      <Form.Range min="0" max="2" step="1" value={temperature} onChange={(e) => setTemperature(Number(e.target.value))} className="control-card__range" />
+                      <span className="control-card__hint">Shifts the latitude-based biome distribution.</span>
+                    </div>
+
+                    <div className="control-card">
+                      <div className="control-card__header">
+                        <span className="control-card__title">Climate</span>
+                        <span className="control-card__value">{['Dry (Plains)', 'Moderate', 'Wet (Jungle)'][climate]}</span>
+                      </div>
+                      <Form.Range min="0" max="2" step="1" value={climate} onChange={(e) => setClimate(Number(e.target.value))} className="control-card__range" />
+                      <span className="control-card__hint">Controls moisture and vegetation density.</span>
+                    </div>
+
+                    <div className="control-card">
+                      <div className="control-card__header">
+                        <span className="control-card__title">Age</span>
+                        <span className="control-card__value">{['Young (Flat)', 'Mature', 'Old (Mountains)'][age]}</span>
+                      </div>
+                      <Form.Range min="0" max="2" step="1" value={age} onChange={(e) => setAge(Number(e.target.value))} className="control-card__range" />
+                      <span className="control-card__hint">Older maps have more hills and mountains.</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="setup-summary" aria-label="Game summary">
@@ -314,6 +362,26 @@ function GameSetupModal({ show, onStart }) {
                     <span className="label">Map Type</span>
                     <span className="value">{mapType}</span>
                   </div>
+                  {mapType !== 'NAVAL_CLOSEUP' && (
+                    <>
+                      <div className="setup-summary-item">
+                        <span className="label">Land Mass</span>
+                        <span className="value">{['Sparse', 'Standard', 'Pangaea'][landMass]}</span>
+                      </div>
+                      <div className="setup-summary-item">
+                        <span className="label">Temperature</span>
+                        <span className="value">{['Hot', 'Temperate', 'Cold'][temperature]}</span>
+                      </div>
+                      <div className="setup-summary-item">
+                        <span className="label">Climate</span>
+                        <span className="value">{['Dry', 'Moderate', 'Wet'][climate]}</span>
+                      </div>
+                      <div className="setup-summary-item">
+                        <span className="label">Age</span>
+                        <span className="value">{['Young', 'Mature', 'Old'][age]}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="setup-summary-item">
                     <Form.Check
                       type="checkbox"

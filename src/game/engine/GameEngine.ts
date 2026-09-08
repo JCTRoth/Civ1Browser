@@ -51,6 +51,11 @@ interface GameSettings {
   playerCivilization: number;
   startingYear: number;
   startingGold: number;
+  /** Civ1 map parameters [0-2]. */
+  landMass?: number;
+  temperature?: number;
+  climate?: number;
+  age?: number;
 }
 
 export interface MapTile {
@@ -821,6 +826,10 @@ export default class GameEngine {
       mapWidth,
       mapHeight,
       seed: Date.now(),
+      landMass: this.gameSettings.landMass,
+      temperature: this.gameSettings.temperature,
+      climate: this.gameSettings.climate,
+      age: this.gameSettings.age,
     });
 
     let tiles: ReturnType<MapGenerator['generate']>;
