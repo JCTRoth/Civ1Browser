@@ -32,6 +32,7 @@ import { EconomicManager } from './EconomicManager';
 import { GovernmentManager } from './GovernmentManager';
 import { ResearchManager } from './ResearchManager';
 import { AIResearch } from './AIResearch';
+import MapGenerator from './MapGenerator';
 import { MIN_CITY_CENTER_DISTANCE } from './SettlementEvaluator';
 import type { GameActions, Unit, City, Civilization, VillageResult, Technology, ProductionItem, TradeRoute, SpecialistType } from '../../../types/game';
 
@@ -805,134 +806,40 @@ export default class GameEngine {
   }
 
   /**
-   * Generate the game world with terrain
+   * Generate the game world with terrain.
+   *
+   * Delegates the heavy lifting to `MapGenerator` which implements the
+   * Civ1-style multi-stage pipeline (continents → temperature → climate →
+   * age → rivers → polar caps → resources → flood-fill → build sites).
+   * The generator is seeded from `Date.now()` so every game gets a unique
+   * but reproducible world.
    */
   async generateWorld(mapWidth: number = Constants.MAP_WIDTH, mapHeight: number = Constants.MAP_HEIGHT, mapType: string = 'NORMAL_SKIRMISH') {
-    const tiles = [];
-    
     console.log(`[GameEngine] Generating world: ${mapWidth}x${mapHeight}, type: ${mapType}`);
-    
-    // Naval Close up - water-only map
-    if (mapType === 'NAVAL_CLOSEUP') {
-      for (let row = 0; row < mapHeight; row++) {
-        for (let col = 0; col < mapWidth; col++) {
-          tiles.push({
-            col,
-            row,
-            type: Constants.TERRAIN.OCEAN,
-            resource: Math.random() < 0.2 ? TERRAIN_RESOURCES[TERRAIN_TYPES.OCEAN] : null, // 20% chance of fish
-            visible: false,
-            explored: false
-          });
-        }
-      }
-    } else {
-      // Standard terrain generation for other modes
-      for (let row = 0; row < mapHeight; row++) {
-        for (let col = 0; col < mapWidth; col++) {
-          let terrainType: string = Constants.TERRAIN.GRASSLAND;
-          
-          // Ocean around edges (except for small maps)
-          if (mapWidth >= 40 && mapHeight >= 40) {
-            if (row === 0 || row === mapHeight - 1 ||
-                col === 0 || col === mapWidth - 1) {
-              terrainType = Constants.TERRAIN.OCEAN;
-            }
-          }
-          
-          // Random terrain generation
-          if (terrainType !== Constants.TERRAIN.OCEAN) {
-            const rand = Math.random();
-            if (rand < 0.05) terrainType = Constants.TERRAIN.MOUNTAINS;
-            else if (rand < 0.2) terrainType = Constants.TERRAIN.HILLS;
-            else if (rand < 0.3) terrainType = Constants.TERRAIN.FOREST;
-            else if (rand < 0.4) terrainType = Constants.TERRAIN.DESERT;
-            else if (rand < 0.5) terrainType = Constants.TERRAIN.PLAINS;
-            else if (rand < 0.6) terrainType = Constants.TERRAIN.TUNDRA;
-            else terrainType = Constants.TERRAIN.GRASSLAND;
-          }
 
-          tiles.push({
-            col,
-            row,
-            type: terrainType,
-            resource: this.rollTerrainResource(terrainType),
-            visible: false,
-            explored: false
-          });
-        }
-      }
+    const generator = new MapGenerator({
+      mapWidth,
+      mapHeight,
+      seed: Date.now(),
+    });
+
+    let tiles: ReturnType<MapGenerator['generate']>;
+
+    if (mapType === 'NAVAL_CLOSEUP') {
+      // Water-only map — no land, no rivers.
+      tiles = generator.generateWaterOnly();
+    } else {
+      // Full Civ1-style terrain generation.
+      tiles = generator.generate();
     }
 
-    // Carve rivers as winding single-tile paths (Civ1 treats rivers as terrain).
-    this.generateRivers(tiles, mapWidth, mapHeight);
-    
     this.map = {
       width: mapWidth,
       height: mapHeight,
-      tiles
+      tiles,
     };
-    
-    console.log('World generated with', tiles.length, 'tiles');
-  }
 
-  /**
-   * Roll a special resource for a terrain type at map generation. Civ1 places
-   * one resource type per terrain in a fixed pattern — approximated here by a
-   * fixed per-tile probability.
-   */
-  private rollTerrainResource(terrainType: string): string | null {
-    const resourceName = TERRAIN_RESOURCES[terrainType];
-    if (!resourceName) return null;
-    return Math.random() < 0.2 ? resourceName : null;
-  }
-
-  /**
-   * Carve rivers as winding single-tile paths across the map. Civ1 treats
-   * rivers as a separate terrain type; only land tiles are converted.
-   */
-  private generateRivers(
-    tiles: Array<{ type?: string; terrain?: string; resource?: string | null }>,
-    mapWidth: number,
-    mapHeight: number
-  ): void {
-    const isLand = (t: { type?: string; terrain?: string }): boolean => {
-      const type = t.type ?? t.terrain;
-      return type !== Constants.TERRAIN.OCEAN && type !== TERRAIN_TYPES.RIVER;
-    };
-    const idx = (row: number, col: number): number => row * mapWidth + col;
-    const valid = (col: number, row: number): boolean => col >= 0 && col < mapWidth && row >= 0 && row < mapHeight;
-    const numRivers = Math.max(1, Math.floor((mapWidth * mapHeight) / 800));
-
-    for (let r = 0; r < numRivers; r++) {
-      // Start on a random edge tile.
-      let col: number;
-      let row: number;
-      if (Math.random() < 0.5) {
-        col = Math.floor(Math.random() * mapWidth);
-        row = Math.random() < 0.5 ? 0 : mapHeight - 1;
-      } else {
-        col = Math.random() < 0.5 ? 0 : mapWidth - 1;
-        row = Math.floor(Math.random() * mapHeight);
-      }
-      const dir = Math.random() < 0.5 ? 1 : -1;
-      const length = 10 + Math.floor(Math.random() * 15);
-      for (let i = 0; i < length; i++) {
-        if (!valid(col, row)) break;
-        const t = tiles[idx(row, col)];
-        if (t && isLand(t)) {
-          t.type = TERRAIN_TYPES.RIVER;
-          t.terrain = TERRAIN_TYPES.RIVER;
-          t.resource = null;
-        }
-        // Wander mostly along the main axis, occasionally drifting a row.
-        if (Math.random() < 0.7) {
-          col += dir;
-        } else {
-          row += Math.random() < 0.5 ? 1 : -1;
-        }
-      }
-    }
+    console.log(`[GameEngine] World generated: ${tiles.length} tiles (seed ${generator['seed']})`);
   }
 
   /**
